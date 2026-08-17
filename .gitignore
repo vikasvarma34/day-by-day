@@ -1,0 +1,46 @@
+# macOS / OS generated
+.DS_Store
+.AppleDouble
+.lsdplugin
+.Trashes
+._*
+
+# Editor / IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmp
+*.bak
+*.user
+*.workspace
+
+# Android / Gradle
+.gradle/
+build/
+app/build/
+local.properties
+.navigation/
+captures/
+*.apk
+*.aar
+*.dex
+*.class
+
+# Node.js
+node_modules/
+dist/
+out/
+.next/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Secrets & Environment
+.env
+.env.local
+.env.*.local
+*.keystore
+*.jks
+google-services.json
