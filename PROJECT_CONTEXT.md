@@ -20,7 +20,7 @@
 * **SDK Versions**: `minSdk 31`, `targetSdk 37`, `compileSdk 37`
 
 ### Backend Decisions
-* **Tech Stack**: Node.js + TypeScript + Express
+* **Tech Stack**: Node.js (>= 24.x target) + TypeScript + Express
 * **API Style**: REST / HTTPS / JSON
 
 ### Database & Deployment
@@ -28,7 +28,7 @@
 * **Backend Deployment Target**: Vercel Hobby (Mumbai where practical)
 
 ### Authentication & Security Fundamentals
-* **Authentication**: Username/password, secure password hashing, opaque random server-side session tokens.
+* **Authentication**: Email/password, secure password hashing, opaque random server-side session tokens.
 * **Security**:
   * Validate untrusted input
   * Enforce authorization server-side
@@ -55,10 +55,15 @@
 ## Build/Test Commands
 
 ### Backend
+* **Environment Variables**: `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `NODE_ENV`, `LOG_LEVEL`
 ```bash
 cd backend
 npm test
 npm run build
+npm run db:check
+npm run user:create
+npm run migrate
+npm run migrate:create -- <migration_name>
 ```
 
 ### Android
