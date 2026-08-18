@@ -32,11 +32,23 @@
   * `Domain` (`src/planner/domain/`): Pure, reusable calendar rules and math (independent of Express and PostgreSQL).
   * Do not create decorative/empty layers without meaningful ownership.
 * **Shared Infrastructure**: Cross-cutting utilities live in bounded top-level folders: `src/config/`, `src/db/`, `src/errors/`, `src/logging/`, `src/middleware/`, `src/security/`, `src/validation/`.
+* **Data & Time Boundary**:
+  * PostgreSQL `DATE` must be stored as strictly valid `YYYY-MM-DD` standard formats without arbitrary truncation.
+  * System/server current time must never be implicitly assumed or injected as "today"; planner dates always arrive explicitly from client payloads or endpoints.
+  * Avoid any runtime inference between UTC and local timezone dates; `plannerToday` solves timezone boundary concerns structurally by delegating local day definition entirely to the authenticated user.
+* **POST /tasks Creation Rules**:
+  * Authenticated endpoint
+  * Client-generated task UUID v4
+  * Race-safe insert-once creation
+  * Same-owner retries return canonical state without overwrite
+  * Scheduled creation is atomic
+  * Recurring creation uses explicit plannerToday from the POST body
 * **Feature Depth**: Cohesive single-responsibility features stay flat (e.g. `src/auth/`). When a feature spans multiple distinct domains or use cases, group internally by responsibility:
   * `src/planner/domain/`: Pure planner calendar & recurrence rules (zero Express/PostgreSQL dependencies).
   * `src/planner/day/`: Authenticated Day API (controller, service, repository, types, colocated unit tests).
   * `src/planner/later/`: Authenticated Later API (controller, service, repository, types).
   * `src/planner/history/`: Authenticated History API (controller, service, repository, types, colocated unit tests).
+  * `src/planner/tasks/`: Authenticated Task Creation API (controller, service, repository, types).
   * `src/planner/planner.router.ts`: Top-level feature router composing sub-routes.
 * **No Speculative Folders**: Do not create empty future folders before their functionality is implemented.
 * **Testing Convention**:
@@ -63,6 +75,7 @@ backend/
       day/                 # Day view use case (controller, service, repository, types)
       later/               # Later view use case (controller, service, repository, types)
       history/             # History view use case (controller, service, repository, types)
+      tasks/               # Task creation use case (controller, service, repository, types)
       planner.router.ts    # Feature-level router mounting planner endpoints
     security/              # Password hashing (Argon2id) & session crypto (SHA-256)
     types/                 # Express type declarations

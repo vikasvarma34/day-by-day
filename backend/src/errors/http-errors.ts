@@ -2,6 +2,7 @@ export type ErrorCode =
   | 'BAD_REQUEST'
   | 'UNAUTHORIZED'
   | 'NOT_FOUND'
+  | 'CONFLICT'
   | 'PAYLOAD_TOO_LARGE'
   | 'UNSUPPORTED_MEDIA_TYPE'
   | 'INTERNAL_ERROR';
@@ -14,6 +15,12 @@ export class HttpError extends Error {
   ) {
     super(message);
     this.name = this.constructor.name;
+  }
+}
+
+export class ConflictError extends HttpError {
+  constructor(message: string = 'Conflict') {
+    super(409, 'CONFLICT', message);
   }
 }
 
