@@ -36,8 +36,9 @@
   * `src/planner/domain/`: Pure planner calendar & recurrence rules (zero Express/PostgreSQL dependencies).
   * `src/planner/day/`: Authenticated Day API (controller, service, repository, types, colocated unit tests).
   * `src/planner/later/`: Authenticated Later API (controller, service, repository, types).
+  * `src/planner/history/`: Authenticated History API (controller, service, repository, types, colocated unit tests).
   * `src/planner/planner.router.ts`: Top-level feature router composing sub-routes.
-* **No Speculative Folders**: Do not create empty future folders (e.g. `history/`) before their functionality is implemented.
+* **No Speculative Folders**: Do not create empty future folders before their functionality is implemented.
 * **Testing Convention**:
   * Unit tests are strictly colocated next to the source files they verify (`*.test.ts`).
   * Integration tests (database constraints, queries, and endpoint integration) live in `backend/tests/integration/`.
@@ -61,6 +62,7 @@ backend/
       domain/              # Pure calendar math & recurrence evaluator (recurrence, date-validation)
       day/                 # Day view use case (controller, service, repository, types)
       later/               # Later view use case (controller, service, repository, types)
+      history/             # History view use case (controller, service, repository, types)
       planner.router.ts    # Feature-level router mounting planner endpoints
     security/              # Password hashing (Argon2id) & session crypto (SHA-256)
     types/                 # Express type declarations
