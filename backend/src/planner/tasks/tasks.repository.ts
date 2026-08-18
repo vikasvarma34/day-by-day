@@ -1,7 +1,7 @@
 import { PoolClient } from 'pg';
 import { getPool } from '../../db/pool';
 import { ConflictError, NotFoundError } from '../../errors/http-errors';
-import { CreateTaskDto, PlannerTaskResponse, EditTaskDto, EditTaskScheduleDto } from './tasks.types';
+import { CreateTaskDto, PlannerTaskResponse, EditTaskDto, EditTaskScheduleDto, CompleteTaskDto, UndoTaskDto, StopRecurrenceDto } from './tasks.types';
 import { PlannerSchedule, isScheduleOccurringOnDate } from '../domain/recurrence';
 
 type QueryExecutor = {
@@ -301,5 +301,233 @@ export class TasksRepository {
   async findTaskWithSchedules(taskId: string, userId: string): Promise<PlannerTaskResponse | null> {
     const pool = getPool();
     return this.findTaskWithSchedulesUsing(pool, taskId, userId);
+  }
+
+  async completeTask(userId: string, taskId: string, dto: CompleteTaskDto): Promise<void> {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const taskRes = await client.query(
+        `SELECT id, title, is_important FROM tasks WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+        [taskId, userId]
+      );
+      if (taskRes.rows.length === 0) {
+        throw new NotFoundError('Task not found');
+      }
+      const taskRow = taskRes.rows[0];
+
+      if (!dto.scheduleId) {
+        const schedRes = await client.query(`SELECT 1 FROM task_schedules WHERE task_id = $1 LIMIT 1`, [taskId]);
+        if (schedRes.rows.length > 0) {
+          throw new ConflictError('Cannot complete a scheduled task as Later');
+        }
+
+        const compRes = await client.query(
+          `SELECT 1 FROM task_completions WHERE task_id = $1 AND schedule_id IS NULL AND scheduled_date IS NULL LIMIT 1`,
+          [taskId]
+        );
+        if (compRes.rows.length === 0) {
+          const titleSnapshot = taskRow.is_important ? taskRow.title : null;
+          await client.query(
+            `INSERT INTO task_completions (
+              task_id, schedule_id, scheduled_date, completed_date, completed_at, title_snapshot, is_important_snapshot
+            ) VALUES ($1, NULL, NULL, $2, NOW(), $3, $4)`,
+            [taskId, dto.completedDate, titleSnapshot, taskRow.is_important]
+          );
+        }
+      } else {
+        const schedRes = await client.query(
+          `SELECT id, schedule_type, start_date::text, end_date::text, interval_days, interval_anchor_date::text, weekdays_mask
+           FROM task_schedules WHERE id = $1 AND task_id = $2 LIMIT 1`,
+          [dto.scheduleId, taskId]
+        );
+        if (schedRes.rows.length === 0) {
+          throw new ConflictError('Schedule not found for this task');
+        }
+
+        const scheduleRow = schedRes.rows[0];
+        const schedule: PlannerSchedule = {
+          schedule_type: scheduleRow.schedule_type,
+          start_date: scheduleRow.start_date,
+          end_date: scheduleRow.end_date,
+          interval_days: scheduleRow.interval_days,
+          interval_anchor_date: scheduleRow.interval_anchor_date,
+          weekdays_mask: scheduleRow.weekdays_mask,
+        };
+
+        if (!isScheduleOccurringOnDate(schedule, dto.scheduledDate!)) {
+          throw new ConflictError('Date is not a valid occurrence of this schedule');
+        }
+
+        const compRes = await client.query(
+          `SELECT 1 FROM task_completions WHERE task_id = $1 AND schedule_id = $2 AND scheduled_date = $3 LIMIT 1`,
+          [taskId, dto.scheduleId, dto.scheduledDate]
+        );
+        if (compRes.rows.length === 0) {
+          const isHistoryEligible = schedule.schedule_type === 'ONCE' && taskRow.is_important;
+          const titleSnapshot = isHistoryEligible ? taskRow.title : null;
+
+          await client.query(
+            `INSERT INTO task_completions (
+              task_id, schedule_id, scheduled_date, completed_date, completed_at, title_snapshot, is_important_snapshot
+            ) VALUES ($1, $2, $3, $4, NOW(), $5, $6)`,
+            [taskId, dto.scheduleId, dto.scheduledDate, dto.completedDate, titleSnapshot, taskRow.is_important]
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async undoTask(userId: string, taskId: string, dto: UndoTaskDto): Promise<void> {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const taskRes = await client.query(
+        `SELECT id FROM tasks WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+        [taskId, userId]
+      );
+      if (taskRes.rows.length === 0) {
+        throw new NotFoundError('Task not found');
+      }
+
+      if (!dto.scheduleId) {
+        await client.query(
+          `DELETE FROM task_completions WHERE task_id = $1 AND schedule_id IS NULL AND scheduled_date IS NULL`,
+          [taskId]
+        );
+      } else {
+        await client.query(
+          `DELETE FROM task_completions WHERE task_id = $1 AND schedule_id = $2 AND scheduled_date = $3`,
+          [taskId, dto.scheduleId, dto.scheduledDate]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteTask(userId: string, taskId: string): Promise<void> {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      await client.query(`DELETE FROM tasks WHERE id = $1 AND user_id = $2`, [taskId, userId]);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async stopRecurrence(userId: string, taskId: string, dto: StopRecurrenceDto): Promise<void> {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const taskRes = await client.query(
+        `SELECT id FROM tasks WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+        [taskId, userId]
+      );
+      if (taskRes.rows.length === 0) {
+        throw new NotFoundError('Task not found');
+      }
+
+      const schedRes = await client.query(
+        `SELECT id, schedule_type, start_date::text, end_date::text, interval_days, interval_anchor_date::text, weekdays_mask
+         FROM task_schedules
+         WHERE task_id = $1
+           AND start_date <= $2
+           AND (end_date IS NULL OR end_date >= $2)
+         ORDER BY start_date DESC
+         LIMIT 1`,
+        [taskId, dto.plannerToday]
+      );
+      if (schedRes.rows.length > 0) {
+        const active = schedRes.rows[0];
+        const newEndDate = dto.plannerToday;
+
+        const dummySchedule: PlannerSchedule = {
+          schedule_type: active.schedule_type,
+          start_date: active.start_date,
+          end_date: newEndDate,
+          interval_days: active.interval_days,
+          interval_anchor_date: active.interval_anchor_date,
+          weekdays_mask: active.weekdays_mask,
+        };
+
+        let hasOccurrence = false;
+        let current = active.start_date;
+        let iterations = 0;
+        while (current <= newEndDate && iterations < 730) {
+          if (isScheduleOccurringOnDate(dummySchedule, current)) {
+            hasOccurrence = true;
+            break;
+          }
+          const d = new Date(current);
+          d.setUTCDate(d.getUTCDate() + 1);
+          current = d.toISOString().split('T')[0];
+          iterations++;
+        }
+
+        const maxCompRes = await client.query(`SELECT MAX(scheduled_date)::text as max_date FROM task_completions WHERE schedule_id = $1`, [active.id]);
+        if (maxCompRes.rows[0].max_date && maxCompRes.rows[0].max_date > newEndDate) {
+          throw new ConflictError('Cannot stop recurrence because a future completion exists');
+        }
+
+        if (!hasOccurrence) {
+          const compRes = await client.query(`SELECT 1 FROM task_completions WHERE schedule_id = $1 LIMIT 1`, [active.id]);
+          if (compRes.rows.length === 0) {
+             await client.query(`DELETE FROM task_schedules WHERE id = $1`, [active.id]);
+          } else {
+             await client.query(`UPDATE task_schedules SET end_date = $1 WHERE id = $2`, [newEndDate, active.id]);
+          }
+        } else {
+          await client.query(`UPDATE task_schedules SET end_date = $1 WHERE id = $2`, [newEndDate, active.id]);
+        }
+      }
+
+      const futureScheds = await client.query(`SELECT id FROM task_schedules WHERE task_id = $1 AND start_date > $2`, [taskId, dto.plannerToday]);
+      for (const fs of futureScheds.rows) {
+        const cRes = await client.query(`SELECT 1 FROM task_completions WHERE schedule_id = $1 LIMIT 1`, [fs.id]);
+        if (cRes.rows.length === 0) {
+          await client.query(`DELETE FROM task_schedules WHERE id = $1`, [fs.id]);
+        } else {
+          throw new ConflictError('Cannot stop recurrence because a future segment has recorded completions');
+        }
+      }
+
+      const anySchedFinal = await client.query(`SELECT 1 FROM task_schedules WHERE task_id = $1 LIMIT 1`, [taskId]);
+      const anyCompFinal = await client.query(`SELECT 1 FROM task_completions WHERE task_id = $1 LIMIT 1`, [taskId]);
+      if (anySchedFinal.rows.length === 0 && anyCompFinal.rows.length === 0) {
+         await client.query(`DELETE FROM tasks WHERE id = $1`, [taskId]);
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 }

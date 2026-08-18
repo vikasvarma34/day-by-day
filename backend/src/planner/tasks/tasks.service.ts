@@ -344,4 +344,98 @@ export class TasksService {
 
     return await this.tasksRepository.updateTask(userId, taskId, dto);
   }
+
+  async completeTask(userId: string, taskId: string, payload: any): Promise<void> {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new BadRequestError('Invalid request body');
+    }
+
+    if (typeof taskId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(taskId)) {
+      throw new BadRequestError('Invalid id: must be a UUID v4');
+    }
+
+    if (!payload.completedDate) {
+      throw new BadRequestError('completedDate is required');
+    }
+    const completedDate = validatePlannerDate(payload.completedDate, 'completedDate');
+
+    let scheduleId = undefined;
+    let scheduledDate = undefined;
+
+    if (payload.scheduleId) {
+      if (typeof payload.scheduleId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.scheduleId)) {
+        throw new BadRequestError('Invalid scheduleId: must be a UUID v4');
+      }
+      scheduleId = payload.scheduleId;
+
+      if (!payload.scheduledDate) {
+        throw new BadRequestError('scheduledDate is required when scheduleId is provided');
+      }
+      scheduledDate = validatePlannerDate(payload.scheduledDate, 'scheduledDate');
+    } else if (payload.scheduledDate) {
+      throw new BadRequestError('scheduleId is required when scheduledDate is provided');
+    }
+
+    await this.tasksRepository.completeTask(userId, taskId, {
+      completedDate,
+      scheduleId,
+      scheduledDate
+    });
+  }
+
+  async undoTask(userId: string, taskId: string, payload: any): Promise<void> {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new BadRequestError('Invalid request body');
+    }
+
+    if (typeof taskId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(taskId)) {
+      throw new BadRequestError('Invalid id: must be a UUID v4');
+    }
+
+    let scheduleId = undefined;
+    let scheduledDate = undefined;
+
+    if (payload.scheduleId) {
+      if (typeof payload.scheduleId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.scheduleId)) {
+        throw new BadRequestError('Invalid scheduleId: must be a UUID v4');
+      }
+      scheduleId = payload.scheduleId;
+
+      if (!payload.scheduledDate) {
+        throw new BadRequestError('scheduledDate is required when scheduleId is provided');
+      }
+      scheduledDate = validatePlannerDate(payload.scheduledDate, 'scheduledDate');
+    } else if (payload.scheduledDate) {
+      throw new BadRequestError('scheduleId is required when scheduledDate is provided');
+    }
+
+    await this.tasksRepository.undoTask(userId, taskId, {
+      scheduleId,
+      scheduledDate
+    });
+  }
+
+  async deleteTask(userId: string, taskId: string): Promise<void> {
+    if (typeof taskId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(taskId)) {
+      throw new BadRequestError('Invalid id: must be a UUID v4');
+    }
+    await this.tasksRepository.deleteTask(userId, taskId);
+  }
+
+  async stopRecurrence(userId: string, taskId: string, payload: any): Promise<void> {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new BadRequestError('Invalid request body');
+    }
+
+    if (typeof taskId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(taskId)) {
+      throw new BadRequestError('Invalid id: must be a UUID v4');
+    }
+
+    if (!payload.plannerToday) {
+      throw new BadRequestError('plannerToday is required');
+    }
+    const plannerToday = validatePlannerDate(payload.plannerToday, 'plannerToday');
+
+    await this.tasksRepository.stopRecurrence(userId, taskId, { plannerToday });
+  }
 }

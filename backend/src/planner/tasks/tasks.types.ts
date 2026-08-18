@@ -56,3 +56,18 @@ export interface EditTaskDto {
   isImportant?: boolean;
   schedule?: EditTaskScheduleDto | null;
 }
+
+export interface CompleteTaskDto {
+  completedDate: string;
+  scheduleId?: string;
+  scheduledDate?: string;
+}
+
+export interface UndoTaskDto {
+  scheduleId?: string;
+  scheduledDate?: string;
+}
+
+export interface StopRecurrenceDto {
+  plannerToday: string;
+}

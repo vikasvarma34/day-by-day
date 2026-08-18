@@ -49,4 +49,64 @@ export class TasksController {
       next(err);
     }
   };
+
+  completeTask = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const taskId = req.params.taskId as string;
+      await this.tasksService.completeTask(req.user.id, taskId, req.body);
+      res.status(200).json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  undoTask = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const taskId = req.params.taskId as string;
+      await this.tasksService.undoTask(req.user.id, taskId, req.body);
+      res.status(200).json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  deleteTask = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const taskId = req.params.taskId as string;
+      await this.tasksService.deleteTask(req.user.id, taskId);
+      res.status(200).json({ deletedTaskId: taskId });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  stopRecurrence = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const taskId = req.params.taskId as string;
+      await this.tasksService.stopRecurrence(req.user.id, taskId, req.body);
+      res.status(200).json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  };
 }

@@ -16,5 +16,10 @@ export function createTasksRouter(
   router.post('/', authMiddleware, tasksController.createTask);
   router.patch('/:taskId', authMiddleware, tasksController.updateTask);
 
+  router.post('/:taskId/complete', authMiddleware, tasksController.completeTask);
+  router.post('/:taskId/undo', authMiddleware, tasksController.undoTask);
+  router.delete('/:taskId', authMiddleware, tasksController.deleteTask);
+  router.post('/:taskId/stop-recurrence', authMiddleware, tasksController.stopRecurrence);
+
   return router;
 }
