@@ -1,7 +1,7 @@
-import { getPool } from '../db/pool';
-import { CandidateScheduleRow } from './types';
+import { getPool } from '../../db/pool';
+import { CandidateScheduleRow } from './day.types';
 
-export class PlannerRepository {
+export class DayRepository {
   /**
    * Queries all candidate schedule segments belonging to tasks owned by userId
    * where start_date <= requestedDate and (end_date IS NULL or end_date >= requestedDate).

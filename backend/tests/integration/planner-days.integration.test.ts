@@ -5,7 +5,7 @@ import { createApp } from '../../src/app';
 import { getPool, closePool } from '../../src/db/pool';
 import { createTestUserFixture, deleteTestUserById } from './auth-test-fixtures';
 import { generateSessionToken, hashSessionToken } from '../../src/security/session';
-import { WEEKDAY_MASKS } from '../../src/planner/recurrence';
+import { WEEKDAY_MASKS } from '../../src/planner/domain/recurrence';
 
 test('GET /planner/days/:date Integration Suite', async (t) => {
   const app = createApp();

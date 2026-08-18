@@ -1,4 +1,4 @@
-import { BadRequestError } from '../errors/http-errors';
+import { BadRequestError } from '../../errors/http-errors';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 

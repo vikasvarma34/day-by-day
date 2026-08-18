@@ -1,13 +1,13 @@
 import { Response, NextFunction } from 'express';
-import { AuthenticatedRequest } from '../auth/auth.middleware';
-import { UnauthorizedError } from '../errors/http-errors';
-import { validatePlannerDate } from './date-validation';
-import { isScheduleOccurringOnDate, PlannerSchedule } from './recurrence';
-import { PlannerRepository } from './planner.repository';
-import { PlannerDayResponse, TaskOccurrenceItem } from './types';
+import { AuthenticatedRequest } from '../../auth/auth.middleware';
+import { UnauthorizedError } from '../../errors/http-errors';
+import { validatePlannerDate } from '../domain/date-validation';
+import { isScheduleOccurringOnDate, PlannerSchedule } from '../domain/recurrence';
+import { DayRepository } from './day.repository';
+import { PlannerDayResponse, TaskOccurrenceItem } from './day.types';
 
-export class PlannerController {
-  constructor(private readonly plannerRepository: PlannerRepository = new PlannerRepository()) {}
+export class DayController {
+  constructor(private readonly dayRepository: DayRepository = new DayRepository()) {}
 
   getDay = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -16,7 +16,7 @@ export class PlannerController {
       }
 
       const requestedDate = validatePlannerDate(req.params.date, 'date');
-      const candidateRows = await this.plannerRepository.findCandidateSchedulesForDate(
+      const candidateRows = await this.dayRepository.findCandidateSchedulesForDate(
         req.user.id,
         requestedDate
       );

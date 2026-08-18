@@ -1,4 +1,4 @@
-import { ScheduleType } from './recurrence';
+import { ScheduleType } from '../domain/recurrence';
 
 export interface TaskOccurrenceCompletion {
   id: string;

@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PlannerController } from './planner.controller';
-import { PlannerRepository } from './planner.repository';
-import { AuthenticatedRequest } from '../auth/auth.middleware';
-import { CandidateScheduleRow } from './types';
+import { DayController } from './day.controller';
+import { DayRepository } from './day.repository';
+import { AuthenticatedRequest } from '../../auth/auth.middleware';
+import { CandidateScheduleRow } from './day.types';
 
-test('PlannerController.getDay: organizes occurrences into timed (sorted), anytime, and completed sections', async () => {
+test('DayController.getDay: organizes occurrences into timed (sorted), anytime, and completed sections', async () => {
   const mockCandidateRows: CandidateScheduleRow[] = [
     // 1. Timed 18:00:00 (Evening)
     {
@@ -106,9 +106,9 @@ test('PlannerController.getDay: organizes occurrences into timed (sorted), anyti
 
   const mockRepo = {
     findCandidateSchedulesForDate: async (_userId: string, _date: string) => mockCandidateRows,
-  } as unknown as PlannerRepository;
+  } as unknown as DayRepository;
 
-  const controller = new PlannerController(mockRepo);
+  const controller = new DayController(mockRepo);
 
   let responseStatus = 0;
   let responseData: any = null;

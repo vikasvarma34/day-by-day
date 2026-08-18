@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validatePlannerDate } from './date-validation';
-import { BadRequestError } from '../errors/http-errors';
+import { BadRequestError } from '../../errors/http-errors';
 
 test('validatePlannerDate: accepts valid standard calendar dates', () => {
   assert.equal(validatePlannerDate('2026-08-18'), '2026-08-18');
