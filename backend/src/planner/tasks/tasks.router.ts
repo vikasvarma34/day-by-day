@@ -14,6 +14,7 @@ export function createTasksRouter(
 
   // Mounted at /tasks in app.ts, so this root corresponds to POST /tasks
   router.post('/', authMiddleware, tasksController.createTask);
+  router.patch('/:taskId', authMiddleware, tasksController.updateTask);
 
   return router;
 }

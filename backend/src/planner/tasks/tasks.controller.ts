@@ -26,4 +26,27 @@ export class TasksController {
       next(err);
     }
   };
+
+  updateTask = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new UnauthorizedError();
+      }
+
+      const taskId = req.params.taskId as string;
+      const task = await this.tasksService.updateTask(
+        req.user.id,
+        taskId,
+        req.body
+      );
+
+      res.status(200).json({ task });
+    } catch (err) {
+      next(err);
+    }
+  };
 }

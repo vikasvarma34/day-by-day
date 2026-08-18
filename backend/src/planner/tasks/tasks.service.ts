@@ -1,5 +1,5 @@
 import { TasksRepository } from './tasks.repository';
-import { CreateTaskDto, PlannerTaskResponse } from './tasks.types';
+import { CreateTaskDto, PlannerTaskResponse, EditTaskDto } from './tasks.types';
 import { validatePlannerDate } from '../domain/date-validation';
 import { isScheduleOccurringOnDate, PlannerSchedule } from '../domain/recurrence';
 import { BadRequestError } from '../../errors/http-errors';
@@ -173,5 +173,175 @@ export class TasksService {
     }
 
     return await this.tasksRepository.createIdempotent(userId, dto);
+  }
+
+  async updateTask(userId: string, taskId: string, payload: any): Promise<PlannerTaskResponse> {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new BadRequestError('Invalid request body');
+    }
+
+    if (typeof taskId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(taskId)) {
+      throw new BadRequestError('Invalid id: must be a UUID v4');
+    }
+
+    const dto: EditTaskDto = {
+      plannerToday: '',
+      effectiveDate: ''
+    };
+
+    if (payload.title !== undefined) {
+      if (typeof payload.title !== 'string' || payload.title.trim() === '') {
+        throw new BadRequestError('Invalid title: cannot be blank');
+      }
+      dto.title = payload.title.trim();
+    }
+
+    if (payload.note !== undefined) {
+      let note = payload.note;
+      if (typeof note === 'string') {
+        note = note.trim();
+        if (note === '') note = null;
+        if (note !== null && note.length > 500) {
+          throw new BadRequestError('Invalid note: max 500 characters');
+        }
+      } else if (note !== null) {
+        throw new BadRequestError('Invalid note');
+      }
+      dto.note = note;
+    }
+
+    if (payload.isImportant !== undefined) {
+      if (typeof payload.isImportant !== 'boolean') {
+        throw new BadRequestError('isImportant must be a boolean');
+      }
+      dto.isImportant = payload.isImportant;
+    }
+
+    if (payload.schedule !== undefined) {
+      if (payload.schedule !== null && (typeof payload.schedule !== 'object' || Array.isArray(payload.schedule))) {
+        throw new BadRequestError('schedule must be an object or null');
+      }
+
+      if (payload.schedule === null) {
+        throw new BadRequestError('Removing schedule (converting to Later) is not supported via this endpoint');
+      }
+
+      if (!payload.plannerToday) {
+        throw new BadRequestError('plannerToday is required for schedule changes');
+      }
+      if (!payload.effectiveDate) {
+        throw new BadRequestError('effectiveDate is required for schedule changes');
+      }
+      dto.plannerToday = validatePlannerDate(payload.plannerToday, 'plannerToday');
+      dto.effectiveDate = validatePlannerDate(payload.effectiveDate, 'effectiveDate');
+
+      if (dto.effectiveDate < dto.plannerToday) {
+        throw new BadRequestError('effectiveDate cannot be before plannerToday');
+      }
+
+      const s = payload.schedule;
+      if (!['ONCE', 'INTERVAL_DAYS', 'WEEKDAYS'].includes(s.type)) {
+        throw new BadRequestError('Invalid schedule type');
+      }
+
+      const startDate = validatePlannerDate(s.startDate, 'startDate');
+
+      if (s.type === 'INTERVAL_DAYS' || s.type === 'WEEKDAYS') {
+        if (startDate < dto.plannerToday) {
+          throw new BadRequestError('Recurring start date cannot be before plannerToday');
+        }
+      }
+
+      let endDate: string | null = null;
+      if (s.endDate !== undefined && s.endDate !== null) {
+        endDate = validatePlannerDate(s.endDate, 'endDate');
+        if (endDate < startDate) {
+          throw new BadRequestError('endDate cannot be before startDate');
+        }
+      }
+
+      if (s.type === 'ONCE') {
+        endDate = startDate;
+      }
+
+      let scheduledTime = null;
+      if (s.scheduledTime !== undefined && s.scheduledTime !== null) {
+        if (typeof s.scheduledTime !== 'string' || !TIME_REGEX.test(s.scheduledTime)) {
+          throw new BadRequestError('Invalid scheduledTime: must be HH:mm:ss');
+        }
+        scheduledTime = s.scheduledTime;
+      }
+
+      let reminder = null;
+      if (s.reminderMinutesBefore !== undefined && s.reminderMinutesBefore !== null) {
+        if (!ALLOWED_REMINDERS.includes(s.reminderMinutesBefore)) {
+          throw new BadRequestError('Invalid reminderMinutesBefore');
+        }
+        if (!scheduledTime) {
+          throw new BadRequestError('reminderMinutesBefore requires scheduledTime');
+        }
+        reminder = s.reminderMinutesBefore;
+      }
+
+      let intervalDays = null;
+      let intervalAnchorDate = null;
+      let weekdaysMask = null;
+
+      if (s.type === 'INTERVAL_DAYS') {
+        if (typeof s.intervalDays !== 'number' || s.intervalDays < 1 || !Number.isInteger(s.intervalDays)) {
+          throw new BadRequestError('intervalDays must be an integer >= 1');
+        }
+        intervalDays = s.intervalDays;
+        intervalAnchorDate = startDate;
+      } else if (s.type === 'WEEKDAYS') {
+        if (typeof s.weekdaysMask !== 'number' || s.weekdaysMask < 1 || s.weekdaysMask > 127 || !Number.isInteger(s.weekdaysMask)) {
+          throw new BadRequestError('weekdaysMask must be an integer between 1 and 127');
+        }
+        weekdaysMask = s.weekdaysMask;
+      }
+
+      if ((s.type === 'INTERVAL_DAYS' || s.type === 'WEEKDAYS') && endDate) {
+        if (s.type === 'WEEKDAYS') {
+          const dummySchedule: PlannerSchedule = {
+            schedule_type: 'WEEKDAYS',
+            start_date: startDate,
+            end_date: endDate,
+            interval_days: null,
+            interval_anchor_date: null,
+            weekdays_mask: weekdaysMask,
+          };
+
+          let hasOccurrence = false;
+          let current = startDate;
+          let iterations = 0;
+          while (current <= endDate && iterations < 7) {
+            if (isScheduleOccurringOnDate(dummySchedule, current)) {
+              hasOccurrence = true;
+              break;
+            }
+            const d = new Date(current);
+            d.setUTCDate(d.getUTCDate() + 1);
+            current = d.toISOString().split('T')[0];
+            iterations++;
+          }
+          if (!hasOccurrence) {
+            throw new BadRequestError('Finite recurring schedule contains no occurrences');
+          }
+        }
+      }
+
+      dto.schedule = {
+        type: s.type,
+        startDate,
+        endDate,
+        scheduledTime,
+        intervalDays,
+        intervalAnchorDate,
+        weekdaysMask,
+        reminderMinutesBefore: reminder,
+      };
+    }
+
+    return await this.tasksRepository.updateTask(userId, taskId, dto);
   }
 }

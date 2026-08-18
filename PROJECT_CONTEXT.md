@@ -43,6 +43,12 @@
   * Same-owner retries return canonical state without overwrite
   * Scheduled creation is atomic
   * Recurring creation uses explicit plannerToday from the POST body
+* **PATCH /tasks/:taskId Edit Rules**:
+  * Authenticated endpoint
+  * Task editing is an atomic operation locked with FOR UPDATE
+  * Content edits (title, note, isImportant) are updated in-place
+  * Rescheduling an uncompleted schedule updates it in-place
+  * Changing a recurring schedule splits the segment (end-dates the existing schedule before the effective date, and creates a new schedule from the effective date)
 * **Feature Depth**: Cohesive single-responsibility features stay flat (e.g. `src/auth/`). When a feature spans multiple distinct domains or use cases, group internally by responsibility:
   * `src/planner/domain/`: Pure planner calendar & recurrence rules (zero Express/PostgreSQL dependencies).
   * `src/planner/day/`: Authenticated Day API (controller, service, repository, types, colocated unit tests).

@@ -1,7 +1,8 @@
 import { PoolClient } from 'pg';
 import { getPool } from '../../db/pool';
-import { ConflictError } from '../../errors/http-errors';
-import { CreateTaskDto, PlannerTaskResponse } from './tasks.types';
+import { ConflictError, NotFoundError } from '../../errors/http-errors';
+import { CreateTaskDto, PlannerTaskResponse, EditTaskDto, EditTaskScheduleDto } from './tasks.types';
+import { PlannerSchedule, isScheduleOccurringOnDate } from '../domain/recurrence';
 
 type QueryExecutor = {
   query: PoolClient['query'];
@@ -51,7 +52,7 @@ export class TasksRepository {
       if (dto.schedule) {
         await client.query(
           `INSERT INTO task_schedules (
-             task_id, schedule_type, start_date, end_date, interval_days, 
+             task_id, schedule_type, start_date, end_date, interval_days,
              interval_anchor_date, weekdays_mask, scheduled_time, reminder_minutes_before
            )
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -85,6 +86,171 @@ export class TasksRepository {
     }
   }
 
+  async updateTask(userId: string, taskId: string, dto: EditTaskDto): Promise<PlannerTaskResponse> {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const taskRes = await client.query(
+        `SELECT id, title, note, is_important FROM tasks WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+        [taskId, userId]
+      );
+      if (taskRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throw new NotFoundError('Task not found');
+      }
+
+      if (dto.title !== undefined) {
+        await client.query(`UPDATE tasks SET title = $1 WHERE id = $2`, [dto.title, taskId]);
+      }
+      if (dto.note !== undefined) {
+        await client.query(`UPDATE tasks SET note = $1 WHERE id = $2`, [dto.note, taskId]);
+      }
+      if (dto.isImportant !== undefined) {
+        await client.query(`UPDATE tasks SET is_important = $1 WHERE id = $2`, [dto.isImportant, taskId]);
+      }
+
+      if (dto.schedule !== undefined && dto.schedule !== null) {
+        const s = dto.schedule;
+        const effectiveDate = dto.effectiveDate;
+
+        const schedRes = await client.query(
+          `SELECT id, schedule_type, start_date::text, end_date::text, interval_days, interval_anchor_date::text, weekdays_mask
+           FROM task_schedules WHERE task_id = $1 ORDER BY start_date ASC`,
+          [taskId]
+        );
+        const existingSchedules = schedRes.rows;
+
+        if (existingSchedules.length === 0) {
+          const compRes = await client.query(
+            `SELECT 1 FROM task_completions WHERE task_id = $1 AND schedule_id IS NULL AND scheduled_date IS NULL LIMIT 1`,
+            [taskId]
+          );
+          if (compRes.rows.length > 0) {
+            throw new ConflictError('Cannot schedule a completed Later task. Undo completion first.');
+          }
+          await this.insertSchedule(client, taskId, s);
+        } else if (existingSchedules.length === 1 && existingSchedules[0].schedule_type === 'ONCE') {
+          const target = existingSchedules[0];
+          const compRes = await client.query(`SELECT 1 FROM task_completions WHERE schedule_id = $1 LIMIT 1`, [target.id]);
+          if (compRes.rows.length > 0) {
+            throw new ConflictError('Cannot reschedule a completed ONCE occurrence. Undo first.');
+          }
+          await client.query(
+            `UPDATE task_schedules
+             SET schedule_type = $1, start_date = $2, end_date = $3, interval_days = $4,
+                 interval_anchor_date = $5, weekdays_mask = $6, scheduled_time = $7, reminder_minutes_before = $8
+             WHERE id = $9`,
+            [
+              s.type, s.startDate, s.endDate ?? null, s.intervalDays ?? null,
+              s.intervalAnchorDate ?? null, s.weekdaysMask ?? null, s.scheduledTime ?? null,
+              s.reminderMinutesBefore ?? null, target.id
+            ]
+          );
+        } else {
+          const activeBeforeD = existingSchedules.find(sc => sc.start_date < effectiveDate && (sc.end_date === null || sc.end_date >= effectiveDate));
+
+          // Interval anchor logic: cadence-preserving edit keeps anchor.
+          let newAnchorDate = s.type === 'INTERVAL_DAYS' ? s.startDate : null;
+          if (activeBeforeD && activeBeforeD.schedule_type === 'INTERVAL_DAYS' && s.type === 'INTERVAL_DAYS' && activeBeforeD.interval_days === s.intervalDays) {
+            newAnchorDate = activeBeforeD.interval_anchor_date;
+          }
+          s.intervalAnchorDate = newAnchorDate;
+
+          if (activeBeforeD) {
+            // Must check for conflicting completions on this segment BEFORE modifying it
+            const compRes = await client.query(`SELECT 1 FROM task_completions WHERE schedule_id = $1 AND scheduled_date >= $2 LIMIT 1`, [activeBeforeD.id, effectiveDate]);
+            if (compRes.rows.length > 0) {
+              throw new ConflictError('Cannot modify schedule because future completions exist. Undo them first.');
+            }
+
+            const newEndDate = this.subtractOneDay(effectiveDate);
+
+            // Check finite preserved segment validity
+            const dummySchedule: PlannerSchedule = {
+              schedule_type: activeBeforeD.schedule_type,
+              start_date: activeBeforeD.start_date,
+              end_date: newEndDate,
+              interval_days: activeBeforeD.interval_days,
+              interval_anchor_date: activeBeforeD.interval_anchor_date,
+              weekdays_mask: activeBeforeD.weekdays_mask,
+            };
+
+            let hasOccurrence = false;
+            let current = dummySchedule.start_date;
+            let iterations = 0;
+            // evaluate up to 7 days to see if the segment contains any occurrence
+            while (current <= newEndDate && iterations < 7) {
+              if (isScheduleOccurringOnDate(dummySchedule, current)) {
+                hasOccurrence = true;
+                break;
+              }
+              const d = new Date(current);
+              d.setUTCDate(d.getUTCDate() + 1);
+              current = d.toISOString().split('T')[0];
+              iterations++;
+            }
+
+            if (!hasOccurrence) {
+              const refRes = await client.query(`SELECT 1 FROM task_completions WHERE schedule_id = $1 LIMIT 1`, [activeBeforeD.id]);
+              if (refRes.rows.length === 0) {
+                await client.query(`DELETE FROM task_schedules WHERE id = $1`, [activeBeforeD.id]);
+              } else {
+                await client.query(`UPDATE task_schedules SET end_date = $1 WHERE id = $2`, [newEndDate, activeBeforeD.id]);
+              }
+            } else {
+              await client.query(`UPDATE task_schedules SET end_date = $1 WHERE id = $2`, [newEndDate, activeBeforeD.id]);
+            }
+          }
+
+          const futureSchedules = existingSchedules.filter(sc => sc.start_date >= effectiveDate);
+          for (const fs of futureSchedules) {
+            const compRes = await client.query(`SELECT 1 FROM task_completions WHERE schedule_id = $1 AND scheduled_date >= $2 LIMIT 1`, [fs.id, effectiveDate]);
+            if (compRes.rows.length > 0) {
+              throw new ConflictError('Cannot modify schedule because future completions exist. Undo them first.');
+            }
+            await client.query(`DELETE FROM task_schedules WHERE id = $1`, [fs.id]);
+          }
+
+          await this.insertSchedule(client, taskId, s);
+        }
+      }
+
+      const updatedTask = await this.findTaskWithSchedulesUsing(client, taskId, userId);
+      await client.query('COMMIT');
+      return updatedTask!;
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  private subtractOneDay(dateStr: string): string {
+    const d = new Date(dateStr);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  private async insertSchedule(client: PoolClient, taskId: string, s: EditTaskScheduleDto) {
+    await client.query(
+      `INSERT INTO task_schedules (
+         task_id, schedule_type, start_date, end_date, interval_days,
+         interval_anchor_date, weekdays_mask, scheduled_time, reminder_minutes_before
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        taskId, s.type, s.startDate, s.endDate ?? null, s.intervalDays ?? null,
+        s.intervalAnchorDate ?? null, s.weekdaysMask ?? null, s.scheduledTime ?? null,
+        s.reminderMinutesBefore ?? null,
+      ]
+    );
+  }
+
   private async findTaskWithSchedulesUsing(
     executor: QueryExecutor,
     taskId: string,
@@ -104,7 +270,7 @@ export class TasksRepository {
     const row = taskRes.rows[0];
 
     const schedulesRes = await executor.query(
-      `SELECT 
+      `SELECT
          id, schedule_type, start_date::text, end_date::text, scheduled_time,
          interval_days, interval_anchor_date::text, weekdays_mask, reminder_minutes_before
        FROM task_schedules

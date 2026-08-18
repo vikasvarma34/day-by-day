@@ -36,3 +36,23 @@ export interface PlannerTaskResponse {
   isImportant: boolean;
   schedules: PlannerTaskScheduleResponse[];
 }
+
+export interface EditTaskScheduleDto {
+  type: 'ONCE' | 'INTERVAL_DAYS' | 'WEEKDAYS';
+  startDate: string; // YYYY-MM-DD
+  endDate?: string | null;
+  intervalDays?: number | null;
+  intervalAnchorDate?: string | null;
+  weekdaysMask?: number | null;
+  scheduledTime?: string | null; // HH:mm:ss
+  reminderMinutesBefore?: number | null;
+}
+
+export interface EditTaskDto {
+  plannerToday: string;
+  effectiveDate: string;
+  title?: string;
+  note?: string | null;
+  isImportant?: boolean;
+  schedule?: EditTaskScheduleDto | null;
+}
