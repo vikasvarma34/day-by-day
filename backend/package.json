@@ -13,8 +13,12 @@
     "test:unit": "tsx --test \"src/**/*.test.ts\"",
     "test:integration": "tsx --env-file=.env --test \"tests/integration/**/*.test.ts\"",
     "test:e2e": "tsx --env-file=.env --test \"tests/e2e/**/*.test.ts\"",
+    "dev": "tsx --env-file=.env src/server.ts",
     "db:check": "tsx --env-file=.env scripts/check-db.ts",
+    "db:reset:dev": "tsx --env-file=.env scripts/reset-dev-db.ts",
     "user:create": "tsx --env-file=.env scripts/create-user.ts",
+    "user:seed:dev": "tsx --env-file=.env scripts/seed-dev-user.ts",
+    "smoke:api": "tsx --env-file=.env scripts/smoke-api.ts",
     "migrate": "node --env-file=.env node_modules/node-pg-migrate/bin/node-pg-migrate up --migrations-dir migrations --database-url-var MIGRATION_DATABASE_URL",
     "migrate:create": "node --env-file=.env node_modules/node-pg-migrate/bin/node-pg-migrate create --migrations-dir migrations --migration-file-language sql"
   },

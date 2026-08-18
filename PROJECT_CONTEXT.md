@@ -126,14 +126,26 @@ backend/
 ## Build/Test Commands
 
 ### Backend
-* **Environment Variables**: `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `NODE_ENV`, `LOG_LEVEL`
+* **Environment Variables**:
+  * `DATABASE_URL`: Application connection pool string.
+  * `MIGRATION_DATABASE_URL`: Migration runner connection string.
+  * `NODE_ENV`: Runtime environment (`development` | `test` | `production`).
+  * `LOG_LEVEL`: Optional logging severity (`debug` | `info` | `warn` | `error`).
+  * `TEST_USER_EMAIL`: Email for the single persistent local development test user.
+  * `TEST_USER_PASSWORD`: Password for the persistent local development test user.
+* **Persistent Development User**: One local development test account is configured via `TEST_USER_EMAIL` and `TEST_USER_PASSWORD` in the gitignored `.env` file. Never commit credentials or bearer tokens. The automated smoke test logs in with these credentials to obtain a fresh session token automatically.
+* **Runbook Reference**: See `docs/backend-development.md` for local setup, data reset, seed, and smoke workflows.
+
 ```bash
 cd backend
-npm test
-npm run build
-npm run db:check
-npm run user:create
-npm run migrate
+npm test                 # Run unit, integration, and E2E regression suites
+npm run build            # Compile TypeScript
+npm run db:check         # Verify database connectivity
+npm run db:reset:dev     # (Dev only) Reset runtime data while preserving schema/migrations
+npm run user:create      # Interactive CLI user creation
+npm run user:seed:dev    # Idempotent seed for persistent development user
+npm run smoke:api        # Execute live API smoke test against running backend
+npm run migrate          # Apply migrations
 npm run migrate:create -- <migration_name>
 ```
 

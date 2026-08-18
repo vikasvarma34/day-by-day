@@ -632,4 +632,203 @@ test('HTTP Authentication E2E Suite', async (t) => {
       assert.equal(meData2.user.id, testUser.id);
     });
   });
+
+  await t.test('POST /auth/change-password scenarios', async (changeSuite) => {
+    await changeSuite.test('unauthenticated request returns HTTP 401 UNAUTHORIZED', async () => {
+      const res = await fetch(`${baseUrl}/auth/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: 'CurrentPassword12345!',
+          newPassword: 'NewPassword12345!',
+        }),
+      });
+
+      assert.equal(res.status, 401);
+      const data = await res.json();
+      assert.equal(data.error.code, 'UNAUTHORIZED');
+    });
+
+    await changeSuite.test('missing or invalid body fields returns HTTP 400 BAD_REQUEST', async () => {
+      const testUser = await createTestUser('changepw_e2e_badbody');
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testUser.email, password: testUser.rawPassword }),
+      });
+      const { token } = await loginRes.json();
+
+      // Missing newPassword
+      const res1 = await fetch(`${baseUrl}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword: testUser.rawPassword,
+        }),
+      });
+      assert.equal(res1.status, 400);
+
+      // Non-string currentPassword
+      const res2 = await fetch(`${baseUrl}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword: 12345,
+          newPassword: 'ValidNewPassword12345!',
+        }),
+      });
+      assert.equal(res2.status, 400);
+    });
+
+    await changeSuite.test('invalid new password (< 15 chars) returns HTTP 400 BAD_REQUEST', async () => {
+      const testUser = await createTestUser('changepw_e2e_short');
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testUser.email, password: testUser.rawPassword }),
+      });
+      const { token } = await loginRes.json();
+
+      const res = await fetch(`${baseUrl}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword: testUser.rawPassword,
+          newPassword: 'TooShort123!',
+        }),
+      });
+
+      assert.equal(res.status, 400);
+      const data = await res.json();
+      assert.equal(data.error.code, 'BAD_REQUEST');
+      assert.ok(data.error.message.includes('between 15 and 128'));
+    });
+
+    await changeSuite.test('same new password returns HTTP 400 BAD_REQUEST', async () => {
+      const testUser = await createTestUser('changepw_e2e_same');
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testUser.email, password: testUser.rawPassword }),
+      });
+      const { token } = await loginRes.json();
+
+      const res = await fetch(`${baseUrl}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword: testUser.rawPassword,
+          newPassword: testUser.rawPassword,
+        }),
+      });
+
+      assert.equal(res.status, 400);
+      const data = await res.json();
+      assert.equal(data.error.code, 'BAD_REQUEST');
+      assert.equal(data.error.message, 'New password cannot be the same as current password');
+    });
+
+    await changeSuite.test('wrong current password returns HTTP 401 UNAUTHORIZED and preserves existing session', async () => {
+      const testUser = await createTestUser('changepw_e2e_wrongpw');
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testUser.email, password: testUser.rawPassword }),
+      });
+      const { token } = await loginRes.json();
+
+      const res = await fetch(`${baseUrl}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword: 'WrongPassword12345!',
+          newPassword: 'BrandNewValidPassword2026!',
+        }),
+      });
+
+      assert.equal(res.status, 401);
+      const data = await res.json();
+      assert.equal(data.error.code, 'UNAUTHORIZED');
+      assert.equal(data.error.message, 'Invalid current password');
+
+      // Session is still active
+      const meRes = await fetch(`${baseUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      assert.equal(meRes.status, 200);
+    });
+
+    await changeSuite.test('successful change password returns HTTP 200 { success: true }, revokes sessions, and requires new password', async () => {
+      const testUser = await createTestUser('changepw_e2e_full');
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testUser.email, password: testUser.rawPassword }),
+      });
+      const { token: sessionToken } = await loginRes.json();
+
+      const newPassword = 'BrandNewValidPassword2026!';
+
+      const changeRes = await fetch(`${baseUrl}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({
+          currentPassword: testUser.rawPassword,
+          newPassword,
+        }),
+      });
+
+      assert.equal(changeRes.status, 200);
+      const changeData = await changeRes.json();
+      assert.deepEqual(changeData, { success: true });
+
+      // Verify no sensitive data leaked in response
+      assert.equal((changeData as any).password, undefined);
+      assert.equal((changeData as any).passwordHash, undefined);
+      assert.equal((changeData as any).token, undefined);
+
+      // Previous session token is now invalid (revoked)
+      const meRes = await fetch(`${baseUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      assert.equal(meRes.status, 401);
+
+      // Old password fails login
+      const oldLoginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testUser.email, password: testUser.rawPassword }),
+      });
+      assert.equal(oldLoginRes.status, 401);
+
+      // New password succeeds login
+      const newLoginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testUser.email, password: newPassword }),
+      });
+      assert.equal(newLoginRes.status, 200);
+      const newLoginData = await newLoginRes.json();
+      assert.ok(newLoginData.token);
+      assert.equal(newLoginData.user.id, testUser.id);
+    });
+  });
 });

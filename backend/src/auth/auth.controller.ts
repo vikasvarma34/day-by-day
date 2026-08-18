@@ -74,4 +74,27 @@ export class AuthController {
       },
     });
   };
+
+  /**
+   * POST /auth/change-password
+   * Authenticated password change endpoint.
+   * Atomically updates password and revokes all active sessions for the user.
+   */
+  changePassword = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new UnauthorizedError('Authentication required');
+      }
+
+      const body = requireObject(req.body);
+      const currentPassword = requireString(body.currentPassword, 'currentPassword');
+      const newPassword = requireString(body.newPassword, 'newPassword');
+
+      await this.authService.changePassword(req.user.id, currentPassword, newPassword);
+
+      res.status(200).json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  };
 }

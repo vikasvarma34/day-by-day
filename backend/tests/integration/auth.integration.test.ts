@@ -334,4 +334,96 @@ test('Authentication Service Integration Suite', async (t) => {
       assert.equal(authUser2.id, testUser.id);
     });
   });
+
+  await t.test('CHANGE PASSWORD scenarios', async (changeSuite) => {
+    await changeSuite.test('rejects change password if current password is wrong and preserves existing state', async () => {
+      const testUser = await createTestUser('changepw_wrong');
+      const session = await authService.login(testUser.email, testUser.rawPassword);
+
+      // Attempt with incorrect current password
+      await assert.rejects(
+        () => authService.changePassword(testUser.id, 'WrongPassword12345!', 'NewValidPassword12345!'),
+        (err: any) => err instanceof AuthenticationError && err.message === 'Invalid current password'
+      );
+
+      // Existing session is still valid
+      const authUser = await authService.authenticateSession(session.token);
+      assert.ok(authUser);
+
+      // Original password still logs in
+      const relogin = await authService.login(testUser.email, testUser.rawPassword);
+      assert.ok(relogin.token);
+    });
+
+    await changeSuite.test('rejects change password if new password is too short or too long', async () => {
+      const testUser = await createTestUser('changepw_bounds');
+
+      // Too short (< 15 chars)
+      await assert.rejects(
+        () => authService.changePassword(testUser.id, testUser.rawPassword, 'Short123!'),
+        (err: any) => err.status === 400 && err.message.includes('between 15 and 128')
+      );
+
+      // Too long (> 128 chars)
+      const tooLong = 'A'.repeat(129);
+      await assert.rejects(
+        () => authService.changePassword(testUser.id, testUser.rawPassword, tooLong),
+        (err: any) => err.status === 400 && err.message.includes('between 15 and 128')
+      );
+    });
+
+    await changeSuite.test('rejects changing to identical new password', async () => {
+      const testUser = await createTestUser('changepw_same');
+
+      await assert.rejects(
+        () => authService.changePassword(testUser.id, testUser.rawPassword, testUser.rawPassword),
+        (err: any) => err.status === 400 && err.message === 'New password cannot be the same as current password'
+      );
+    });
+
+    await changeSuite.test('successful change updates hash, invalidates all sessions, and allows login only with new password', async () => {
+      const testUser = await createTestUser('changepw_success');
+      const session1 = await authService.login(testUser.email, testUser.rawPassword);
+      const session2 = await authService.login(testUser.email, testUser.rawPassword);
+
+      const newPassword = 'BrandNewValidPassword2026!';
+
+      // Change password
+      await authService.changePassword(testUser.id, testUser.rawPassword, newPassword);
+
+      // ALL existing sessions must be revoked
+      assert.equal(await authService.authenticateSession(session1.token), null);
+      assert.equal(await authService.authenticateSession(session2.token), null);
+
+      // Old password fails login
+      await assert.rejects(
+        () => authService.login(testUser.email, testUser.rawPassword),
+        (err: any) => err instanceof AuthenticationError
+      );
+
+      // New password succeeds login
+      const newSession = await authService.login(testUser.email, newPassword);
+      assert.ok(newSession.token);
+      assert.equal(newSession.user.id, testUser.id);
+    });
+
+    await changeSuite.test('changing password for user A does not affect user B credentials or sessions', async () => {
+      const userA = await createTestUser('changepw_usera');
+      const userB = await createTestUser('changepw_userb');
+
+      const sessionB = await authService.login(userB.email, userB.rawPassword);
+
+      // Change user A's password
+      await authService.changePassword(userA.id, userA.rawPassword, 'NewUserAPassword2026!');
+
+      // User B's session is still valid
+      const authUserB = await authService.authenticateSession(sessionB.token);
+      assert.ok(authUserB);
+      assert.equal(authUserB.id, userB.id);
+
+      // User B can still log in with existing password
+      const reloginB = await authService.login(userB.email, userB.rawPassword);
+      assert.ok(reloginB.token);
+    });
+  });
 });

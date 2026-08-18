@@ -1,7 +1,8 @@
 import { AuthRepository } from './auth.repository';
 import { AuthUser, LoginResult } from './types';
 import { normalizeEmail, validateEmail, validatePassword } from '../security/validation';
-import { verifyPassword, DUMMY_ARGON2_HASH } from '../security/password';
+import { verifyPassword, hashPassword, DUMMY_ARGON2_HASH } from '../security/password';
+import { BadRequestError, UnauthorizedError } from '../errors/http-errors';
 import {
   generateSessionToken,
   hashSessionToken,
@@ -120,5 +121,38 @@ export class AuthService {
     } catch {
       // Idempotent error handling
     }
+  }
+
+  /**
+   * Authenticated password change with atomic session revocation:
+   * - Validates new password rules (15-128 chars).
+   * - Verifies current password against stored Argon2id hash.
+   * - Rejects if new password matches current password.
+   * - Hashes new password with Argon2id.
+   * - Atomically updates password hash and deletes all active sessions for the user.
+   * - Never logs or exposes passwords or hashes.
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    if (!validatePassword(newPassword)) {
+      throw new BadRequestError('Password must be between 15 and 128 characters');
+    }
+
+    const userWithHash = await this.authRepository.findUserById(userId);
+    if (!userWithHash) {
+      throw new UnauthorizedError('User not found');
+    }
+
+    const isCurrentValid = await verifyPassword(userWithHash.passwordHash, currentPassword);
+    if (!isCurrentValid) {
+      throw new AuthenticationError('Invalid current password');
+    }
+
+    const isSamePassword = await verifyPassword(userWithHash.passwordHash, newPassword);
+    if (isSamePassword) {
+      throw new BadRequestError('New password cannot be the same as current password');
+    }
+
+    const newPasswordHash = await hashPassword(newPassword);
+    await this.authRepository.updatePasswordAndRevokeSessions(userId, newPasswordHash);
   }
 }

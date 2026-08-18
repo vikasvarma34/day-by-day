@@ -178,4 +178,56 @@ export class AuthRepository {
       [userId, now]
     );
   }
+
+  /**
+   * Finds a user by ID including password_hash for credential verification.
+   */
+  async findUserById(userId: string): Promise<UserWithPasswordHash | null> {
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT id, email, password_hash, first_name, last_name, nickname
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      email: row.email,
+      passwordHash: row.password_hash,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      nickname: row.nickname,
+    };
+  }
+
+  /**
+   * Atomically updates a user's password hash and revokes all active sessions in a single transaction.
+   */
+  async updatePasswordAndRevokeSessions(userId: string, newPasswordHash: string): Promise<void> {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+        [newPasswordHash, userId]
+      );
+      await client.query(
+        `DELETE FROM auth_sessions WHERE user_id = $1`,
+        [userId]
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 }
