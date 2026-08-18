@@ -1,6 +1,7 @@
 import express, { Express } from 'express';
 import helmet from 'helmet';
 import { createAuthRouter } from './auth/auth.router';
+import { createPlannerRouter } from './planner/planner.router';
 import { errorHandler } from './errors/error.middleware';
 import { NotFoundError } from './errors/http-errors';
 import { requestLogger } from './logging/request-logger.middleware';
@@ -29,6 +30,7 @@ export function createApp(): Express {
   });
 
   app.use('/auth', createAuthRouter());
+  app.use('/planner', createPlannerRouter());
 
   // Catch-all 404 for unknown routes (returns JSON instead of HTML)
   app.use((req, _res, next) => {
