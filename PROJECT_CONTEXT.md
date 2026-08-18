@@ -54,8 +54,10 @@
   * `src/planner/day/`: Authenticated Day API (controller, service, repository, types, colocated unit tests).
   * `src/planner/later/`: Authenticated Later API (controller, service, repository, types).
   * `src/planner/history/`: Authenticated History API (controller, service, repository, types, colocated unit tests).
-  * `src/planner/tasks/`: Authenticated Task Creation API (controller, service, repository, types).
+  * `src/planner/tasks/`: Authenticated Task Creation & Mutation API (controller, service, repository, types).
+  * `src/planner/refresh/`: Authenticated Manual Refresh / Snapshot API (controller, service, repository, types, colocated unit tests).
   * `src/planner/planner.router.ts`: Top-level feature router composing sub-routes.
+* **Android API Contract**: The frozen backend API contract for Android is documented in `docs/planner-api-contract.md`.
 * **No Speculative Folders**: Do not create empty future folders before their functionality is implemented.
 * **Testing Convention**:
   * Unit tests are strictly colocated next to the source files they verify (`*.test.ts`).
@@ -81,7 +83,8 @@ backend/
       day/                 # Day view use case (controller, service, repository, types)
       later/               # Later view use case (controller, service, repository, types)
       history/             # History view use case (controller, service, repository, types)
-      tasks/               # Task creation use case (controller, service, repository, types)
+      tasks/               # Task creation & mutation use case (controller, service, repository, types)
+      refresh/             # Manual refresh & snapshot use case (controller, service, repository, types)
       planner.router.ts    # Feature-level router mounting planner endpoints
     security/              # Password hashing (Argon2id) & session crypto (SHA-256)
     types/                 # Express type declarations
