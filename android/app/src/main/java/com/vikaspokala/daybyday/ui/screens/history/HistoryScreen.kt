@@ -34,7 +34,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
@@ -216,21 +215,12 @@ private fun HistoryCard(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            Column(
+            Text(
+                text = task.title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = DayByDayPrimaryText,
                 modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = task.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = DayByDayPrimaryText
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Completed at ${task.completedAtTime}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = DayByDaySecondaryText
-                )
-            }
+            )
         }
     }
 }
