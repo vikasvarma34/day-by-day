@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,13 +43,17 @@ fun MonthCalendar(
     onDateSelected: (LocalDate) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val weekdays = listOf("S", "M", "T", "W", "T", "F", "S")
+    val weekdays = remember { listOf("S", "M", "T", "W", "T", "F", "S") }
 
-    val firstDayOfMonth = month.atDay(1)
-    val firstDayOfWeek = firstDayOfMonth.dayOfWeek.value // Mon=1..Sun=7
-    val emptyOffset = if (firstDayOfWeek == 7) 0 else firstDayOfWeek
-    val daysInMonth = month.lengthOfMonth()
-    val totalCells = emptyOffset + daysInMonth
+    val (rows, totalCells, emptyOffset) = remember(month) {
+        val firstDayOfMonth = month.atDay(1)
+        val firstDayOfWeek = firstDayOfMonth.dayOfWeek.value // Mon=1..Sun=7
+        val offset = if (firstDayOfWeek == 7) 0 else firstDayOfWeek
+        val daysInMonth = month.lengthOfMonth()
+        val total = offset + daysInMonth
+        val r = (total + 6) / 7
+        Triple(r, total, offset)
+    }
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -81,7 +86,6 @@ fun MonthCalendar(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Calendar Days Grid
-            val rows = (totalCells + 6) / 7
             for (row in 0 until rows) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

@@ -3,6 +3,12 @@ package com.vikaspokala.daybyday.ui
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -110,8 +116,12 @@ fun AppShell(
                                             } else if (screen == Screen.Later) {
                                                 laterViewModel.collapseCompleted()
                                             }
-                                            backStack.clear()
-                                            backStack.add(screen)
+                                            if (backStack.size == 1) {
+                                                backStack[0] = screen
+                                            } else {
+                                                backStack.clear()
+                                                backStack.add(screen)
+                                            }
                                         }
                                     }
                                 )
@@ -124,6 +134,31 @@ fun AppShell(
     ) { innerPadding ->
         NavDisplay(
             backStack = backStack,
+            modifier = Modifier.padding(innerPadding),
+            transitionSpec = {
+                val isInitialTab = initialState.key in Screen.bottomNavItems
+                val isTargetTab = targetState.key in Screen.bottomNavItems
+                if (isInitialTab && isTargetTab) {
+                    fadeIn(animationSpec = tween(durationMillis = 80)) togetherWith
+                        fadeOut(animationSpec = tween(durationMillis = 60))
+                } else {
+                    (fadeIn(animationSpec = tween(durationMillis = 150)) +
+                        slideInVertically(animationSpec = tween(durationMillis = 150)) { it / 24 }) togetherWith
+                        fadeOut(animationSpec = tween(durationMillis = 100))
+                }
+            },
+            popTransitionSpec = {
+                val isInitialTab = initialState.key in Screen.bottomNavItems
+                val isTargetTab = targetState.key in Screen.bottomNavItems
+                if (isInitialTab && isTargetTab) {
+                    fadeIn(animationSpec = tween(durationMillis = 80)) togetherWith
+                        fadeOut(animationSpec = tween(durationMillis = 60))
+                } else {
+                    fadeIn(animationSpec = tween(durationMillis = 100)) togetherWith
+                        (fadeOut(animationSpec = tween(durationMillis = 140)) +
+                            slideOutVertically(animationSpec = tween(durationMillis = 140)) { it / 24 })
+                }
+            },
             entryProvider = { key ->
                 when (key) {
                     is Screen.Today -> NavEntry(key) {
@@ -284,7 +319,6 @@ fun AppShell(
                     else -> error("Unknown destination key: $key")
                 }
             },
-            modifier = Modifier.padding(innerPadding),
             onBack = {
                 if (backStack.size > 1) {
                     backStack.removeAt(backStack.lastIndex)

@@ -62,6 +62,11 @@ fun ScheduleScreen(
         viewModel.getTasksForDate(selectedDate, tasks)
     }
 
+    val importantDates = remember(tasks) {
+        tasks.filter { it.isImportant }.map { it.date }.toSet()
+    }
+
+    val todayDate = remember { java.time.LocalDate.now() }
     val monthTitleFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()) }
     val selectedDateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
     val fullDateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
@@ -163,8 +168,8 @@ fun ScheduleScreen(
                     MonthCalendar(
                         month = currentMonth,
                         selectedDate = selectedDate,
-                        todayDate = java.time.LocalDate.now(),
-                        hasImportantTask = { date -> viewModel.hasImportantTask(date, tasks) },
+                        todayDate = todayDate,
+                        hasImportantTask = { date -> date in importantDates },
                         onDateSelected = { date -> viewModel.selectDate(date) }
                     )
 

@@ -66,9 +66,15 @@ fun TodayScreen(
         viewModel.getTasksForDate(selectedDate, tasks)
     }
 
-    val timedTasks = selectedDateTasks.filter { !it.isCompleted && it.time != null }
-    val anytimeTasks = selectedDateTasks.filter { !it.isCompleted && it.time == null }
-    val completedTasks = selectedDateTasks.filter { it.isCompleted }
+    val timedTasks = remember(selectedDateTasks) {
+        selectedDateTasks.filter { !it.isCompleted && it.time != null }
+    }
+    val anytimeTasks = remember(selectedDateTasks) {
+        selectedDateTasks.filter { !it.isCompleted && it.time == null }
+    }
+    val completedTasks = remember(selectedDateTasks) {
+        selectedDateTasks.filter { it.isCompleted }
+    }
 
     val actualTodayFormatted = remember {
         LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()))
