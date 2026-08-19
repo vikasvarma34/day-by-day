@@ -63,6 +63,7 @@ class ScheduleViewModel(
         date: LocalDate,
         time: String? = null,
         reminder: String? = null,
+        recurrence: com.vikaspokala.daybyday.ui.models.Recurrence? = null,
         isImportant: Boolean = false
     ): String {
         return taskStore.addTask(
@@ -71,6 +72,7 @@ class ScheduleViewModel(
             date = date,
             time = time,
             reminder = reminder,
+            recurrence = recurrence,
             isImportant = isImportant
         )
     }
@@ -82,6 +84,7 @@ class ScheduleViewModel(
         date: LocalDate,
         time: String? = null,
         reminder: String? = null,
+        recurrence: com.vikaspokala.daybyday.ui.models.Recurrence? = null,
         isImportant: Boolean = false
     ) {
         taskStore.updateTask(
@@ -91,6 +94,7 @@ class ScheduleViewModel(
             date = date,
             time = time,
             reminder = reminder,
+            recurrence = recurrence,
             isImportant = isImportant
         )
     }

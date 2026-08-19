@@ -2,6 +2,7 @@ package com.vikaspokala.daybyday.ui.fake
 
 import java.time.LocalDate
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
+import com.vikaspokala.daybyday.ui.models.Recurrence
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +46,7 @@ class InMemoryDatedTaskStore(
         date: LocalDate,
         time: String? = null,
         reminder: String? = null,
+        recurrence: Recurrence? = null,
         isImportant: Boolean = false
     ): String {
         val newId = "task_" + System.currentTimeMillis()
@@ -55,6 +57,7 @@ class InMemoryDatedTaskStore(
             date = date,
             time = time,
             reminder = if (time != null) reminder else null,
+            recurrence = recurrence,
             isImportant = isImportant,
             isCompleted = false
         )
@@ -69,6 +72,7 @@ class InMemoryDatedTaskStore(
         date: LocalDate,
         time: String? = null,
         reminder: String? = null,
+        recurrence: Recurrence? = null,
         isImportant: Boolean = false
     ) {
         _tasks.update { list ->
@@ -82,6 +86,7 @@ class InMemoryDatedTaskStore(
                             date = date,
                             time = time,
                             reminder = if (time != null) reminder else null,
+                            recurrence = recurrence,
                             isImportant = isImportant
                         )
                     } else {
@@ -96,6 +101,7 @@ class InMemoryDatedTaskStore(
                     date = date,
                     time = time,
                     reminder = if (time != null) reminder else null,
+                    recurrence = recurrence,
                     isImportant = isImportant,
                     isCompleted = false
                 )

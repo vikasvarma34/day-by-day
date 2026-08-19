@@ -49,6 +49,8 @@ import com.vikaspokala.daybyday.ui.theme.DayByDayPrimaryText
 import com.vikaspokala.daybyday.ui.theme.DayByDaySecondaryText
 import com.vikaspokala.daybyday.ui.theme.DayByDayStrongAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
+import com.vikaspokala.daybyday.ui.components.ChooseRepeatModal
+import com.vikaspokala.daybyday.ui.models.toDisplayString
 
 @Composable
 fun TaskScreen(
@@ -60,9 +62,10 @@ fun TaskScreen(
     dateString: String? = null,
     timeString: String? = null,
     reminderString: String? = null,
+    recurrence: com.vikaspokala.daybyday.ui.models.Recurrence? = null,
     isLaterTask: Boolean = false,
     onNavigateBack: () -> Unit,
-    onSaveTask: (title: String, note: String?, dateString: String?, timeString: String?, reminderString: String?, isImportant: Boolean) -> Unit = { _, _, _, _, _, _ -> },
+    onSaveTask: (title: String, note: String?, dateString: String?, timeString: String?, reminderString: String?, recurrence: com.vikaspokala.daybyday.ui.models.Recurrence?, isImportant: Boolean) -> Unit = { _, _, _, _, _, _, _ -> },
     onScheduleThisClick: () -> Unit = {},
     onConfirmDelete: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -75,39 +78,55 @@ fun TaskScreen(
     var currentReminderString by remember(reminderString, timeString) {
         mutableStateOf(if (timeString != null) reminderString else null)
     }
+    var currentRecurrence by remember(recurrence, dateString) {
+        mutableStateOf(if (dateString != null) recurrence else null)
+    }
 
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePickerModal by remember { mutableStateOf(false) }
     var showReminderModal by remember { mutableStateOf(false) }
+    var showRepeatModal by remember { mutableStateOf(false) }
     var showNoTimeWarning by remember { mutableStateOf(false) }
+    var showNoDateWarning by remember { mutableStateOf(false) }
+    var showPastDateWarning by remember { mutableStateOf(false) }
+    var showEndDateWarning by remember { mutableStateOf(false) }
 
     // Intercept system Back button when overlays/screens are open
-    BackHandler(enabled = showDeleteConfirmation || showDatePicker || showTimePickerModal || showReminderModal || showNoTimeWarning) {
+    BackHandler(enabled = showDeleteConfirmation || showDatePicker || showTimePickerModal || showReminderModal || showRepeatModal || showNoTimeWarning || showNoDateWarning || showPastDateWarning || showEndDateWarning) {
         when {
             showDeleteConfirmation -> showDeleteConfirmation = false
             showDatePicker -> showDatePicker = false
             showTimePickerModal -> showTimePickerModal = false
             showReminderModal -> showReminderModal = false
+            showRepeatModal -> showRepeatModal = false
             showNoTimeWarning -> showNoTimeWarning = false
+            showNoDateWarning -> showNoDateWarning = false
+            showPastDateWarning -> showPastDateWarning = false
+            showEndDateWarning -> showEndDateWarning = false
         }
     }
 
     // Determine dirty state by comparing current form state against initial state
+    val isTitleDirty = titleText != initialTitle
+    val isNoteDirty = noteText != initialNote.orEmpty()
+    val isImportantDirty = isImportant != initialIsImportant
+    val isDateDirty = currentDateString != dateString
+    val isTimeDirty = currentTimeString != timeString
+    val isReminderDirty = currentReminderString != (if (timeString != null) reminderString else null)
+    val isRecurrenceDirty = currentRecurrence != (if (dateString != null) recurrence else null)
+
+    val isContentChanged = isTitleDirty || isNoteDirty || isImportantDirty
+    val isScheduleChanged = isDateDirty || isTimeDirty || isReminderDirty || isRecurrenceDirty
+
     val isSaveEnabled = if (isCreateMode) {
         titleText.trim().isNotEmpty()
     } else {
-        titleText.trim().isNotEmpty() && (
-            titleText != initialTitle ||
-            noteText != initialNote.orEmpty() ||
-            isImportant != initialIsImportant ||
-            currentDateString != dateString ||
-            currentTimeString != timeString ||
-            currentReminderString != (if (timeString != null) reminderString else null)
-        )
+        titleText.trim().isNotEmpty() && (isContentChanged || isScheduleChanged)
     }
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
+    val parseFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
 
     Box(
         modifier = modifier
@@ -181,14 +200,25 @@ fun TaskScreen(
                             .then(
                                 if (isSaveEnabled) {
                                     Modifier.clickable {
-                                        onSaveTask(
-                                            titleText,
-                                            noteText,
-                                            currentDateString,
-                                            currentTimeString,
-                                            currentReminderString,
-                                            isImportant
-                                        )
+                                        val pd = try { currentDateString?.let { java.time.LocalDate.parse(it, parseFormatter) } } catch (e: Exception) { null }
+                                        val recEndDate = currentRecurrence?.endDate
+                                        val isEndDateInvalid = pd != null && recEndDate != null && recEndDate.isBefore(pd)
+                                        val isBlocked = pd != null && pd.isBefore(java.time.LocalDate.now()) && (isCreateMode || isScheduleChanged)
+                                        if (isEndDateInvalid) {
+                                            showEndDateWarning = true
+                                        } else if (isBlocked) {
+                                            showPastDateWarning = true
+                                        } else {
+                                            onSaveTask(
+                                                titleText,
+                                                noteText,
+                                                currentDateString,
+                                                currentTimeString,
+                                                currentReminderString,
+                                                currentRecurrence,
+                                                isImportant
+                                            )
+                                        }
                                     }
                                 } else Modifier
                             ),
@@ -362,10 +392,23 @@ fun TaskScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // REPEAT Field (72dp height)
+                    val parsedDate = try {
+                        currentDateString?.let { java.time.LocalDate.parse(it, parseFormatter) }
+                    } catch (e: Exception) { null }
+
                     StandardFieldRow(
                         label = "REPEAT",
-                        valueText = "Does not repeat",
-                        actionText = "›"
+                        valueText = if (currentDateString != null) currentRecurrence.toDisplayString(parsedDate) else "Does not repeat",
+                        actionText = "›",
+                        onClick = {
+                            if (currentDateString == null) {
+                                showNoDateWarning = true
+                            } else if (parsedDate != null && parsedDate.isBefore(java.time.LocalDate.now())) {
+                                showPastDateWarning = true
+                            } else {
+                                showRepeatModal = true
+                            }
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -555,6 +598,218 @@ fun TaskScreen(
                                 .height(44.dp)
                                 .fillMaxWidth()
                                 .clickable { showNoTimeWarning = false },
+                            shape = RoundedCornerShape(14.dp),
+                            color = DayByDayAccent
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "OK",
+                                    style = TextStyle(
+                                        fontFamily = DayByDayFontFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Floating Choose Repeat Modal (ON TOP of Task screen)
+        if (showRepeatModal && !isLaterTask && currentDateString != null) {
+            val parsedDate = try {
+                java.time.LocalDate.parse(currentDateString, parseFormatter)
+            } catch (e: Exception) { null }
+
+            ChooseRepeatModal(
+                currentRepeat = currentRecurrence,
+                anchorDate = parsedDate,
+                onDismiss = { showRepeatModal = false },
+                onRepeatSelected = { newRepeat ->
+                    currentRecurrence = newRepeat
+                    showRepeatModal = false
+                }
+            )
+        }
+
+        // Warning when tapping Repeat without a Date
+        if (showNoDateWarning) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { showNoDateWarning = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { /* Consume clicks */ },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, DayByDayNeutralBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Add a date before setting a repeat.",
+                            style = TextStyle(
+                                fontFamily = DayByDayFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                color = DayByDayPrimaryText,
+                                textAlign = TextAlign.Center
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier
+                                .height(44.dp)
+                                .fillMaxWidth()
+                                .clickable { showNoDateWarning = false },
+                            shape = RoundedCornerShape(14.dp),
+                            color = DayByDayAccent
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "OK",
+                                    style = TextStyle(
+                                        fontFamily = DayByDayFontFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Warning when scheduling in the past
+        if (showPastDateWarning) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { showPastDateWarning = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { /* Consume clicks */ },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, DayByDayNeutralBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Tasks cannot be scheduled in the past.",
+                            style = TextStyle(
+                                fontFamily = DayByDayFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                color = DayByDayPrimaryText,
+                                textAlign = TextAlign.Center
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier
+                                .height(44.dp)
+                                .fillMaxWidth()
+                                .clickable { showPastDateWarning = false },
+                            shape = RoundedCornerShape(14.dp),
+                            color = DayByDayAccent
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "OK",
+                                    style = TextStyle(
+                                        fontFamily = DayByDayFontFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Warning when End Date is before Start Date
+        if (showEndDateWarning) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { showEndDateWarning = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { /* Consume clicks */ },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, DayByDayNeutralBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "End date cannot be before start date.",
+                            style = TextStyle(
+                                fontFamily = DayByDayFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                color = DayByDayPrimaryText,
+                                textAlign = TextAlign.Center
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier
+                                .height(44.dp)
+                                .fillMaxWidth()
+                                .clickable { showEndDateWarning = false },
                             shape = RoundedCornerShape(14.dp),
                             color = DayByDayAccent
                         ) {

@@ -238,6 +238,7 @@ fun ScheduleScreen(
                                         dateString = formattedSelectedDate,
                                         timeString = task.time,
                                         reminderString = task.reminder,
+                                        recurrence = task.recurrence,
                                         isLaterTask = false,
                                         sourceScreen = "SCHEDULE"
                                     )

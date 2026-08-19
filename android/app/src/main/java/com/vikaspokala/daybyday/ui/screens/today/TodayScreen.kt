@@ -236,6 +236,7 @@ fun TodayScreen(
                                         dateString = selectedDateFormatted,
                                         timeString = task.time,
                                         reminderString = task.reminder,
+                                        recurrence = task.recurrence,
                                         isLaterTask = false,
                                         sourceScreen = "TODAY"
                                     )
@@ -271,6 +272,7 @@ fun TodayScreen(
                                         dateString = selectedDateFormatted,
                                         timeString = null,
                                         reminderString = null,
+                                        recurrence = task.recurrence,
                                         isLaterTask = false,
                                         sourceScreen = "TODAY"
                                     )
@@ -306,6 +308,7 @@ fun TodayScreen(
                                         dateString = selectedDateFormatted,
                                         timeString = task.time,
                                         reminderString = task.reminder,
+                                        recurrence = task.recurrence,
                                         isLaterTask = false,
                                         sourceScreen = "TODAY"
                                     )

@@ -4,6 +4,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import androidx.lifecycle.ViewModel
 import com.vikaspokala.daybyday.ui.fake.InMemoryDatedTaskStore
+import com.vikaspokala.daybyday.ui.models.Recurrence
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,6 +55,7 @@ class TodayViewModel(
         date: LocalDate = _selectedDate.value,
         time: String? = null,
         reminder: String? = null,
+        recurrence: Recurrence? = null,
         isImportant: Boolean = false
     ): String {
         return taskStore.addTask(
@@ -62,6 +64,7 @@ class TodayViewModel(
             date = date,
             time = time,
             reminder = reminder,
+            recurrence = recurrence,
             isImportant = isImportant
         )
     }
@@ -70,19 +73,20 @@ class TodayViewModel(
         id: String,
         title: String,
         note: String? = null,
-        date: LocalDate? = null,
+        date: LocalDate,
         time: String? = null,
         reminder: String? = null,
+        recurrence: Recurrence? = null,
         isImportant: Boolean = false
     ) {
-        val targetDate = date ?: tasks.value.firstOrNull { it.id == id }?.date ?: _selectedDate.value
         taskStore.updateTask(
             id = id,
             title = title,
             note = note,
-            date = targetDate,
+            date = date,
             time = time,
             reminder = reminder,
+            recurrence = recurrence,
             isImportant = isImportant
         )
     }

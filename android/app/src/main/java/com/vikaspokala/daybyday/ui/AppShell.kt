@@ -264,6 +264,7 @@ fun AppShell(
                             dateString = key.dateString,
                             timeString = key.timeString,
                             reminderString = key.reminderString,
+                            recurrence = key.recurrence,
                             isLaterTask = key.isLaterTask,
                             onNavigateBack = {
                                 if (backStack.size > 1) {
@@ -277,12 +278,13 @@ fun AppShell(
                                             taskId = id,
                                             initialTitle = key.initialTitle,
                                             initialNote = key.initialNote,
-                                            initialIsImportant = key.initialIsImportant
+                                            initialIsImportant = key.initialIsImportant,
+                                            recurrence = key.recurrence
                                         )
                                     )
                                 }
                             },
-                            onSaveTask = { title, note, newDateStr, newTimeStr, newReminderStr, isImp ->
+                            onSaveTask = { title, note, newDateStr, newTimeStr, newReminderStr, newRecurrenceStr, isImp ->
                                 if (key.isCreateMode) {
                                     when {
                                         key.isLaterTask || key.sourceScreen == "LATER" -> {
@@ -290,12 +292,12 @@ fun AppShell(
                                         }
                                         key.sourceScreen == "SCHEDULE" -> {
                                             val parsedDate = parseDateString(newDateStr) ?: scheduleViewModel.selectedDate.value
-                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
+                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                         }
                                         else -> {
                                             val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
-                                            todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
-                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
+                                            todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
+                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                         }
                                     }
                                 } else {
@@ -306,12 +308,12 @@ fun AppShell(
                                             }
                                             key.sourceScreen == "SCHEDULE" -> {
                                                 val parsedDate = parseDateString(newDateStr) ?: scheduleViewModel.selectedDate.value
-                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
+                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                             }
                                             else -> {
                                                 val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
-                                                todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
-                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
+                                                todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
+                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                             }
                                         }
                                     }
@@ -337,12 +339,13 @@ fun AppShell(
                             initialTitle = key.initialTitle,
                             initialNote = key.initialNote,
                             initialIsImportant = key.initialIsImportant,
+                            initialRecurrence = key.recurrence,
                             onNavigateBack = {
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)
                                 }
                             },
-                            onSchedule = { title, note, date, time, reminder, isImportant ->
+                            onSchedule = { title, note, date, time, reminder, recurrence, isImportant ->
                                 laterViewModel.deleteTask(key.taskId)
                                 todayViewModel.addTask(
                                     title = title,
@@ -350,6 +353,7 @@ fun AppShell(
                                     date = date,
                                     time = time,
                                     reminder = reminder,
+                                    recurrence = recurrence,
                                     isImportant = isImportant
                                 )
                                 // Pop both ScheduleItem and TaskScreen to land directly on LaterScreen

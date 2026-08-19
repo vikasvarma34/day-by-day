@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation3.runtime.NavKey
+import com.vikaspokala.daybyday.ui.models.Recurrence
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -44,6 +45,7 @@ sealed class Screen : NavKey {
         val dateString: String? = null,
         val timeString: String? = null,
         val reminderString: String? = null,
+        val recurrence: Recurrence? = null,
         val isLaterTask: Boolean = false,
         val sourceScreen: String = "TODAY"
     ) : Screen()
@@ -52,7 +54,8 @@ sealed class Screen : NavKey {
         val taskId: String,
         val initialTitle: String,
         val initialNote: String? = null,
-        val initialIsImportant: Boolean = false
+        val initialIsImportant: Boolean = false,
+        val recurrence: Recurrence? = null
     ) : Screen()
 
     val screenTitle: String
