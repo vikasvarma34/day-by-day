@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.update
 class TodayViewModel : ViewModel() {
 
     private val _tasks = MutableStateFlow(FakePlannerData.getTodayDemoTasks())
-    val tasks: StateFlow<List<TaskItem>> = _tasks.asStateFlow()
+    val tasks: StateFlow<List<TodayTaskItem>> = _tasks.asStateFlow()
 
     fun toggleCompletion(taskId: String) {
         _tasks.update { currentList ->

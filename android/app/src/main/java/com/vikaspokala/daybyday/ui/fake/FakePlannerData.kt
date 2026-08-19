@@ -4,7 +4,7 @@ import java.time.LocalDate
 import com.vikaspokala.daybyday.ui.screens.history.HistoryTaskItem
 import com.vikaspokala.daybyday.ui.screens.later.LaterTaskItem
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
-import com.vikaspokala.daybyday.ui.screens.today.TaskItem
+import com.vikaspokala.daybyday.ui.screens.today.TodayTaskItem
 
 /**
  * ============================================================================
@@ -19,14 +19,14 @@ import com.vikaspokala.daybyday.ui.screens.today.TaskItem
  */
 object FakePlannerData {
 
-    fun getTodayDemoTasks(): List<TaskItem> {
+    fun getTodayDemoTasks(): List<TodayTaskItem> {
         return listOf(
-            TaskItem(id = "t1", title = "Take medicine", time = "8:00 AM", isImportant = false, isCompleted = false),
-            TaskItem(id = "t2", title = "Buy groceries", time = "10:30 AM", isImportant = true, isCompleted = false),
-            TaskItem(id = "t3", title = "Lunch", time = "1:00 PM", isImportant = false, isCompleted = false),
-            TaskItem(id = "t4", title = "Gym", time = "6:00 PM", isImportant = true, isCompleted = false),
-            TaskItem(id = "t5", title = "Call the bank", time = null, isImportant = false, isCompleted = false),
-            TaskItem(id = "t6", title = "Morning walk", time = "7:15 AM", isImportant = false, isCompleted = true)
+            TodayTaskItem(id = "t1", title = "Take medicine", time = "8:00 AM", isImportant = false, isCompleted = false),
+            TodayTaskItem(id = "t2", title = "Buy groceries", time = "10:30 AM", isImportant = true, isCompleted = false),
+            TodayTaskItem(id = "t3", title = "Lunch", time = "1:00 PM", isImportant = false, isCompleted = false),
+            TodayTaskItem(id = "t4", title = "Gym", time = "6:00 PM", isImportant = true, isCompleted = false),
+            TodayTaskItem(id = "t5", title = "Call the bank", time = null, isImportant = false, isCompleted = false),
+            TodayTaskItem(id = "t6", title = "Morning walk", time = "7:15 AM", isImportant = false, isCompleted = true)
         )
     }
 
