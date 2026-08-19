@@ -65,16 +65,15 @@ export class TasksService {
         throw new BadRequestError('Invalid schedule type');
       }
 
+      if (!plannerToday) {
+        throw new BadRequestError('plannerToday is required for scheduled task creation');
+      }
+      const today = validatePlannerDate(plannerToday, 'plannerToday');
+
       const startDate = validatePlannerDate(s.startDate, 'startDate');
 
-      if (s.type === 'INTERVAL_DAYS' || s.type === 'WEEKDAYS') {
-        if (!plannerToday) {
-          throw new BadRequestError('plannerToday is required for recurring schedule creation');
-        }
-        const today = validatePlannerDate(plannerToday, 'plannerToday');
-        if (startDate < today) {
-          throw new BadRequestError('Recurring start date cannot be before plannerToday');
-        }
+      if (startDate < today) {
+        throw new BadRequestError('Scheduled start date cannot be before plannerToday');
       }
 
       let endDate: string | null = null;
@@ -246,10 +245,8 @@ export class TasksService {
 
       const startDate = validatePlannerDate(s.startDate, 'startDate');
 
-      if (s.type === 'INTERVAL_DAYS' || s.type === 'WEEKDAYS') {
-        if (startDate < dto.plannerToday) {
-          throw new BadRequestError('Recurring start date cannot be before plannerToday');
-        }
+      if (startDate < dto.plannerToday) {
+        throw new BadRequestError('Scheduled start date cannot be before plannerToday');
       }
 
       let endDate: string | null = null;

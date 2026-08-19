@@ -141,6 +141,7 @@ export async function runSmokeTest(): Promise<void> {
         id: onceTaskId,
         title: 'Smoke Test Once Task',
         isImportant: true,
+        plannerToday: today,
         schedule: {
           type: 'ONCE',
           startDate: today,

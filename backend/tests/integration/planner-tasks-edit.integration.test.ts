@@ -106,12 +106,34 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     assert.equal(body.task.isImportant, true);
   });
 
-  await t.test('Later → ONCE schedule', async () => {
+  await t.test('Later → ONCE rejects scheduling into past (< plannerToday)', async () => {
     const taskId = getValidId();
     await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
-      body: JSON.stringify({ id: taskId, title: 'Later', plannerToday: '2026-08-18' }),
+      body: JSON.stringify({ id: taskId, title: 'Later Task' }),
+    });
+
+    const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+      body: JSON.stringify({
+        plannerToday: '2026-08-19',
+        effectiveDate: '2026-08-19',
+        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+      }),
+    });
+    assert.equal(res.status, 400);
+    const body = await (res.json() as any);
+    assert.match(body.error.message, /Scheduled start date cannot be before plannerToday/);
+  });
+
+  await t.test('Later → ONCE schedule succeeds for today or future', async () => {
+    const taskId = getValidId();
+    await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+      body: JSON.stringify({ id: taskId, title: 'Later' }),
     });
 
     const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
@@ -129,7 +151,34 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     assert.equal(body.task.schedules[0].startDate, '2026-08-18');
   });
 
-  await t.test('ONCE reschedule in place', async () => {
+  await t.test('ONCE reschedule rejects moving to date before plannerToday', async () => {
+    const taskId = getValidId();
+    await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+      body: JSON.stringify({
+        id: taskId,
+        title: 'ONCE Today',
+        plannerToday: '2026-08-19',
+        schedule: { type: 'ONCE', startDate: '2026-08-19' }
+      }),
+    });
+
+    const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+      body: JSON.stringify({
+        plannerToday: '2026-08-19',
+        effectiveDate: '2026-08-19',
+        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+      }),
+    });
+    assert.equal(res.status, 400);
+    const body = await (res.json() as any);
+    assert.match(body.error.message, /Scheduled start date cannot be before plannerToday/);
+  });
+
+  await t.test('ONCE reschedule succeeds for today or future', async () => {
     const taskId = getValidId();
     await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
@@ -155,6 +204,28 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     const body = await (res.json() as any);
     assert.equal(body.task.schedules.length, 1);
     assert.equal(body.task.schedules[0].startDate, '2026-08-19');
+  });
+
+  await t.test('content-only edit of a historical task with past schedule is not blocked', async () => {
+    const taskId = getValidId();
+    // Directly insert historical task with past schedule in DB
+    await pool.query(`INSERT INTO tasks (id, user_id, title, note) VALUES ($1, $2, 'Historical Title', 'Old Note')`, [taskId, user1.id]);
+    await pool.query(`INSERT INTO task_schedules (task_id, schedule_type, start_date, end_date) VALUES ($1, 'ONCE', '2020-01-01', '2020-01-01')`, [taskId]);
+
+    // Content-only edit does not pass schedule
+    const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+      body: JSON.stringify({
+        title: 'Updated Historical Title',
+        note: 'Updated Historical Note'
+      }),
+    });
+    assert.equal(res.status, 200);
+    const body = await (res.json() as any);
+    assert.equal(body.task.title, 'Updated Historical Title');
+    assert.equal(body.task.note, 'Updated Historical Note');
+    assert.equal(body.task.schedules[0].startDate, '2020-01-01');
   });
 
   await t.test('Recurring edit splits existing segment at effectiveDate', async () => {

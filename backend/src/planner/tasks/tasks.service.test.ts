@@ -13,6 +13,7 @@ describe('TasksService', () => {
     mockRepository = {
       createIdempotent: mock.fn(),
       findTaskWithSchedules: mock.fn(),
+      updateTask: mock.fn(),
     };
     service = new TasksService(mockRepository as any);
   });
@@ -39,6 +40,31 @@ describe('TasksService', () => {
     );
   });
 
+  it('allows Later task creation without plannerToday', async () => {
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: {} }));
+    const payload = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Later Task',
+      note: 'No schedule'
+    };
+    await service.createTask(mockUserId, payload);
+    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(callArgs[0], mockUserId);
+    assert.equal(callArgs[1].schedule, null);
+  });
+
+  it('rejects schedule creation without plannerToday for scheduled tasks (ONCE)', async () => {
+    const payload = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Task',
+      schedule: { type: 'ONCE', startDate: '2026-08-18' }
+    };
+    await assert.rejects(
+      service.createTask(mockUserId, payload),
+      /plannerToday is required for scheduled task creation/
+    );
+  });
+
   it('rejects schedule creation without plannerToday for recurring schedules', async () => {
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
@@ -47,8 +73,47 @@ describe('TasksService', () => {
     };
     await assert.rejects(
       service.createTask(mockUserId, payload),
-      BadRequestError
+      /plannerToday is required for scheduled task creation/
     );
+  });
+
+  it('rejects ONCE start date before plannerToday', async () => {
+    const payload = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Task',
+      plannerToday: '2026-08-19',
+      schedule: { type: 'ONCE', startDate: '2026-08-18' }
+    };
+    await assert.rejects(
+      service.createTask(mockUserId, payload),
+      /Scheduled start date cannot be before plannerToday/
+    );
+  });
+
+  it('allows ONCE start date equal to plannerToday', async () => {
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: {} }));
+    const payload = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Task',
+      plannerToday: '2026-08-19',
+      schedule: { type: 'ONCE', startDate: '2026-08-19' }
+    };
+    await service.createTask(mockUserId, payload);
+    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(callArgs[1].schedule.startDate, '2026-08-19');
+  });
+
+  it('allows ONCE start date after plannerToday', async () => {
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: {} }));
+    const payload = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Task',
+      plannerToday: '2026-08-19',
+      schedule: { type: 'ONCE', startDate: '2026-08-20' }
+    };
+    await service.createTask(mockUserId, payload);
+    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(callArgs[1].schedule.startDate, '2026-08-20');
   });
 
   it('rejects recurring start date before plannerToday', async () => {
@@ -60,7 +125,7 @@ describe('TasksService', () => {
     };
     await assert.rejects(
       service.createTask(mockUserId, payload),
-      BadRequestError
+      /Scheduled start date cannot be before plannerToday/
     );
   });
 
@@ -69,6 +134,7 @@ describe('TasksService', () => {
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Task',
+      plannerToday: '2026-08-18',
       schedule: { type: 'ONCE', startDate: '2026-08-18', endDate: '2026-08-20' }
     };
     await service.createTask(mockUserId, payload);
@@ -115,6 +181,7 @@ describe('TasksService', () => {
       service.createTask(mockUserId, {
         id: '00000000-0000-4000-a000-000000000000', 
         title: 'T', 
+        plannerToday: '2026-08-18',
         schedule: { type: 'ONCE', startDate: '2026-08-18', scheduledTime: '' }
       }),
       BadRequestError
@@ -129,9 +196,31 @@ describe('TasksService', () => {
       plannerToday: '2026-08-18',
       schedule: { type: 'WEEKDAYS', startDate: '2050-01-01', endDate: '2050-01-05', weekdaysMask: 127 }
     };
-    // If it took a giant loop, it would hang or be slow. With max 7 iterations, it's instant.
     await service.createTask(mockUserId, payload);
     const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
     assert.equal(callArgs[1].schedule.endDate, '2050-01-05');
+  });
+
+  it('updateTask rejects schedule change if startDate < plannerToday for ONCE', async () => {
+    const payload = {
+      plannerToday: '2026-08-19',
+      effectiveDate: '2026-08-19',
+      schedule: { type: 'ONCE', startDate: '2026-08-18' }
+    };
+    await assert.rejects(
+      service.updateTask(mockUserId, '00000000-0000-4000-a000-000000000000', payload),
+      /Scheduled start date cannot be before plannerToday/
+    );
+  });
+
+  it('updateTask allows schedule change if startDate >= plannerToday for ONCE', async () => {
+    mockRepository.updateTask.mock.mockImplementation(async () => ({}));
+    const payload = {
+      plannerToday: '2026-08-19',
+      effectiveDate: '2026-08-19',
+      schedule: { type: 'ONCE', startDate: '2026-08-19' }
+    };
+    await service.updateTask(mockUserId, '00000000-0000-4000-a000-000000000000', payload);
+    assert.equal(mockRepository.updateTask.mock.calls.length, 1);
   });
 });

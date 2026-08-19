@@ -157,7 +157,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       const taskId = getValidId();
       const createRes = await fetch(`${baseUrl}/tasks`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ id: taskId, title: 'Once Task', schedule: { type: 'ONCE', startDate: '2026-08-18' } })
+        body: JSON.stringify({ id: taskId, title: 'Once Task', plannerToday: '2026-08-18', schedule: { type: 'ONCE', startDate: '2026-08-18' } })
       });
       const createBody = await createRes.json();
       const scheduleId = createBody.task.schedules[0].id;
@@ -205,7 +205,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       const taskId = getValidId();
       await fetch(`${baseUrl}/tasks`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ id: taskId, title: 'To Delete', schedule: { type: 'ONCE', startDate: '2026-08-18' } })
+        body: JSON.stringify({ id: taskId, title: 'To Delete', plannerToday: '2026-08-18', schedule: { type: 'ONCE', startDate: '2026-08-18' } })
       });
       
       const res = await fetch(`${baseUrl}/tasks/${taskId}`, {

@@ -65,7 +65,7 @@ test('POST /tasks Integration Suite', async (t) => {
     assert.equal(res.status, 400);
   });
 
-  await t.test('creates a Later task without schedule', async () => {
+  await t.test('creates a Later task without schedule or plannerToday', async () => {
     const id = getValidId();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
@@ -79,12 +79,34 @@ test('POST /tasks Integration Suite', async (t) => {
     assert.equal(body.task.schedules.length, 0);
   });
 
-  await t.test('creates a task with ONCE schedule atomically', async () => {
+  await t.test('rejects creating ONCE task when startDate < plannerToday with 400', async () => {
     const id = getValidId();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-      body: JSON.stringify({ id, title: 'Once Task', schedule: { type: 'ONCE', startDate: '2026-08-18' } }),
+      body: JSON.stringify({
+        id,
+        title: 'Past Once Task',
+        plannerToday: '2026-08-19',
+        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+      }),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error.message, /Scheduled start date cannot be before plannerToday/);
+  });
+
+  await t.test('creates a task with ONCE schedule atomically when startDate >= plannerToday', async () => {
+    const id = getValidId();
+    const res = await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+      body: JSON.stringify({
+        id,
+        title: 'Once Task',
+        plannerToday: '2026-08-18',
+        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+      }),
     });
     assert.equal(res.status, 201);
     const body = await res.json();
@@ -131,8 +153,8 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('handles genuinely concurrent requests idempotently and safely', async () => {
     const id = getValidId();
-    const payloadA = { id, title: 'Concurrent Winner', note: 'Payload A', schedule: { type: 'ONCE', startDate: '2026-08-18' } };
-    const payloadB = { id, title: 'Concurrent Loser', note: 'Payload B', schedule: { type: 'ONCE', startDate: '2026-08-19' } };
+    const payloadA = { id, title: 'Concurrent Winner', note: 'Payload A', plannerToday: '2026-08-18', schedule: { type: 'ONCE', startDate: '2026-08-18' } };
+    const payloadB = { id, title: 'Concurrent Loser', note: 'Payload B', plannerToday: '2026-08-18', schedule: { type: 'ONCE', startDate: '2026-08-19' } };
 
     const reqA = fetch(`${baseUrl}/tasks`, {
       method: 'POST',
@@ -191,8 +213,6 @@ test('POST /tasks Integration Suite', async (t) => {
   await t.test('rolls back completely if schedule violates database constraint', async () => {
     const id = getValidId();
     
-    // We intentionally violate a DB constraint while passing application validation.
-    // Wait, the repository is what we can test here.
     await assert.rejects(
       tasksRepo.createIdempotent(user1.id, {
         id,

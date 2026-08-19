@@ -117,6 +117,7 @@ test('GET /planner/refresh Integration Suite', async (t) => {
           title: 'Doctor Appointment',
           note: 'Checkup',
           isImportant: true,
+          plannerToday: '2026-08-18',
           schedule: {
             type: 'ONCE',
             startDate: '2026-08-18',
@@ -282,6 +283,7 @@ test('GET /planner/refresh Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskId,
           title: 'Timezone Check Task',
+          plannerToday: '2026-08-18',
           schedule: {
             type: 'ONCE',
             startDate: '2026-08-18',

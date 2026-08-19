@@ -185,7 +185,7 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
   "title": "String",
   "note": "String | null",
   "isImportant": false,
-  "plannerToday": "YYYY-MM-DD (required if recurring schedule)",
+  "plannerToday": "YYYY-MM-DD (required if task has a schedule)",
   "schedule": {
     "type": "ONCE | INTERVAL_DAYS | WEEKDAYS",
     "startDate": "YYYY-MM-DD",
@@ -197,20 +197,22 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
   }
 }
 ```
+* **Notes**: For any scheduled task creation (`ONCE`, `INTERVAL_DAYS`, `WEEKDAYS`), `plannerToday` is required and `schedule.startDate` must be `>= plannerToday`. Later tasks without a schedule do not require `plannerToday`.
 * **Response**: `HTTP 201 Created` (or `HTTP 200 OK` on idempotent retry with existing task).
 
 #### Edit (`PATCH /tasks/:taskId`)
 * **Request**:
 ```json
 {
-  "plannerToday": "YYYY-MM-DD",
-  "effectiveDate": "YYYY-MM-DD",
+  "plannerToday": "YYYY-MM-DD (required if updating schedule)",
+  "effectiveDate": "YYYY-MM-DD (required if updating schedule)",
   "title": "Updated Title",
   "note": "Updated note",
   "isImportant": true,
-  "schedule": { /* new schedule or null to clear */ }
+  "schedule": { /* new schedule */ }
 }
 ```
+* **Notes**: For any schedule update (`ONCE`, `INTERVAL_DAYS`, `WEEKDAYS`), `plannerToday` and `effectiveDate` are required with `effectiveDate >= plannerToday` and `schedule.startDate >= plannerToday`. Content-only updates do not require `plannerToday`/`effectiveDate` and do not modify existing schedules.
 * **Response**: `HTTP 200 OK` with updated task and schedules.
 
 #### Complete (`POST /tasks/:taskId/complete`)
