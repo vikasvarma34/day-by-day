@@ -1,5 +1,8 @@
 package com.vikaspokala.daybyday.ui
 
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -100,7 +103,9 @@ fun AppShell(
                                     ),
                                     onClick = {
                                         if (currentScreen != screen) {
-                                            if (screen == Screen.Schedule) {
+                                            if (screen == Screen.Today) {
+                                                todayViewModel.selectToday()
+                                            } else if (screen == Screen.Schedule) {
                                                 scheduleViewModel.resetToToday()
                                             } else if (screen == Screen.Later) {
                                                 laterViewModel.collapseCompleted()
@@ -226,6 +231,44 @@ fun AppShell(
                                     backStack.removeAt(backStack.lastIndex)
                                 }
                             },
+                            onSaveTask = { title, note, newDateStr, newTimeStr, isImp ->
+                                if (key.isCreateMode) {
+                                    when {
+                                        key.isLaterTask || key.sourceScreen == "LATER" -> {
+                                            laterViewModel.addTask(title = title, note = note, isImportant = isImp)
+                                        }
+                                        key.sourceScreen == "SCHEDULE" -> {
+                                            val parsedDate = parseDateString(newDateStr) ?: scheduleViewModel.selectedDate.value
+                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                        }
+                                        else -> {
+                                            val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
+                                            todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                        }
+                                    }
+                                } else {
+                                    key.taskId?.let { id ->
+                                        when {
+                                            key.isLaterTask || key.sourceScreen == "LATER" -> {
+                                                laterViewModel.updateTask(id = id, title = title, note = note, isImportant = isImp)
+                                            }
+                                            key.sourceScreen == "SCHEDULE" -> {
+                                                val parsedDate = parseDateString(newDateStr) ?: scheduleViewModel.selectedDate.value
+                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                            }
+                                            else -> {
+                                                val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
+                                                todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                            }
+                                        }
+                                    }
+                                }
+                                if (backStack.size > 1) {
+                                    backStack.removeAt(backStack.lastIndex)
+                                }
+                            },
                             onConfirmDelete = {
                                 key.taskId?.let { id ->
                                     todayViewModel.deleteTask(id)
@@ -248,5 +291,17 @@ fun AppShell(
                 }
             }
         )
+    }
+}
+
+private fun parseDateString(dateStr: String?): LocalDate? {
+    if (dateStr.isNullOrEmpty()) return null
+    return try {
+        val currentYear = LocalDate.now().year
+        val fullStr = if (!dateStr.contains(currentYear.toString())) "$dateStr $currentYear" else dateStr
+        val formatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault())
+        LocalDate.parse(fullStr, formatter)
+    } catch (e: Exception) {
+        null
     }
 }

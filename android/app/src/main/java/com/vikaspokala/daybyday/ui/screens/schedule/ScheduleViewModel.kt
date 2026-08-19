@@ -3,13 +3,14 @@ package com.vikaspokala.daybyday.ui.screens.schedule
 import java.time.LocalDate
 import java.time.YearMonth
 import androidx.lifecycle.ViewModel
-import com.vikaspokala.daybyday.ui.fake.FakePlannerData
+import com.vikaspokala.daybyday.ui.fake.InMemoryDatedTaskStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 class ScheduleViewModel(
+    private val taskStore: InMemoryDatedTaskStore = InMemoryDatedTaskStore.defaultStore,
     initialDate: LocalDate = LocalDate.now()
 ) : ViewModel() {
 
@@ -19,8 +20,7 @@ class ScheduleViewModel(
     private val _selectedDate = MutableStateFlow(initialDate)
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
 
-    private val _tasks = MutableStateFlow(FakePlannerData.getScheduleDemoTasks(initialDate))
-    val tasks: StateFlow<List<ScheduleTaskItem>> = _tasks.asStateFlow()
+    val tasks: StateFlow<List<ScheduleTaskItem>> = taskStore.tasks
 
     fun selectDate(date: LocalDate) {
         _selectedDate.value = date
@@ -46,32 +46,56 @@ class ScheduleViewModel(
     }
 
     fun toggleCompletion(taskId: String) {
-        _tasks.update { list ->
-            list.map { task ->
-                if (task.id == taskId) task.copy(isCompleted = !task.isCompleted) else task
-            }
-        }
+        taskStore.toggleCompletion(taskId)
     }
 
     fun toggleImportant(taskId: String) {
-        _tasks.update { list ->
-            list.map { task ->
-                if (task.id == taskId) task.copy(isImportant = !task.isImportant) else task
-            }
-        }
+        taskStore.toggleImportant(taskId)
     }
 
     fun deleteTask(taskId: String) {
-        _tasks.update { list ->
-            list.filter { it.id != taskId }
-        }
+        taskStore.deleteTask(taskId)
     }
 
-    fun hasImportantTask(date: LocalDate, taskList: List<ScheduleTaskItem> = _tasks.value): Boolean {
+    fun addTask(
+        title: String,
+        note: String? = null,
+        date: LocalDate,
+        time: String? = null,
+        isImportant: Boolean = false
+    ): String {
+        return taskStore.addTask(
+            title = title,
+            note = note,
+            date = date,
+            time = time,
+            isImportant = isImportant
+        )
+    }
+
+    fun updateTask(
+        id: String,
+        title: String,
+        note: String? = null,
+        date: LocalDate,
+        time: String? = null,
+        isImportant: Boolean = false
+    ) {
+        taskStore.updateTask(
+            id = id,
+            title = title,
+            note = note,
+            date = date,
+            time = time,
+            isImportant = isImportant
+        )
+    }
+
+    fun hasImportantTask(date: LocalDate, taskList: List<ScheduleTaskItem> = tasks.value): Boolean {
         return taskList.any { it.date == date && it.isImportant }
     }
 
-    fun getTasksForDate(date: LocalDate, taskList: List<ScheduleTaskItem> = _tasks.value): List<ScheduleTaskItem> {
+    fun getTasksForDate(date: LocalDate, taskList: List<ScheduleTaskItem> = tasks.value): List<ScheduleTaskItem> {
         val dateTasks = taskList.filter { it.date == date }
 
         val incompleteTimed = dateTasks.filter { !it.isCompleted && it.time != null }

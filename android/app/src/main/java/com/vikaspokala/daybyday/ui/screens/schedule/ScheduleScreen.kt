@@ -228,10 +228,12 @@ fun ScheduleScreen(
                                         isCreateMode = false,
                                         taskId = task.id,
                                         initialTitle = task.title,
+                                        initialNote = task.note,
                                         initialIsImportant = task.isImportant,
                                         dateString = formattedSelectedDate,
                                         timeString = task.time,
-                                        isLaterTask = false
+                                        isLaterTask = false,
+                                        sourceScreen = "SCHEDULE"
                                     )
                                 )
                             }
@@ -248,7 +250,8 @@ fun ScheduleScreen(
                     Screen.Task(
                         isCreateMode = true,
                         dateString = formattedSelectedDate,
-                        isLaterTask = false
+                        isLaterTask = false,
+                        sourceScreen = "SCHEDULE"
                     )
                 )
             },

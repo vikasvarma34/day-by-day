@@ -4,7 +4,6 @@ import java.time.LocalDate
 import com.vikaspokala.daybyday.ui.screens.history.HistoryTaskItem
 import com.vikaspokala.daybyday.ui.screens.later.LaterTaskItem
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
-import com.vikaspokala.daybyday.ui.screens.today.TodayTaskItem
 
 /**
  * ============================================================================
@@ -19,93 +18,214 @@ import com.vikaspokala.daybyday.ui.screens.today.TodayTaskItem
  */
 object FakePlannerData {
 
-    fun getTodayDemoTasks(): List<TodayTaskItem> {
-        return listOf(
-            TodayTaskItem(id = "t1", title = "Take medicine", time = "8:00 AM", isImportant = false, isCompleted = false),
-            TodayTaskItem(id = "t2", title = "Buy groceries", time = "10:30 AM", isImportant = true, isCompleted = false),
-            TodayTaskItem(id = "t3", title = "Lunch", time = "1:00 PM", isImportant = false, isCompleted = false),
-            TodayTaskItem(id = "t4", title = "Gym", time = "6:00 PM", isImportant = true, isCompleted = false),
-            TodayTaskItem(id = "t5", title = "Call the bank", time = null, isImportant = false, isCompleted = false),
-            TodayTaskItem(id = "t6", title = "Morning walk", time = "7:15 AM", isImportant = false, isCompleted = true)
-        )
-    }
-
     fun getScheduleDemoTasks(referenceDate: LocalDate = LocalDate.now()): List<ScheduleTaskItem> {
         val today = referenceDate
         return listOf(
-            // Demo tasks relative to current reference date (today) - 6 tasks
+            // 2 days before today (minus 2 days)
+            ScheduleTaskItem(
+                id = "d_m2_1",
+                title = "Prep presentation slides",
+                note = "Include Q3 metrics",
+                date = today.minusDays(2),
+                time = "11:00 AM",
+                isImportant = true,
+                isCompleted = true
+            ),
+            ScheduleTaskItem(
+                id = "d_m2_2",
+                title = "Order office supplies",
+                note = null,
+                date = today.minusDays(2),
+                time = null,
+                isImportant = false,
+                isCompleted = true
+            ),
+
+            // Yesterday (minus 1 day)
+            ScheduleTaskItem(
+                id = "d_m1_1",
+                title = "Dentist checkup",
+                note = "Dr. Smith clinic",
+                date = today.minusDays(1),
+                time = "9:30 AM",
+                isImportant = false,
+                isCompleted = true
+            ),
+            ScheduleTaskItem(
+                id = "d_m1_2",
+                title = "Review pull request",
+                note = "Check auth flow",
+                date = today.minusDays(1),
+                time = "4:00 PM",
+                isImportant = true,
+                isCompleted = false
+            ),
+            ScheduleTaskItem(
+                id = "d_m1_3",
+                title = "Water balcony plants",
+                note = null,
+                date = today.minusDays(1),
+                time = null,
+                isImportant = false,
+                isCompleted = false
+            ),
+
+            // Today (referenceDate)
             ScheduleTaskItem(
                 id = "s1",
                 title = "Morning walk",
+                note = null,
                 date = today,
                 time = "7:30 AM",
-                isImportant = false
+                isImportant = false,
+                isCompleted = false
             ),
             ScheduleTaskItem(
                 id = "s2",
                 title = "Plan weekly meals",
+                note = "Check pantry first",
                 date = today,
                 time = "9:00 AM",
-                isImportant = true
+                isImportant = true,
+                isCompleted = false
             ),
             ScheduleTaskItem(
                 id = "s3",
                 title = "Pick up parcel",
+                note = "Code 4821",
                 date = today,
                 time = "3:00 PM",
-                isImportant = false
+                isImportant = false,
+                isCompleted = false
             ),
             ScheduleTaskItem(
                 id = "s4",
                 title = "Call parents",
+                note = null,
                 date = today,
                 time = "6:30 PM",
-                isImportant = false
+                isImportant = false,
+                isCompleted = false
             ),
             ScheduleTaskItem(
                 id = "s5",
                 title = "Review insurance",
+                note = "Compare policies",
                 date = today,
                 time = null,
-                isImportant = true
+                isImportant = true,
+                isCompleted = false
             ),
             ScheduleTaskItem(
                 id = "s6",
                 title = "Prepare documents",
+                note = null,
                 date = today,
                 time = null,
-                isImportant = false
+                isImportant = false,
+                isCompleted = false
             ),
-            // Demo tasks on nearby dates relative to today for calendar dot testing
+
+            // Tomorrow (plus 1 day)
+            ScheduleTaskItem(
+                id = "d_p1_1",
+                title = "Team sync meeting",
+                note = "Discuss Sprint 4 goals",
+                date = today.plusDays(1),
+                time = "10:00 AM",
+                isImportant = true,
+                isCompleted = false
+            ),
+            ScheduleTaskItem(
+                id = "d_p1_2",
+                title = "Car wash",
+                note = null,
+                date = today.plusDays(1),
+                time = "2:00 PM",
+                isImportant = false,
+                isCompleted = false
+            ),
+            ScheduleTaskItem(
+                id = "d_p1_3",
+                title = "Renew library books",
+                note = null,
+                date = today.plusDays(1),
+                time = null,
+                isImportant = false,
+                isCompleted = false
+            ),
+
+            // 2 days after today (plus 2 days)
+            ScheduleTaskItem(
+                id = "d_p2_1",
+                title = "Doctor appointment",
+                note = "Bring blood test results",
+                date = today.plusDays(2),
+                time = "11:30 AM",
+                isImportant = true,
+                isCompleted = false
+            ),
+            ScheduleTaskItem(
+                id = "d_p2_2",
+                title = "Grocery shopping",
+                note = "Fruits, milk, bread",
+                date = today.plusDays(2),
+                time = "5:00 PM",
+                isImportant = false,
+                isCompleted = false
+            ),
+            ScheduleTaskItem(
+                id = "d_p2_3",
+                title = "Clean kitchen cabinets",
+                note = null,
+                date = today.plusDays(2),
+                time = null,
+                isImportant = false,
+                isCompleted = false
+            ),
+
+            // Demo tasks on nearby dates for calendar dot testing
             ScheduleTaskItem(
                 id = "s7",
                 title = "Car service",
+                note = null,
                 date = today.minusDays(12),
                 time = "10:00 AM",
-                isImportant = true
+                isImportant = true,
+                isCompleted = false
             ),
             ScheduleTaskItem(
                 id = "s8",
                 title = "Water plants",
+                note = null,
                 date = today.minusDays(6),
                 time = null,
-                isImportant = false
+                isImportant = false,
+                isCompleted = false
             ),
             ScheduleTaskItem(
                 id = "s9",
-                title = "Doctor appointment",
+                title = "Eye exam",
+                note = null,
                 date = today.plusDays(5),
                 time = "11:00 AM",
-                isImportant = true
+                isImportant = true,
+                isCompleted = false
             ),
             ScheduleTaskItem(
                 id = "s10",
                 title = "Tax filing",
+                note = null,
                 date = today.plusDays(12),
                 time = null,
-                isImportant = true
+                isImportant = true,
+                isCompleted = false
             )
         )
+    }
+
+    fun getTodayDemoTasks(referenceDate: LocalDate = LocalDate.now()): List<ScheduleTaskItem> {
+        return getScheduleDemoTasks(referenceDate)
     }
 
     fun getLaterDemoTasks(): List<LaterTaskItem> {

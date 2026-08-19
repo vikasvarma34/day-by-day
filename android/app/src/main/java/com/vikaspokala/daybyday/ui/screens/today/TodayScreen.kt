@@ -5,6 +5,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,14 +59,26 @@ fun TodayScreen(
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel = viewModel()
 ) {
+    val selectedDate by viewModel.selectedDate.collectAsState()
     val tasks by viewModel.tasks.collectAsState()
 
-    val timedTasks = tasks.filter { !it.isCompleted && it.time != null }
-    val anytimeTasks = tasks.filter { !it.isCompleted && it.time == null }
-    val completedTasks = tasks.filter { it.isCompleted }
+    val selectedDateTasks = remember(tasks, selectedDate) {
+        viewModel.getTasksForDate(selectedDate, tasks)
+    }
 
-    val todayDateFormatted = remember {
+    val timedTasks = selectedDateTasks.filter { !it.isCompleted && it.time != null }
+    val anytimeTasks = selectedDateTasks.filter { !it.isCompleted && it.time == null }
+    val completedTasks = selectedDateTasks.filter { it.isCompleted }
+
+    val actualTodayFormatted = remember {
         LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()))
+    }
+    val greeting = remember {
+        TodayViewModel.getGreeting()
+    }
+
+    val selectedDateFormatted = remember(selectedDate) {
+        selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()))
     }
 
     Box(
@@ -90,12 +103,12 @@ fun TodayScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Good afternoon, Vicky",
+                                text = greeting,
                                 style = MaterialTheme.typography.titleLarge,
                                 color = DayByDayPrimaryText
                             )
                             Text(
-                                text = todayDateFormatted,
+                                text = actualTodayFormatted,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = DayByDaySecondaryText
                             )
@@ -130,7 +143,7 @@ fun TodayScreen(
                             color = DayByDaySurface,
                             border = BorderStroke(1.dp, DayByDayNeutralBorder)
                         ) {
-                            IconButton(onClick = { /* Previous day callback placeholder */ }) {
+                            IconButton(onClick = { viewModel.selectPreviousDay() }) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                                     contentDescription = "Previous day",
@@ -140,7 +153,8 @@ fun TodayScreen(
                         }
 
                         Row(
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { viewModel.selectToday() }
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DateRange,
@@ -150,7 +164,7 @@ fun TodayScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Today",
+                                text = if (selectedDate == LocalDate.now()) "Today" else selectedDate.format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = DayByDayPrimaryText
                             )
@@ -161,7 +175,7 @@ fun TodayScreen(
                             color = DayByDaySurface,
                             border = BorderStroke(1.dp, DayByDayNeutralBorder)
                         ) {
-                            IconButton(onClick = { /* Next day callback placeholder */ }) {
+                            IconButton(onClick = { viewModel.selectNextDay() }) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                     contentDescription = "Next day",
@@ -169,6 +183,24 @@ fun TodayScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // Empty state if no tasks on the selected date
+            if (selectedDateTasks.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No tasks for this date",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = DayByDaySecondaryText
+                        )
                     }
                 }
             }
@@ -193,10 +225,12 @@ fun TodayScreen(
                                         isCreateMode = false,
                                         taskId = task.id,
                                         initialTitle = task.title,
+                                        initialNote = task.note,
                                         initialIsImportant = task.isImportant,
-                                        dateString = todayDateFormatted,
+                                        dateString = selectedDateFormatted,
                                         timeString = task.time,
-                                        isLaterTask = false
+                                        isLaterTask = false,
+                                        sourceScreen = "TODAY"
                                     )
                                 )
                             }
@@ -225,10 +259,12 @@ fun TodayScreen(
                                         isCreateMode = false,
                                         taskId = task.id,
                                         initialTitle = task.title,
+                                        initialNote = task.note,
                                         initialIsImportant = task.isImportant,
-                                        dateString = todayDateFormatted,
+                                        dateString = selectedDateFormatted,
                                         timeString = null,
-                                        isLaterTask = false
+                                        isLaterTask = false,
+                                        sourceScreen = "TODAY"
                                     )
                                 )
                             }
@@ -257,10 +293,12 @@ fun TodayScreen(
                                         isCreateMode = false,
                                         taskId = task.id,
                                         initialTitle = task.title,
+                                        initialNote = task.note,
                                         initialIsImportant = task.isImportant,
-                                        dateString = todayDateFormatted,
+                                        dateString = selectedDateFormatted,
                                         timeString = task.time,
-                                        isLaterTask = false
+                                        isLaterTask = false,
+                                        sourceScreen = "TODAY"
                                     )
                                 )
                             }
@@ -276,8 +314,9 @@ fun TodayScreen(
                 onAddTask(
                     Screen.Task(
                         isCreateMode = true,
-                        dateString = todayDateFormatted,
-                        isLaterTask = false
+                        dateString = selectedDateFormatted,
+                        isLaterTask = false,
+                        sourceScreen = "TODAY"
                     )
                 )
             },

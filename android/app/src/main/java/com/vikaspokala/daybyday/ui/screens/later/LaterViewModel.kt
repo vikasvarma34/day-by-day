@@ -45,6 +45,31 @@ class LaterViewModel : ViewModel() {
         }
     }
 
+    fun addTask(title: String, note: String?, isImportant: Boolean): String {
+        val newId = "later_" + System.currentTimeMillis()
+        val newTask = LaterTaskItem(
+            id = newId,
+            title = title.trim(),
+            note = note?.takeIf { it.isNotBlank() },
+            isImportant = isImportant,
+            isCompleted = false
+        )
+        _tasks.update { currentList -> listOf(newTask) + currentList }
+        return newId
+    }
+
+    fun updateTask(id: String, title: String, note: String?, isImportant: Boolean) {
+        _tasks.update { currentList ->
+            currentList.map { task ->
+                if (task.id == id) {
+                    task.copy(title = title.trim(), note = note?.takeIf { it.isNotBlank() }, isImportant = isImportant)
+                } else {
+                    task
+                }
+            }
+        }
+    }
+
     fun toggleCompletedExpanded() {
         _isCompletedExpanded.update { !it }
     }

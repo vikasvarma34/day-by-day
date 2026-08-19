@@ -1,9 +1,5 @@
 package com.vikaspokala.daybyday.ui.screens.today
 
-data class TodayTaskItem(
-    val id: String,
-    val title: String,
-    val time: String? = null,
-    val isImportant: Boolean = false,
-    val isCompleted: Boolean = false
-)
+import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
+
+typealias TodayTaskItem = ScheduleTaskItem
