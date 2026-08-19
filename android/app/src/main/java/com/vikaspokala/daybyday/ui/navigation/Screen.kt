@@ -40,10 +40,18 @@ sealed class Screen : NavKey {
         val initialTitle: String = "",
         val initialNote: String? = null,
         val initialIsImportant: Boolean = false,
+        val isCompleted: Boolean = false,
         val dateString: String? = null,
         val timeString: String? = null,
         val isLaterTask: Boolean = false,
         val sourceScreen: String = "TODAY"
+    ) : Screen()
+    @Serializable
+    data class ScheduleItem(
+        val taskId: String,
+        val initialTitle: String,
+        val initialNote: String? = null,
+        val initialIsImportant: Boolean = false
     ) : Screen()
 
     val screenTitle: String
@@ -56,6 +64,7 @@ sealed class Screen : NavKey {
             ChangePassword -> "Change Password"
             is EditProfileField -> "Edit Profile"
             is Task -> "Task"
+            is ScheduleItem -> "Schedule item"
         }
 
     val icon: ImageVector
@@ -68,6 +77,7 @@ sealed class Screen : NavKey {
             ChangePassword -> Icons.Default.Settings
             is EditProfileField -> Icons.Default.Settings
             is Task -> Icons.Default.Check
+            is ScheduleItem -> Icons.Default.DateRange
         }
 
     companion object {

@@ -41,6 +41,7 @@ import com.vikaspokala.daybyday.ui.navigation.Screen
 import com.vikaspokala.daybyday.ui.screens.history.HistoryScreen
 import com.vikaspokala.daybyday.ui.screens.later.LaterScreen
 import com.vikaspokala.daybyday.ui.screens.later.LaterViewModel
+import com.vikaspokala.daybyday.ui.screens.later.ScheduleItemScreen
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleScreen
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 import com.vikaspokala.daybyday.ui.screens.settings.ChangePasswordScreen
@@ -75,7 +76,8 @@ fun AppShell(
             if (currentScreen != Screen.Settings &&
                 currentScreen != Screen.ChangePassword &&
                 currentScreen !is Screen.EditProfileField &&
-                currentScreen !is Screen.Task) {
+                currentScreen !is Screen.Task &&
+                currentScreen !is Screen.ScheduleItem) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -258,12 +260,25 @@ fun AppShell(
                             initialTitle = key.initialTitle,
                             initialNote = key.initialNote,
                             initialIsImportant = key.initialIsImportant,
+                            isCompleted = key.isCompleted,
                             dateString = key.dateString,
                             timeString = key.timeString,
                             isLaterTask = key.isLaterTask,
                             onNavigateBack = {
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)
+                                }
+                            },
+                            onScheduleThisClick = {
+                                key.taskId?.let { id ->
+                                    backStack.add(
+                                        Screen.ScheduleItem(
+                                            taskId = id,
+                                            initialTitle = key.initialTitle,
+                                            initialNote = key.initialNote,
+                                            initialIsImportant = key.initialIsImportant
+                                        )
+                                    )
                                 }
                             },
                             onSaveTask = { title, note, newDateStr, newTimeStr, isImp ->
@@ -311,6 +326,32 @@ fun AppShell(
                                     laterViewModel.deleteTask(id)
                                 }
                                 if (backStack.size > 1) {
+                                    backStack.removeAt(backStack.lastIndex)
+                                }
+                            }
+                        )
+                    }
+                    is Screen.ScheduleItem -> NavEntry(key) {
+                        ScheduleItemScreen(
+                            initialTitle = key.initialTitle,
+                            initialNote = key.initialNote,
+                            initialIsImportant = key.initialIsImportant,
+                            onNavigateBack = {
+                                if (backStack.size > 1) {
+                                    backStack.removeAt(backStack.lastIndex)
+                                }
+                            },
+                            onSchedule = { title, note, date, time, isImportant ->
+                                laterViewModel.deleteTask(key.taskId)
+                                todayViewModel.addTask(
+                                    title = title,
+                                    note = note,
+                                    date = date,
+                                    time = time,
+                                    isImportant = isImportant
+                                )
+                                // Pop both ScheduleItem and TaskScreen to land directly on LaterScreen
+                                while (backStack.isNotEmpty() && (backStack.last() is Screen.ScheduleItem || backStack.last() is Screen.Task)) {
                                     backStack.removeAt(backStack.lastIndex)
                                 }
                             }

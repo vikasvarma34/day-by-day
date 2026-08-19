@@ -1,12 +1,12 @@
-package com.vikaspokala.daybyday.ui.screens.task
+package com.vikaspokala.daybyday.ui.screens.later
 
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,65 +50,45 @@ import com.vikaspokala.daybyday.ui.theme.DayByDayStrongAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 
 @Composable
-fun TaskScreen(
-    isCreateMode: Boolean,
-    initialTitle: String = "",
+fun ScheduleItemScreen(
+    initialTitle: String,
     initialNote: String? = null,
     initialIsImportant: Boolean = false,
-    isCompleted: Boolean = false,
-    dateString: String? = null,
-    timeString: String? = null,
-    isLaterTask: Boolean = false,
     onNavigateBack: () -> Unit,
-    onSaveTask: (title: String, note: String?, dateString: String?, timeString: String?, isImportant: Boolean) -> Unit = { _, _, _, _, _ -> },
-    onScheduleThisClick: () -> Unit = {},
-    onConfirmDelete: () -> Unit = {},
+    onSchedule: (title: String, note: String?, date: LocalDate, time: String?, isImportant: Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var titleText by remember(initialTitle) { mutableStateOf(initialTitle) }
     var noteText by remember(initialNote) { mutableStateOf(initialNote.orEmpty()) }
     var isImportant by remember(initialIsImportant) { mutableStateOf(initialIsImportant) }
-    var currentDateString by remember(dateString) { mutableStateOf(dateString) }
-    var currentTimeString by remember(timeString) { mutableStateOf(timeString) }
 
-    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+    var timeString by remember { mutableStateOf<String?>(null) }
+
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePickerModal by remember { mutableStateOf(false) }
 
-    // Intercept system Back button when overlays/screens are open
-    BackHandler(enabled = showDeleteConfirmation || showDatePicker || showTimePickerModal) {
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
+
+    BackHandler(enabled = showDatePicker || showTimePickerModal) {
         when {
-            showDeleteConfirmation -> showDeleteConfirmation = false
             showDatePicker -> showDatePicker = false
             showTimePickerModal -> showTimePickerModal = false
         }
     }
 
-    // Determine dirty state by comparing current form state against initial state
-    val isSaveEnabled = if (isCreateMode) {
-        titleText.trim().isNotEmpty()
-    } else {
-        titleText.trim().isNotEmpty() && (
-            titleText != initialTitle ||
-            noteText != initialNote.orEmpty() ||
-            isImportant != initialIsImportant ||
-            currentDateString != dateString ||
-            currentTimeString != timeString
-        )
-    }
-
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
+    val isScheduleEnabled = selectedDate != null && titleText.trim().isNotEmpty()
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(DayByDayBackground)
     ) {
-        if (showDatePicker && !isLaterTask) {
+        if (showDatePicker) {
             ChooseDateScreen(
-                initialDateString = currentDateString,
-                onDateSelected = { selectedDate ->
-                    currentDateString = selectedDate.format(dateFormatter)
+                initialDateString = selectedDate?.format(dateFormatter),
+                onDateSelected = { date ->
+                    selectedDate = date
                     showDatePicker = false
                 },
                 onNavigateBack = { showDatePicker = false }
@@ -120,13 +100,12 @@ fun TaskScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 32.dp, vertical = 48.dp)
             ) {
-                // Header (348dp x 40dp)
+                // Header (‹  Schedule item)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(40.dp)
                 ) {
-                    // Back control (34dp x 34dp)
                     Surface(
                         modifier = Modifier
                             .size(34.dp)
@@ -150,9 +129,8 @@ fun TaskScreen(
                         }
                     }
 
-                    // Center Title ("Task")
                     Text(
-                        text = "Task",
+                        text = "Schedule item",
                         style = TextStyle(
                             fontFamily = DayByDayFontFamily,
                             fontWeight = FontWeight.SemiBold,
@@ -162,49 +140,12 @@ fun TaskScreen(
                         ),
                         modifier = Modifier.align(Alignment.Center)
                     )
-
-                    // Right Save Control (56dp x 32dp, radius 16dp)
-                    Surface(
-                        modifier = Modifier
-                            .size(width = 56.dp, height = 32.dp)
-                            .align(Alignment.CenterEnd)
-                            .then(
-                                if (isSaveEnabled) {
-                                    Modifier.clickable {
-                                        onSaveTask(
-                                            titleText,
-                                            noteText,
-                                            currentDateString,
-                                            currentTimeString,
-                                            isImportant
-                                        )
-                                    }
-                                } else Modifier
-                            ),
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (isSaveEnabled) DayByDayAccent else Color(0xFFF4F0EC),
-                        border = BorderStroke(1.dp, if (isSaveEnabled) DayByDayAccent else Color(0xFFDDD4CC))
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "Save",
-                                style = TextStyle(
-                                    fontFamily = DayByDayFontFamily,
-                                    fontWeight = FontWeight.W400,
-                                    fontSize = 12.5.sp,
-                                    color = if (isSaveEnabled) Color.White else Color(0xFFA79B91)
-                                )
-                            )
-                        }
-                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // TITLE Field (72dp height)
-                StandardField(
-                    label = "TITLE"
-                ) {
+                // 1. TITLE Field
+                StandardField(label = "TITLE") {
                     BasicTextField(
                         value = titleText,
                         onValueChange = { titleText = it },
@@ -238,7 +179,7 @@ fun TaskScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // NOTE Field (116dp height)
+                // 2. NOTE Field
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -312,48 +253,45 @@ fun TaskScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // DATE, TIME, REMINDER, REPEAT fields ONLY shown if NOT a Later task
-                if (!isLaterTask) {
-                    // DATE Field (72dp height)
-                    StandardFieldRow(
-                        label = "DATE",
-                        valueText = currentDateString,
-                        actionText = if (!currentDateString.isNullOrEmpty()) "Change" else "Add date",
-                        onClick = { showDatePicker = true }
-                    )
+                // 3. DATE Field (Required)
+                StandardFieldRow(
+                    label = "DATE",
+                    valueText = selectedDate?.format(dateFormatter),
+                    actionText = if (selectedDate != null) "Change" else "Add date",
+                    onClick = { showDatePicker = true }
+                )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    // TIME Field (72dp height)
-                    StandardFieldRow(
-                        label = "TIME",
-                        valueText = currentTimeString ?: "Anytime",
-                        actionText = "Optional",
-                        onClick = { showTimePickerModal = true }
-                    )
+                // 4. TIME Field (Optional)
+                StandardFieldRow(
+                    label = "TIME",
+                    valueText = timeString ?: "Anytime",
+                    actionText = "Optional",
+                    onClick = { showTimePickerModal = true }
+                )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    // REMINDER Field (72dp height)
-                    StandardFieldRow(
-                        label = "REMINDER",
-                        valueText = "None",
-                        actionText = "Optional"
-                    )
+                // 5. REMINDER Field (Presentation-only)
+                StandardFieldRow(
+                    label = "REMINDER",
+                    valueText = "No reminder",
+                    actionText = "Optional"
+                )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    // REPEAT Field (72dp height)
-                    StandardFieldRow(
-                        label = "REPEAT",
-                        valueText = "Does not repeat",
-                        actionText = "›"
-                    )
+                // 6. REPEAT Field (Presentation-only)
+                StandardFieldRow(
+                    label = "REPEAT",
+                    valueText = "Does not repeat",
+                    actionText = "›"
+                )
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // IMPORTANT Toggle Row (64dp height)
+                // 7. Important Toggle
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -402,63 +340,47 @@ fun TaskScreen(
                     }
                 }
 
-                // LATER-SPECIFIC "Schedule this" Action (Active Existing Later tasks only)
-                if (isLaterTask && !isCreateMode && !isCompleted) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(54.dp)
-                            .clickable { onScheduleThisClick() },
-                        shape = RoundedCornerShape(18.dp),
-                        color = DayByDayAccent
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Schedule this",
-                                style = TextStyle(
-                                    fontFamily = DayByDayFontFamily,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 15.sp,
-                                    lineHeight = 20.sp,
-                                    color = Color.White,
-                                    textAlign = TextAlign.Center
-                                )
-                            )
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // DELETE TASK Button (Existing tasks only)
-                if (!isCreateMode) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .clickable { showDeleteConfirmation = true },
-                        shape = RoundedCornerShape(18.dp),
-                        color = Color(0xFFD95C5C),
-                        border = BorderStroke(1.dp, Color(0xFFD95C5C))
+                // Primary Action: Schedule Button
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .then(
+                            if (isScheduleEnabled) {
+                                Modifier.clickable {
+                                    selectedDate?.let { date ->
+                                        onSchedule(
+                                            titleText,
+                                            noteText,
+                                            date,
+                                            timeString,
+                                            isImportant
+                                        )
+                                    }
+                                }
+                            } else Modifier
+                        ),
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (isScheduleEnabled) DayByDayAccent else Color(0xFFF4F0EC),
+                    border = BorderStroke(1.dp, if (isScheduleEnabled) DayByDayAccent else Color(0xFFDDD4CC))
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Delete task",
-                                style = TextStyle(
-                                    fontFamily = DayByDayFontFamily,
-                                    fontWeight = FontWeight.W400,
-                                    fontSize = 13.5.sp,
-                                    color = Color.White,
-                                    textAlign = TextAlign.Center
-                                )
+                        Text(
+                            text = "Schedule",
+                            style = TextStyle(
+                                fontFamily = DayByDayFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                color = if (isScheduleEnabled) Color.White else Color(0xFFA79B91),
+                                textAlign = TextAlign.Center
                             )
-                        }
+                        )
                     }
                 }
 
@@ -466,134 +388,16 @@ fun TaskScreen(
             }
         }
 
-        // Floating Choose Time Modal (ON TOP of Task screen)
-        if (showTimePickerModal && !isLaterTask) {
+        // Floating Choose Time Modal
+        if (showTimePickerModal) {
             ChooseTimeModal(
-                initialTimeString = currentTimeString,
+                initialTimeString = timeString,
                 onDismiss = { showTimePickerModal = false },
                 onTimeSelected = { newTimeString ->
-                    currentTimeString = newTimeString
+                    timeString = newTimeString
                     showTimePickerModal = false
                 }
             )
-        }
-
-        // Floating Delete Confirmation Overlay (ON TOP of Task screen)
-        if (showDeleteConfirmation && !isCreateMode) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.18f))
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) {
-                        showDeleteConfirmation = false
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .padding(horizontal = 32.dp)
-                        .fillMaxWidth()
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { /* Consume clicks inside card */ },
-                    shape = RoundedCornerShape(24.dp),
-                    color = Color.White,
-                    border = BorderStroke(1.dp, DayByDayNeutralBorder)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp)
-                    ) {
-                        Text(
-                            text = "Delete this task?",
-                            style = TextStyle(
-                                fontFamily = DayByDayFontFamily,
-                                fontWeight = FontWeight.W600,
-                                fontSize = 22.sp,
-                                lineHeight = 29.sp,
-                                color = DayByDayPrimaryText
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = "This task will be permanently deleted.",
-                            style = TextStyle(
-                                fontFamily = DayByDayFontFamily,
-                                fontWeight = FontWeight.W400,
-                                fontSize = 14.sp,
-                                lineHeight = 18.sp,
-                                color = DayByDaySecondaryText
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .clickable { showDeleteConfirmation = false },
-                            shape = RoundedCornerShape(18.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.dp, DayByDayNeutralBorder)
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Cancel",
-                                    style = TextStyle(
-                                        fontFamily = DayByDayFontFamily,
-                                        fontWeight = FontWeight.W400,
-                                        fontSize = 13.5.sp,
-                                        color = DayByDayPrimaryText,
-                                        textAlign = TextAlign.Center
-                                    )
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .clickable {
-                                    showDeleteConfirmation = false
-                                    onConfirmDelete()
-                                },
-                            shape = RoundedCornerShape(18.dp),
-                            color = Color(0xFFD95C5C),
-                            border = BorderStroke(1.dp, Color(0xFFD95C5C))
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Delete",
-                                    style = TextStyle(
-                                        fontFamily = DayByDayFontFamily,
-                                        fontWeight = FontWeight.W400,
-                                        fontSize = 13.5.sp,
-                                        color = Color.White,
-                                        textAlign = TextAlign.Center
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -669,7 +473,7 @@ private fun StandardFieldRow(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = valueText ?: "Not set",
+                    text = valueText ?: "Choose date",
                     style = TextStyle(
                         fontFamily = DayByDayFontFamily,
                         fontWeight = FontWeight.W400,
