@@ -24,8 +24,8 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.vikaspokala.daybyday.ui.navigation.Screen
-import com.vikaspokala.daybyday.ui.screens.HistoryScreen
 import com.vikaspokala.daybyday.ui.screens.SettingsScreen
+import com.vikaspokala.daybyday.ui.screens.history.HistoryScreen
 import com.vikaspokala.daybyday.ui.screens.later.LaterScreen
 import com.vikaspokala.daybyday.ui.screens.later.LaterViewModel
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleScreen

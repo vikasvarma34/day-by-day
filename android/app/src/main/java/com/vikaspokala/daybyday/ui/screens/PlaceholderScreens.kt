@@ -9,11 +9,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 @Composable
-fun HistoryScreen() {
-    PlaceholderView(title = "History")
-}
-
-@Composable
 fun SettingsScreen() {
     PlaceholderView(title = "Settings")
 }

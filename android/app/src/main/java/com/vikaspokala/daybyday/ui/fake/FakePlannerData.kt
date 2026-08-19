@@ -1,6 +1,7 @@
 package com.vikaspokala.daybyday.ui.fake
 
 import java.time.LocalDate
+import com.vikaspokala.daybyday.ui.screens.history.HistoryTaskItem
 import com.vikaspokala.daybyday.ui.screens.later.LaterTaskItem
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
 import com.vikaspokala.daybyday.ui.screens.today.TaskItem
@@ -138,6 +139,39 @@ object FakePlannerData {
                 title = "Research weekend trip",
                 note = "Somewhere quiet",
                 isImportant = false
+            )
+        )
+    }
+
+    fun getHistoryDemoTasks(referenceDate: LocalDate = LocalDate.now()): List<HistoryTaskItem> {
+        return listOf(
+            HistoryTaskItem(
+                id = "h1",
+                title = "Buy groceries",
+                completedDate = referenceDate.minusDays(1),
+                completedAtTime = "5:15 PM",
+                completedAtMinutes = 1035
+            ),
+            HistoryTaskItem(
+                id = "h2",
+                title = "Submit tax documents",
+                completedDate = referenceDate.minusDays(1),
+                completedAtTime = "2:30 PM",
+                completedAtMinutes = 870
+            ),
+            HistoryTaskItem(
+                id = "h3",
+                title = "Plan weekly meals",
+                completedDate = referenceDate.minusDays(3),
+                completedAtTime = "11:00 AM",
+                completedAtMinutes = 660
+            ),
+            HistoryTaskItem(
+                id = "h4",
+                title = "Read Atomic Habits",
+                completedDate = referenceDate.minusDays(7),
+                completedAtTime = "8:45 PM",
+                completedAtMinutes = 1245
             )
         )
     }
