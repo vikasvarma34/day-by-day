@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -22,8 +23,9 @@ import androidx.navigation3.ui.NavDisplay
 import com.vikaspokala.daybyday.ui.navigation.Screen
 import com.vikaspokala.daybyday.ui.screens.HistoryScreen
 import com.vikaspokala.daybyday.ui.screens.LaterScreen
-import com.vikaspokala.daybyday.ui.screens.ScheduleScreen
 import com.vikaspokala.daybyday.ui.screens.SettingsScreen
+import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleScreen
+import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 import com.vikaspokala.daybyday.ui.screens.today.TodayScreen
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDayNeutralBorder
@@ -31,7 +33,9 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySecondaryText
 import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 
 @Composable
-fun AppShell() {
+fun AppShell(
+    scheduleViewModel: ScheduleViewModel = viewModel()
+) {
     val backStack = rememberNavBackStack(Screen.Today as NavKey)
 
     val currentScreen = backStack.lastOrNull() as? Screen ?: Screen.Today
@@ -63,6 +67,9 @@ fun AppShell() {
                             ),
                             onClick = {
                                 if (currentScreen != screen) {
+                                    if (screen == Screen.Schedule) {
+                                        scheduleViewModel.resetToToday()
+                                    }
                                     backStack.clear()
                                     backStack.add(screen)
                                 }
@@ -84,7 +91,9 @@ fun AppShell() {
                             }
                         )
                     }
-                    is Screen.Schedule -> NavEntry(key) { ScheduleScreen() }
+                    is Screen.Schedule -> NavEntry(key) {
+                        ScheduleScreen(viewModel = scheduleViewModel)
+                    }
                     is Screen.Later -> NavEntry(key) { LaterScreen() }
                     is Screen.History -> NavEntry(key) { HistoryScreen() }
                     is Screen.Settings -> NavEntry(key) { SettingsScreen() }

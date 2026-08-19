@@ -32,29 +32,29 @@ class TodayViewModelTest {
 
     @Test
     fun `toggleCompletion updates task completion state`() {
-        val initialTask = viewModel.tasks.value.first { it.id == "1" }
+        val initialTask = viewModel.tasks.value.first { it.id == "t1" }
         assertFalse(initialTask.isCompleted)
 
-        viewModel.toggleCompletion("1")
-        val updatedTask = viewModel.tasks.value.first { it.id == "1" }
+        viewModel.toggleCompletion("t1")
+        val updatedTask = viewModel.tasks.value.first { it.id == "t1" }
         assertTrue(updatedTask.isCompleted)
 
-        viewModel.toggleCompletion("1")
-        val restoredTask = viewModel.tasks.value.first { it.id == "1" }
+        viewModel.toggleCompletion("t1")
+        val restoredTask = viewModel.tasks.value.first { it.id == "t1" }
         assertFalse(restoredTask.isCompleted)
     }
 
     @Test
     fun `toggleImportant updates task importance state`() {
-        val initialTask = viewModel.tasks.value.first { it.id == "1" }
+        val initialTask = viewModel.tasks.value.first { it.id == "t1" }
         assertFalse(initialTask.isImportant)
 
-        viewModel.toggleImportant("1")
-        val updatedTask = viewModel.tasks.value.first { it.id == "1" }
+        viewModel.toggleImportant("t1")
+        val updatedTask = viewModel.tasks.value.first { it.id == "t1" }
         assertTrue(updatedTask.isImportant)
 
-        viewModel.toggleImportant("1")
-        val restoredTask = viewModel.tasks.value.first { it.id == "1" }
+        viewModel.toggleImportant("t1")
+        val restoredTask = viewModel.tasks.value.first { it.id == "t1" }
         assertFalse(restoredTask.isImportant)
     }
 }
