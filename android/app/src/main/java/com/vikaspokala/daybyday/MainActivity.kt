@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.vikaspokala.daybyday.ui.AppShell
 import com.vikaspokala.daybyday.ui.screens.SplashScreen
+import com.vikaspokala.daybyday.ui.screens.auth.SignInScreen
 import com.vikaspokala.daybyday.ui.theme.DayByDayTheme
 import kotlinx.coroutines.delay
 
@@ -23,16 +24,17 @@ class MainActivity : ComponentActivity() {
             DayByDayTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     var showSplash by remember { mutableStateOf(true) }
+                    var isSignedIn by remember { mutableStateOf(false) }
 
                     LaunchedEffect(Unit) {
                         delay(1200)
                         showSplash = false
                     }
 
-                    if (showSplash) {
-                        SplashScreen()
-                    } else {
-                        AppShell()
+                    when {
+                        showSplash -> SplashScreen()
+                        !isSignedIn -> SignInScreen(onSignInSuccess = { isSignedIn = true })
+                        else -> AppShell()
                     }
                 }
             }

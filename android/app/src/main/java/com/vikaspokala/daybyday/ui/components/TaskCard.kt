@@ -41,12 +41,15 @@ fun TaskCard(
     isCompleted: Boolean,
     onToggleCompletion: () -> Unit,
     onToggleImportant: () -> Unit,
+    onCardClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val borderColor = if (isImportant && !isCompleted) DayByDayAccent else DayByDayNeutralBorder
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (onCardClick != null) Modifier.clickable { onCardClick() } else Modifier),
         shape = RoundedCornerShape(16.dp),
         color = DayByDaySurface,
         border = BorderStroke(1.dp, borderColor)

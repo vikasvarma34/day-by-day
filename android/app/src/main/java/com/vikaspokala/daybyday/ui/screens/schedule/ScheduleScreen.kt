@@ -1,6 +1,5 @@
 package com.vikaspokala.daybyday.ui.screens.schedule
 
-import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.foundation.BorderStroke
@@ -40,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vikaspokala.daybyday.ui.components.MonthCalendar
 import com.vikaspokala.daybyday.ui.components.TaskCard
+import com.vikaspokala.daybyday.ui.navigation.Screen
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDayBackground
 import com.vikaspokala.daybyday.ui.theme.DayByDayNeutralBorder
@@ -49,7 +49,8 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 
 @Composable
 fun ScheduleScreen(
-    onAddTask: (LocalDate) -> Unit = {},
+    onAddTask: (Screen.Task) -> Unit = {},
+    onTaskClick: (Screen.Task) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: ScheduleViewModel = viewModel()
 ) {
@@ -63,6 +64,11 @@ fun ScheduleScreen(
 
     val monthTitleFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()) }
     val selectedDateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
+    val fullDateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
+
+    val formattedSelectedDate = remember(selectedDate) {
+        selectedDate.format(fullDateFormatter)
+    }
 
     Box(
         modifier = modifier
@@ -157,7 +163,7 @@ fun ScheduleScreen(
                     MonthCalendar(
                         month = currentMonth,
                         selectedDate = selectedDate,
-                        todayDate = LocalDate.now(),
+                        todayDate = java.time.LocalDate.now(),
                         hasImportantTask = { date -> viewModel.hasImportantTask(date, tasks) },
                         onDateSelected = { date -> viewModel.selectDate(date) }
                     )
@@ -215,7 +221,20 @@ fun ScheduleScreen(
                             isImportant = task.isImportant,
                             isCompleted = task.isCompleted,
                             onToggleCompletion = { viewModel.toggleCompletion(task.id) },
-                            onToggleImportant = { viewModel.toggleImportant(task.id) }
+                            onToggleImportant = { viewModel.toggleImportant(task.id) },
+                            onCardClick = {
+                                onTaskClick(
+                                    Screen.Task(
+                                        isCreateMode = false,
+                                        taskId = task.id,
+                                        initialTitle = task.title,
+                                        initialIsImportant = task.isImportant,
+                                        dateString = formattedSelectedDate,
+                                        timeString = task.time,
+                                        isLaterTask = false
+                                    )
+                                )
+                            }
                         )
                     }
                 }
@@ -224,7 +243,15 @@ fun ScheduleScreen(
 
         // Floating Action Button carrying currently selected date
         FloatingActionButton(
-            onClick = { onAddTask(selectedDate) },
+            onClick = {
+                onAddTask(
+                    Screen.Task(
+                        isCreateMode = true,
+                        dateString = formattedSelectedDate,
+                        isLaterTask = false
+                    )
+                )
+            },
             containerColor = DayByDayAccent,
             contentColor = Color.White,
             shape = CircleShape,

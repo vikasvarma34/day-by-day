@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vikaspokala.daybyday.ui.components.TaskCard
+import com.vikaspokala.daybyday.ui.navigation.Screen
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDayBackground
 import com.vikaspokala.daybyday.ui.theme.DayByDayPrimaryText
@@ -39,8 +40,8 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySecondaryText
 
 @Composable
 fun LaterScreen(
-    onAddTask: () -> Unit = {},
-    onTaskClick: (String) -> Unit = {},
+    onAddTask: (Screen.Task) -> Unit = {},
+    onTaskClick: (Screen.Task) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: LaterViewModel = viewModel()
 ) {
@@ -80,12 +81,11 @@ fun LaterScreen(
                 }
             }
 
-            // Active Later Task List (Notes NOT shown on list card per product rule)
+            // Active Later Task List
             items(activeTasks, key = { it.id }) { task ->
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 20.dp, vertical = 4.dp)
-                        .clickable { onTaskClick(task.id) }
                 ) {
                     TaskCard(
                         title = task.title,
@@ -93,7 +93,21 @@ fun LaterScreen(
                         isImportant = task.isImportant,
                         isCompleted = task.isCompleted,
                         onToggleCompletion = { viewModel.toggleCompletion(task.id) },
-                        onToggleImportant = { viewModel.toggleImportant(task.id) }
+                        onToggleImportant = { viewModel.toggleImportant(task.id) },
+                        onCardClick = {
+                            onTaskClick(
+                                Screen.Task(
+                                    isCreateMode = false,
+                                    taskId = task.id,
+                                    initialTitle = task.title,
+                                    initialNote = task.note,
+                                    initialIsImportant = task.isImportant,
+                                    dateString = null,
+                                    timeString = null,
+                                    isLaterTask = true
+                                )
+                            )
+                        }
                     )
                 }
             }
@@ -127,7 +141,6 @@ fun LaterScreen(
                         Box(
                             modifier = Modifier
                                 .padding(horizontal = 20.dp, vertical = 4.dp)
-                                .clickable { onTaskClick(task.id) }
                         ) {
                             TaskCard(
                                 title = task.title,
@@ -135,7 +148,21 @@ fun LaterScreen(
                                 isImportant = task.isImportant,
                                 isCompleted = task.isCompleted,
                                 onToggleCompletion = { viewModel.toggleCompletion(task.id) },
-                                onToggleImportant = { viewModel.toggleImportant(task.id) }
+                                onToggleImportant = { viewModel.toggleImportant(task.id) },
+                                onCardClick = {
+                                    onTaskClick(
+                                        Screen.Task(
+                                            isCreateMode = false,
+                                            taskId = task.id,
+                                            initialTitle = task.title,
+                                            initialNote = task.note,
+                                            initialIsImportant = task.isImportant,
+                                            dateString = null,
+                                            timeString = null,
+                                            isLaterTask = true
+                                        )
+                                    )
+                                }
                             )
                         }
                     }
@@ -145,7 +172,15 @@ fun LaterScreen(
 
         // Floating Action Button
         FloatingActionButton(
-            onClick = onAddTask,
+            onClick = {
+                onAddTask(
+                    Screen.Task(
+                        isCreateMode = true,
+                        dateString = null,
+                        isLaterTask = true
+                    )
+                )
+            },
             containerColor = DayByDayAccent,
             contentColor = Color.White,
             shape = CircleShape,

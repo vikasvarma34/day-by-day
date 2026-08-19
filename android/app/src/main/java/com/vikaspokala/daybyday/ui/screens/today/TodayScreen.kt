@@ -1,5 +1,8 @@
 package com.vikaspokala.daybyday.ui.screens.today
 
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -32,12 +35,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vikaspokala.daybyday.ui.components.TaskCard
+import com.vikaspokala.daybyday.ui.navigation.Screen
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDayBackground
 import com.vikaspokala.daybyday.ui.theme.DayByDayNeutralBorder
@@ -48,6 +53,8 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 @Composable
 fun TodayScreen(
     onNavigateToSettings: () -> Unit,
+    onTaskClick: (Screen.Task) -> Unit = {},
+    onAddTask: (Screen.Task) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel = viewModel()
 ) {
@@ -56,6 +63,10 @@ fun TodayScreen(
     val timedTasks = tasks.filter { !it.isCompleted && it.time != null }
     val anytimeTasks = tasks.filter { !it.isCompleted && it.time == null }
     val completedTasks = tasks.filter { it.isCompleted }
+
+    val todayDateFormatted = remember {
+        LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()))
+    }
 
     Box(
         modifier = modifier
@@ -84,7 +95,7 @@ fun TodayScreen(
                                 color = DayByDayPrimaryText
                             )
                             Text(
-                                text = "Wednesday, Aug 19",
+                                text = todayDateFormatted,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = DayByDaySecondaryText
                             )
@@ -175,7 +186,20 @@ fun TodayScreen(
                             isImportant = task.isImportant,
                             isCompleted = task.isCompleted,
                             onToggleCompletion = { viewModel.toggleCompletion(task.id) },
-                            onToggleImportant = { viewModel.toggleImportant(task.id) }
+                            onToggleImportant = { viewModel.toggleImportant(task.id) },
+                            onCardClick = {
+                                onTaskClick(
+                                    Screen.Task(
+                                        isCreateMode = false,
+                                        taskId = task.id,
+                                        initialTitle = task.title,
+                                        initialIsImportant = task.isImportant,
+                                        dateString = todayDateFormatted,
+                                        timeString = task.time,
+                                        isLaterTask = false
+                                    )
+                                )
+                            }
                         )
                     }
                 }
@@ -194,7 +218,20 @@ fun TodayScreen(
                             isImportant = task.isImportant,
                             isCompleted = task.isCompleted,
                             onToggleCompletion = { viewModel.toggleCompletion(task.id) },
-                            onToggleImportant = { viewModel.toggleImportant(task.id) }
+                            onToggleImportant = { viewModel.toggleImportant(task.id) },
+                            onCardClick = {
+                                onTaskClick(
+                                    Screen.Task(
+                                        isCreateMode = false,
+                                        taskId = task.id,
+                                        initialTitle = task.title,
+                                        initialIsImportant = task.isImportant,
+                                        dateString = todayDateFormatted,
+                                        timeString = null,
+                                        isLaterTask = false
+                                    )
+                                )
+                            }
                         )
                     }
                 }
@@ -213,7 +250,20 @@ fun TodayScreen(
                             isImportant = task.isImportant,
                             isCompleted = task.isCompleted,
                             onToggleCompletion = { viewModel.toggleCompletion(task.id) },
-                            onToggleImportant = { viewModel.toggleImportant(task.id) }
+                            onToggleImportant = { viewModel.toggleImportant(task.id) },
+                            onCardClick = {
+                                onTaskClick(
+                                    Screen.Task(
+                                        isCreateMode = false,
+                                        taskId = task.id,
+                                        initialTitle = task.title,
+                                        initialIsImportant = task.isImportant,
+                                        dateString = todayDateFormatted,
+                                        timeString = task.time,
+                                        isLaterTask = false
+                                    )
+                                )
+                            }
                         )
                     }
                 }
@@ -222,7 +272,15 @@ fun TodayScreen(
 
         // Floating Action Button
         FloatingActionButton(
-            onClick = { /* Add task callback placeholder */ },
+            onClick = {
+                onAddTask(
+                    Screen.Task(
+                        isCreateMode = true,
+                        dateString = todayDateFormatted,
+                        isLaterTask = false
+                    )
+                )
+            },
             containerColor = DayByDayAccent,
             contentColor = Color.White,
             shape = CircleShape,

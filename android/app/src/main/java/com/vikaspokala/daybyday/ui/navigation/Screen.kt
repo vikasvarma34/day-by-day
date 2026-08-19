@@ -11,6 +11,13 @@ import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
 @Serializable
+enum class ProfileFieldType {
+    FIRST_NAME,
+    LAST_NAME,
+    NICKNAME
+}
+
+@Serializable
 sealed class Screen : NavKey {
     @Serializable
     data object Today : Screen()
@@ -22,14 +29,32 @@ sealed class Screen : NavKey {
     data object History : Screen()
     @Serializable
     data object Settings : Screen()
+    @Serializable
+    data object ChangePassword : Screen()
+    @Serializable
+    data class EditProfileField(val fieldType: ProfileFieldType) : Screen()
+    @Serializable
+    data class Task(
+        val isCreateMode: Boolean = false,
+        val taskId: String? = null,
+        val initialTitle: String = "",
+        val initialNote: String? = null,
+        val initialIsImportant: Boolean = false,
+        val dateString: String? = null,
+        val timeString: String? = null,
+        val isLaterTask: Boolean = false
+    ) : Screen()
 
-    val title: String
+    val screenTitle: String
         get() = when (this) {
             Today -> "Today"
             Schedule -> "Schedule"
             Later -> "Later"
             History -> "History"
             Settings -> "Settings"
+            ChangePassword -> "Change Password"
+            is EditProfileField -> "Edit Profile"
+            is Task -> "Task"
         }
 
     val icon: ImageVector
@@ -39,6 +64,9 @@ sealed class Screen : NavKey {
             Later -> Icons.AutoMirrored.Filled.List
             History -> Icons.Default.Refresh
             Settings -> Icons.Default.Settings
+            ChangePassword -> Icons.Default.Settings
+            is EditProfileField -> Icons.Default.Settings
+            is Task -> Icons.Default.Check
         }
 
     companion object {

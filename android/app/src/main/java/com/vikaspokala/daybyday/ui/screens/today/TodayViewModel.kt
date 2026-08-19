@@ -35,4 +35,10 @@ class TodayViewModel : ViewModel() {
             }
         }
     }
+
+    fun deleteTask(taskId: String) {
+        _tasks.update { currentList ->
+            currentList.filter { it.id != taskId }
+        }
+    }
 }

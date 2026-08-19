@@ -61,6 +61,12 @@ class ScheduleViewModel(
         }
     }
 
+    fun deleteTask(taskId: String) {
+        _tasks.update { list ->
+            list.filter { it.id != taskId }
+        }
+    }
+
     fun hasImportantTask(date: LocalDate, taskList: List<ScheduleTaskItem> = _tasks.value): Boolean {
         return taskList.any { it.date == date && it.isImportant }
     }

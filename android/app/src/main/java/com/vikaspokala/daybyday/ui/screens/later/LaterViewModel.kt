@@ -39,6 +39,12 @@ class LaterViewModel : ViewModel() {
         }
     }
 
+    fun deleteTask(taskId: String) {
+        _tasks.update { currentList ->
+            currentList.filter { it.id != taskId }
+        }
+    }
+
     fun toggleCompletedExpanded() {
         _isCompletedExpanded.update { !it }
     }
