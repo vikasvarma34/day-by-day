@@ -9,11 +9,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 @Composable
-fun TodayScreen() {
-    PlaceholderView(title = "Today")
-}
-
-@Composable
 fun ScheduleScreen() {
     PlaceholderView(title = "Schedule")
 }

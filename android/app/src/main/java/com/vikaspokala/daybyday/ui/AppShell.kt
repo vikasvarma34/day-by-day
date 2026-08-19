@@ -1,13 +1,20 @@
 package com.vikaspokala.daybyday.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -17,7 +24,11 @@ import com.vikaspokala.daybyday.ui.screens.HistoryScreen
 import com.vikaspokala.daybyday.ui.screens.LaterScreen
 import com.vikaspokala.daybyday.ui.screens.ScheduleScreen
 import com.vikaspokala.daybyday.ui.screens.SettingsScreen
-import com.vikaspokala.daybyday.ui.screens.TodayScreen
+import com.vikaspokala.daybyday.ui.screens.today.TodayScreen
+import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
+import com.vikaspokala.daybyday.ui.theme.DayByDayNeutralBorder
+import com.vikaspokala.daybyday.ui.theme.DayByDaySecondaryText
+import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 
 @Composable
 fun AppShell() {
@@ -27,20 +38,37 @@ fun AppShell() {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                Screen.bottomNavItems.forEach { screen ->
-                    val selected = currentScreen == screen
-                    NavigationBarItem(
-                        icon = { Icon(screen.icon, contentDescription = screen.title) },
-                        label = { Text(screen.title) },
-                        selected = selected,
-                        onClick = {
-                            if (currentScreen != screen) {
-                                backStack.clear()
-                                backStack.add(screen)
+            Surface(
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                color = DayByDaySurface,
+                border = BorderStroke(1.dp, DayByDayNeutralBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                NavigationBar(
+                    containerColor = Color.Transparent,
+                    tonalElevation = 0.dp
+                ) {
+                    Screen.bottomNavItems.forEach { screen ->
+                        val selected = currentScreen == screen
+                        NavigationBarItem(
+                            icon = { Icon(screen.icon, contentDescription = screen.title) },
+                            label = { Text(screen.title) },
+                            selected = selected,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = DayByDayAccent,
+                                selectedTextColor = DayByDayAccent,
+                                unselectedIconColor = DayByDaySecondaryText,
+                                unselectedTextColor = DayByDaySecondaryText,
+                                indicatorColor = Color.Transparent
+                            ),
+                            onClick = {
+                                if (currentScreen != screen) {
+                                    backStack.clear()
+                                    backStack.add(screen)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -49,7 +77,13 @@ fun AppShell() {
             backStack = backStack,
             entryProvider = { key ->
                 when (key) {
-                    is Screen.Today -> NavEntry(key) { TodayScreen() }
+                    is Screen.Today -> NavEntry(key) {
+                        TodayScreen(
+                            onNavigateToSettings = {
+                                backStack.add(Screen.Settings)
+                            }
+                        )
+                    }
                     is Screen.Schedule -> NavEntry(key) { ScheduleScreen() }
                     is Screen.Later -> NavEntry(key) { LaterScreen() }
                     is Screen.History -> NavEntry(key) { HistoryScreen() }
