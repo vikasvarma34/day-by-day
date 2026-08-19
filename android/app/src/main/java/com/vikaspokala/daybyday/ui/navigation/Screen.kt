@@ -43,6 +43,7 @@ sealed class Screen : NavKey {
         val isCompleted: Boolean = false,
         val dateString: String? = null,
         val timeString: String? = null,
+        val reminderString: String? = null,
         val isLaterTask: Boolean = false,
         val sourceScreen: String = "TODAY"
     ) : Screen()

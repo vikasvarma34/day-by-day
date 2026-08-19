@@ -53,6 +53,7 @@ class TodayViewModel(
         note: String? = null,
         date: LocalDate = _selectedDate.value,
         time: String? = null,
+        reminder: String? = null,
         isImportant: Boolean = false
     ): String {
         return taskStore.addTask(
@@ -60,6 +61,7 @@ class TodayViewModel(
             note = note,
             date = date,
             time = time,
+            reminder = reminder,
             isImportant = isImportant
         )
     }
@@ -70,6 +72,7 @@ class TodayViewModel(
         note: String? = null,
         date: LocalDate? = null,
         time: String? = null,
+        reminder: String? = null,
         isImportant: Boolean = false
     ) {
         val targetDate = date ?: tasks.value.firstOrNull { it.id == id }?.date ?: _selectedDate.value
@@ -79,6 +82,7 @@ class TodayViewModel(
             note = note,
             date = targetDate,
             time = time,
+            reminder = reminder,
             isImportant = isImportant
         )
     }

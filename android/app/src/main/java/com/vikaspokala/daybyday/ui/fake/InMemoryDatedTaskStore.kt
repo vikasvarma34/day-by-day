@@ -44,6 +44,7 @@ class InMemoryDatedTaskStore(
         note: String? = null,
         date: LocalDate,
         time: String? = null,
+        reminder: String? = null,
         isImportant: Boolean = false
     ): String {
         val newId = "task_" + System.currentTimeMillis()
@@ -53,6 +54,7 @@ class InMemoryDatedTaskStore(
             note = note?.takeIf { it.isNotBlank() },
             date = date,
             time = time,
+            reminder = if (time != null) reminder else null,
             isImportant = isImportant,
             isCompleted = false
         )
@@ -66,6 +68,7 @@ class InMemoryDatedTaskStore(
         note: String? = null,
         date: LocalDate,
         time: String? = null,
+        reminder: String? = null,
         isImportant: Boolean = false
     ) {
         _tasks.update { list ->
@@ -78,6 +81,7 @@ class InMemoryDatedTaskStore(
                             note = note?.takeIf { it.isNotBlank() },
                             date = date,
                             time = time,
+                            reminder = if (time != null) reminder else null,
                             isImportant = isImportant
                         )
                     } else {
@@ -91,6 +95,7 @@ class InMemoryDatedTaskStore(
                     note = note?.takeIf { it.isNotBlank() },
                     date = date,
                     time = time,
+                    reminder = if (time != null) reminder else null,
                     isImportant = isImportant,
                     isCompleted = false
                 )

@@ -235,6 +235,7 @@ fun TodayScreen(
                                         initialIsImportant = task.isImportant,
                                         dateString = selectedDateFormatted,
                                         timeString = task.time,
+                                        reminderString = task.reminder,
                                         isLaterTask = false,
                                         sourceScreen = "TODAY"
                                     )
@@ -269,6 +270,7 @@ fun TodayScreen(
                                         initialIsImportant = task.isImportant,
                                         dateString = selectedDateFormatted,
                                         timeString = null,
+                                        reminderString = null,
                                         isLaterTask = false,
                                         sourceScreen = "TODAY"
                                     )
@@ -303,6 +305,7 @@ fun TodayScreen(
                                         initialIsImportant = task.isImportant,
                                         dateString = selectedDateFormatted,
                                         timeString = task.time,
+                                        reminderString = task.reminder,
                                         isLaterTask = false,
                                         sourceScreen = "TODAY"
                                     )

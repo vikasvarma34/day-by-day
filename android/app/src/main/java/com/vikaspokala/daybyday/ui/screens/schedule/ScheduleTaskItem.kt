@@ -8,6 +8,7 @@ data class ScheduleTaskItem(
     val note: String? = null,
     val date: LocalDate,
     val time: String? = null,
+    val reminder: String? = null,
     val isImportant: Boolean = false,
     val isCompleted: Boolean = false
 )

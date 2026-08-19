@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vikaspokala.daybyday.ui.components.ChooseDateScreen
+import com.vikaspokala.daybyday.ui.components.ChooseReminderModal
 import com.vikaspokala.daybyday.ui.components.ChooseTimeModal
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDayBackground
@@ -58,9 +59,10 @@ fun TaskScreen(
     isCompleted: Boolean = false,
     dateString: String? = null,
     timeString: String? = null,
+    reminderString: String? = null,
     isLaterTask: Boolean = false,
     onNavigateBack: () -> Unit,
-    onSaveTask: (title: String, note: String?, dateString: String?, timeString: String?, isImportant: Boolean) -> Unit = { _, _, _, _, _ -> },
+    onSaveTask: (title: String, note: String?, dateString: String?, timeString: String?, reminderString: String?, isImportant: Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onScheduleThisClick: () -> Unit = {},
     onConfirmDelete: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -70,17 +72,24 @@ fun TaskScreen(
     var isImportant by remember(initialIsImportant) { mutableStateOf(initialIsImportant) }
     var currentDateString by remember(dateString) { mutableStateOf(dateString) }
     var currentTimeString by remember(timeString) { mutableStateOf(timeString) }
+    var currentReminderString by remember(reminderString, timeString) {
+        mutableStateOf(if (timeString != null) reminderString else null)
+    }
 
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePickerModal by remember { mutableStateOf(false) }
+    var showReminderModal by remember { mutableStateOf(false) }
+    var showNoTimeWarning by remember { mutableStateOf(false) }
 
     // Intercept system Back button when overlays/screens are open
-    BackHandler(enabled = showDeleteConfirmation || showDatePicker || showTimePickerModal) {
+    BackHandler(enabled = showDeleteConfirmation || showDatePicker || showTimePickerModal || showReminderModal || showNoTimeWarning) {
         when {
             showDeleteConfirmation -> showDeleteConfirmation = false
             showDatePicker -> showDatePicker = false
             showTimePickerModal -> showTimePickerModal = false
+            showReminderModal -> showReminderModal = false
+            showNoTimeWarning -> showNoTimeWarning = false
         }
     }
 
@@ -93,7 +102,8 @@ fun TaskScreen(
             noteText != initialNote.orEmpty() ||
             isImportant != initialIsImportant ||
             currentDateString != dateString ||
-            currentTimeString != timeString
+            currentTimeString != timeString ||
+            currentReminderString != (if (timeString != null) reminderString else null)
         )
     }
 
@@ -176,6 +186,7 @@ fun TaskScreen(
                                             noteText,
                                             currentDateString,
                                             currentTimeString,
+                                            currentReminderString,
                                             isImportant
                                         )
                                     }
@@ -337,8 +348,15 @@ fun TaskScreen(
                     // REMINDER Field (72dp height)
                     StandardFieldRow(
                         label = "REMINDER",
-                        valueText = "None",
-                        actionText = "Optional"
+                        valueText = if (currentTimeString != null) (currentReminderString ?: "No reminder") else "No reminder",
+                        actionText = "Optional",
+                        onClick = {
+                            if (currentTimeString == null) {
+                                showNoTimeWarning = true
+                            } else {
+                                showReminderModal = true
+                            }
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -476,6 +494,85 @@ fun TaskScreen(
                     showTimePickerModal = false
                 }
             )
+        }
+
+        // Floating Choose Reminder Modal (ON TOP of Task screen)
+        if (showReminderModal && !isLaterTask && currentTimeString != null) {
+            ChooseReminderModal(
+                currentReminder = currentReminderString,
+                onDismiss = { showReminderModal = false },
+                onReminderSelected = { newReminder ->
+                    currentReminderString = newReminder
+                    showReminderModal = false
+                }
+            )
+        }
+
+        // Warning when tapping Reminder without a Time
+        if (showNoTimeWarning) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { showNoTimeWarning = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { /* Consume clicks inside modal card */ },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, DayByDayNeutralBorder)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Add a time before setting a reminder.",
+                            style = TextStyle(
+                                fontFamily = DayByDayFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                color = DayByDayPrimaryText,
+                                textAlign = TextAlign.Center
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier
+                                .height(44.dp)
+                                .fillMaxWidth()
+                                .clickable { showNoTimeWarning = false },
+                            shape = RoundedCornerShape(14.dp),
+                            color = DayByDayAccent
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "OK",
+                                    style = TextStyle(
+                                        fontFamily = DayByDayFontFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Floating Delete Confirmation Overlay (ON TOP of Task screen)
@@ -675,7 +772,7 @@ private fun StandardFieldRow(
                         fontWeight = FontWeight.W400,
                         fontSize = 14.sp,
                         lineHeight = 18.sp,
-                        color = if (valueText != null) DayByDayPrimaryText else DayByDaySecondaryText
+                        color = if (valueText != null && valueText != "No reminder" && valueText != "None" && valueText != "Does not repeat") DayByDayPrimaryText else DayByDaySecondaryText
                     )
                 )
             }

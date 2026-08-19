@@ -237,6 +237,7 @@ fun ScheduleScreen(
                                         initialIsImportant = task.isImportant,
                                         dateString = formattedSelectedDate,
                                         timeString = task.time,
+                                        reminderString = task.reminder,
                                         isLaterTask = false,
                                         sourceScreen = "SCHEDULE"
                                     )

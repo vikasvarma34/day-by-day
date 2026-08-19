@@ -263,6 +263,7 @@ fun AppShell(
                             isCompleted = key.isCompleted,
                             dateString = key.dateString,
                             timeString = key.timeString,
+                            reminderString = key.reminderString,
                             isLaterTask = key.isLaterTask,
                             onNavigateBack = {
                                 if (backStack.size > 1) {
@@ -281,7 +282,7 @@ fun AppShell(
                                     )
                                 }
                             },
-                            onSaveTask = { title, note, newDateStr, newTimeStr, isImp ->
+                            onSaveTask = { title, note, newDateStr, newTimeStr, newReminderStr, isImp ->
                                 if (key.isCreateMode) {
                                     when {
                                         key.isLaterTask || key.sourceScreen == "LATER" -> {
@@ -289,12 +290,12 @@ fun AppShell(
                                         }
                                         key.sourceScreen == "SCHEDULE" -> {
                                             val parsedDate = parseDateString(newDateStr) ?: scheduleViewModel.selectedDate.value
-                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
                                         }
                                         else -> {
                                             val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
-                                            todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
-                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                            todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
+                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
                                         }
                                     }
                                 } else {
@@ -305,12 +306,12 @@ fun AppShell(
                                             }
                                             key.sourceScreen == "SCHEDULE" -> {
                                                 val parsedDate = parseDateString(newDateStr) ?: scheduleViewModel.selectedDate.value
-                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
                                             }
                                             else -> {
                                                 val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
-                                                todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
-                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                                                todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
+                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
                                             }
                                         }
                                     }
@@ -341,13 +342,14 @@ fun AppShell(
                                     backStack.removeAt(backStack.lastIndex)
                                 }
                             },
-                            onSchedule = { title, note, date, time, isImportant ->
+                            onSchedule = { title, note, date, time, reminder, isImportant ->
                                 laterViewModel.deleteTask(key.taskId)
                                 todayViewModel.addTask(
                                     title = title,
                                     note = note,
                                     date = date,
                                     time = time,
+                                    reminder = reminder,
                                     isImportant = isImportant
                                 )
                                 // Pop both ScheduleItem and TaskScreen to land directly on LaterScreen

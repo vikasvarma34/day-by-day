@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vikaspokala.daybyday.ui.components.ChooseDateScreen
+import com.vikaspokala.daybyday.ui.components.ChooseReminderModal
 import com.vikaspokala.daybyday.ui.components.ChooseTimeModal
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDayBackground
@@ -55,7 +57,7 @@ fun ScheduleItemScreen(
     initialNote: String? = null,
     initialIsImportant: Boolean = false,
     onNavigateBack: () -> Unit,
-    onSchedule: (title: String, note: String?, date: LocalDate, time: String?, isImportant: Boolean) -> Unit,
+    onSchedule: (title: String, note: String?, date: LocalDate, time: String?, reminder: String?, isImportant: Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var titleText by remember(initialTitle) { mutableStateOf(initialTitle) }
@@ -64,16 +66,21 @@ fun ScheduleItemScreen(
 
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     var timeString by remember { mutableStateOf<String?>(null) }
+    var reminderString by remember { mutableStateOf<String?>(null) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePickerModal by remember { mutableStateOf(false) }
+    var showReminderModal by remember { mutableStateOf(false) }
+    var showNoTimeWarning by remember { mutableStateOf(false) }
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
 
-    BackHandler(enabled = showDatePicker || showTimePickerModal) {
+    BackHandler(enabled = showDatePicker || showTimePickerModal || showReminderModal || showNoTimeWarning) {
         when {
             showDatePicker -> showDatePicker = false
             showTimePickerModal -> showTimePickerModal = false
+            showReminderModal -> showReminderModal = false
+            showNoTimeWarning -> showNoTimeWarning = false
         }
     }
 
@@ -273,11 +280,18 @@ fun ScheduleItemScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 5. REMINDER Field (Presentation-only)
+                // 5. REMINDER Field (Functional)
                 StandardFieldRow(
                     label = "REMINDER",
-                    valueText = "No reminder",
-                    actionText = "Optional"
+                    valueText = if (timeString != null) (reminderString ?: "No reminder") else "No reminder",
+                    actionText = "Optional",
+                    onClick = {
+                        if (timeString == null) {
+                            showNoTimeWarning = true
+                        } else {
+                            showReminderModal = true
+                        }
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -356,6 +370,7 @@ fun ScheduleItemScreen(
                                             noteText,
                                             date,
                                             timeString,
+                                            if (timeString != null) reminderString else null,
                                             isImportant
                                         )
                                     }
@@ -398,6 +413,85 @@ fun ScheduleItemScreen(
                     showTimePickerModal = false
                 }
             )
+        }
+
+        // Floating Choose Reminder Modal
+        if (showReminderModal && timeString != null) {
+            ChooseReminderModal(
+                currentReminder = reminderString,
+                onDismiss = { showReminderModal = false },
+                onReminderSelected = { newReminder ->
+                    reminderString = newReminder
+                    showReminderModal = false
+                }
+            )
+        }
+
+        // Warning when tapping Reminder without a Time
+        if (showNoTimeWarning) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { showNoTimeWarning = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { /* Consume clicks inside modal card */ },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, DayByDayNeutralBorder)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Add a time before setting a reminder.",
+                            style = TextStyle(
+                                fontFamily = DayByDayFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                color = DayByDayPrimaryText,
+                                textAlign = TextAlign.Center
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier
+                                .height(44.dp)
+                                .fillMaxWidth()
+                                .clickable { showNoTimeWarning = false },
+                            shape = RoundedCornerShape(14.dp),
+                            color = DayByDayAccent
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "OK",
+                                    style = TextStyle(
+                                        fontFamily = DayByDayFontFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -479,7 +573,7 @@ private fun StandardFieldRow(
                         fontWeight = FontWeight.W400,
                         fontSize = 14.sp,
                         lineHeight = 18.sp,
-                        color = if (valueText != null) DayByDayPrimaryText else DayByDaySecondaryText
+                        color = if (valueText != null && valueText != "No reminder" && valueText != "Does not repeat") DayByDayPrimaryText else DayByDaySecondaryText
                     )
                 )
             }

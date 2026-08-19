@@ -62,6 +62,7 @@ class ScheduleViewModel(
         note: String? = null,
         date: LocalDate,
         time: String? = null,
+        reminder: String? = null,
         isImportant: Boolean = false
     ): String {
         return taskStore.addTask(
@@ -69,6 +70,7 @@ class ScheduleViewModel(
             note = note,
             date = date,
             time = time,
+            reminder = reminder,
             isImportant = isImportant
         )
     }
@@ -79,6 +81,7 @@ class ScheduleViewModel(
         note: String? = null,
         date: LocalDate,
         time: String? = null,
+        reminder: String? = null,
         isImportant: Boolean = false
     ) {
         taskStore.updateTask(
@@ -87,6 +90,7 @@ class ScheduleViewModel(
             note = note,
             date = date,
             time = time,
+            reminder = reminder,
             isImportant = isImportant
         )
     }

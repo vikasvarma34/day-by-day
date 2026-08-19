@@ -3,6 +3,7 @@ package com.vikaspokala.daybyday.ui
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -36,6 +37,7 @@ class TaskSaveContractTest {
         note: String?,
         newDateStr: String?,
         newTimeStr: String?,
+        newReminderStr: String?,
         isImp: Boolean
     ) {
         if (isCreateMode) {
@@ -45,11 +47,11 @@ class TaskSaveContractTest {
                 }
                 sourceScreen == "SCHEDULE" -> {
                     val parsedDate = scheduleViewModel.selectedDate.value
-                    scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                    scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
                 }
                 else -> {
                     val parsedDate = todayViewModel.selectedDate.value
-                    todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                    todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
                 }
             }
         } else {
@@ -60,11 +62,11 @@ class TaskSaveContractTest {
                     }
                     sourceScreen == "SCHEDULE" -> {
                         val parsedDate = scheduleViewModel.selectedDate.value
-                        scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                        scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
                     }
                     else -> {
                         val parsedDate = todayViewModel.selectedDate.value
-                        todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, isImportant = isImp)
+                        todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, isImportant = isImp)
                     }
                 }
             }
@@ -82,16 +84,18 @@ class TaskSaveContractTest {
             note = "Bring reports",
             newDateStr = null,
             newTimeStr = "10:00 AM",
+            newReminderStr = "15 minutes before",
             isImp = false
         )
 
         val createdTaskInToday = todayViewModel.tasks.value.first()
         assertEquals("Doctor", createdTaskInToday.title)
         assertEquals("Bring reports", createdTaskInToday.note)
+        assertEquals("15 minutes before", createdTaskInToday.reminder)
 
         // Same task visible in Schedule
         val scheduleTasks = scheduleViewModel.getTasksForDate(testToday)
-        assertTrue(scheduleTasks.any { it.title == "Doctor" && it.note == "Bring reports" })
+        assertTrue(scheduleTasks.any { it.title == "Doctor" && it.note == "Bring reports" && it.reminder == "15 minutes before" })
     }
 
     @Test
@@ -107,6 +111,7 @@ class TaskSaveContractTest {
             note = "Bring reports and prescription",
             newDateStr = null,
             newTimeStr = existingTask.time,
+            newReminderStr = existingTask.reminder,
             isImp = existingTask.isImportant
         )
 
@@ -118,7 +123,7 @@ class TaskSaveContractTest {
     }
 
     @Test
-    fun `Schedule task creation with note passes note and is visible in Today for that date`() {
+    fun `Schedule task creation with note and reminder passes both to store`() {
         val targetDate = testToday.plusDays(1)
         scheduleViewModel.selectDate(targetDate)
 
@@ -131,16 +136,41 @@ class TaskSaveContractTest {
             note = "Check teeth whitening",
             newDateStr = null,
             newTimeStr = "02:00 PM",
+            newReminderStr = "30 minutes before",
             isImp = true
         )
 
         val createdTask = scheduleViewModel.tasks.value.first()
         assertEquals("Dentist appointment", createdTask.title)
         assertEquals("Check teeth whitening", createdTask.note)
+        assertEquals("02:00 PM", createdTask.time)
+        assertEquals("30 minutes before", createdTask.reminder)
 
         // Today browsing targetDate sees this task
         todayViewModel.selectDate(targetDate)
         val todayTasksOnTargetDate = todayViewModel.getTasksForDate(targetDate)
-        assertTrue(todayTasksOnTargetDate.any { it.title == "Dentist appointment" && it.note == "Check teeth whitening" })
+        assertTrue(todayTasksOnTargetDate.any { it.title == "Dentist appointment" && it.reminder == "30 minutes before" })
+    }
+
+    @Test
+    fun `removing task time automatically resets reminder in store`() {
+        val existingTask = todayViewModel.tasks.value.first { it.time != null }
+
+        handleSaveTask(
+            isCreateMode = false,
+            taskId = existingTask.id,
+            sourceScreen = "TODAY",
+            isLaterTask = false,
+            title = existingTask.title,
+            note = existingTask.note,
+            newDateStr = null,
+            newTimeStr = null, // removed time
+            newReminderStr = "15 minutes before", // even if attempted
+            isImp = existingTask.isImportant
+        )
+
+        val updatedTask = todayViewModel.tasks.value.first { it.id == existingTask.id }
+        assertNull(updatedTask.time)
+        assertNull(updatedTask.reminder)
     }
 }
