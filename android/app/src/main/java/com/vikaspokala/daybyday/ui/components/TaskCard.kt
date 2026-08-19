@@ -36,7 +36,7 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 @Composable
 fun TaskCard(
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
     isImportant: Boolean,
     isCompleted: Boolean,
     onToggleCompletion: () -> Unit,
@@ -92,11 +92,13 @@ fun TaskCard(
                     color = if (isCompleted) DayByDaySecondaryText else DayByDayPrimaryText,
                     textDecoration = if (isCompleted) TextDecoration.LineThrough else TextDecoration.None
                 )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = DayByDaySecondaryText
-                )
+                if (!subtitle.isNullOrEmpty()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = DayByDaySecondaryText
+                    )
+                }
             }
 
             // Star / Important toggle button

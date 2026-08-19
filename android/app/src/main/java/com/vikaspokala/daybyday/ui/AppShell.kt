@@ -1,6 +1,9 @@
 package com.vikaspokala.daybyday.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,59 +25,74 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.vikaspokala.daybyday.ui.navigation.Screen
 import com.vikaspokala.daybyday.ui.screens.HistoryScreen
-import com.vikaspokala.daybyday.ui.screens.LaterScreen
 import com.vikaspokala.daybyday.ui.screens.SettingsScreen
+import com.vikaspokala.daybyday.ui.screens.later.LaterScreen
+import com.vikaspokala.daybyday.ui.screens.later.LaterViewModel
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleScreen
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 import com.vikaspokala.daybyday.ui.screens.today.TodayScreen
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
+import com.vikaspokala.daybyday.ui.theme.DayByDayBackground
 import com.vikaspokala.daybyday.ui.theme.DayByDayNeutralBorder
 import com.vikaspokala.daybyday.ui.theme.DayByDaySecondaryText
 import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 
 @Composable
 fun AppShell(
-    scheduleViewModel: ScheduleViewModel = viewModel()
+    scheduleViewModel: ScheduleViewModel = viewModel(),
+    laterViewModel: LaterViewModel = viewModel()
 ) {
     val backStack = rememberNavBackStack(Screen.Today as NavKey)
 
     val currentScreen = backStack.lastOrNull() as? Screen ?: Screen.Today
 
     Scaffold(
+        containerColor = DayByDayBackground,
         bottomBar = {
-            Surface(
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                color = DayByDaySurface,
-                border = BorderStroke(1.dp, DayByDayNeutralBorder),
-                modifier = Modifier.fillMaxWidth()
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Transparent)
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
-                NavigationBar(
-                    containerColor = Color.Transparent,
-                    tonalElevation = 0.dp
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = DayByDaySurface,
+                    border = BorderStroke(1.dp, DayByDayNeutralBorder),
+                    shadowElevation = 4.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Screen.bottomNavItems.forEach { screen ->
-                        val selected = currentScreen == screen
-                        NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = screen.title) },
-                            label = { Text(screen.title) },
-                            selected = selected,
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = DayByDayAccent,
-                                selectedTextColor = DayByDayAccent,
-                                unselectedIconColor = DayByDaySecondaryText,
-                                unselectedTextColor = DayByDaySecondaryText,
-                                indicatorColor = Color.Transparent
-                            ),
-                            onClick = {
-                                if (currentScreen != screen) {
-                                    if (screen == Screen.Schedule) {
-                                        scheduleViewModel.resetToToday()
+                    NavigationBar(
+                        containerColor = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        windowInsets = WindowInsets(0, 0, 0, 0)
+                    ) {
+                        Screen.bottomNavItems.forEach { screen ->
+                            val selected = currentScreen == screen
+                            NavigationBarItem(
+                                icon = { Icon(screen.icon, contentDescription = screen.title) },
+                                label = { Text(screen.title) },
+                                selected = selected,
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = DayByDayAccent,
+                                    selectedTextColor = DayByDayAccent,
+                                    unselectedIconColor = DayByDaySecondaryText,
+                                    unselectedTextColor = DayByDaySecondaryText,
+                                    indicatorColor = Color.Transparent
+                                ),
+                                onClick = {
+                                    if (currentScreen != screen) {
+                                        if (screen == Screen.Schedule) {
+                                            scheduleViewModel.resetToToday()
+                                        } else if (screen == Screen.Later) {
+                                            laterViewModel.collapseCompleted()
+                                        }
+                                        backStack.clear()
+                                        backStack.add(screen)
                                     }
-                                    backStack.clear()
-                                    backStack.add(screen)
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -94,7 +112,9 @@ fun AppShell(
                     is Screen.Schedule -> NavEntry(key) {
                         ScheduleScreen(viewModel = scheduleViewModel)
                     }
-                    is Screen.Later -> NavEntry(key) { LaterScreen() }
+                    is Screen.Later -> NavEntry(key) {
+                        LaterScreen(viewModel = laterViewModel)
+                    }
                     is Screen.History -> NavEntry(key) { HistoryScreen() }
                     is Screen.Settings -> NavEntry(key) { SettingsScreen() }
                     else -> error("Unknown destination key: $key")

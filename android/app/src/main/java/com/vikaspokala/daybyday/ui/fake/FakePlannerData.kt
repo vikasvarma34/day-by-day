@@ -1,6 +1,7 @@
 package com.vikaspokala.daybyday.ui.fake
 
 import java.time.LocalDate
+import com.vikaspokala.daybyday.ui.screens.later.LaterTaskItem
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
 import com.vikaspokala.daybyday.ui.screens.today.TaskItem
 
@@ -102,6 +103,41 @@ object FakePlannerData {
                 date = today.plusDays(12),
                 time = null,
                 isImportant = true
+            )
+        )
+    }
+
+    fun getLaterDemoTasks(): List<LaterTaskItem> {
+        return listOf(
+            LaterTaskItem(
+                id = "l1",
+                title = "Read Atomic Habits",
+                note = "A chapter or two when there is time",
+                isImportant = true
+            ),
+            LaterTaskItem(
+                id = "l2",
+                title = "Compare new headphones",
+                note = "Look at comfort and battery life",
+                isImportant = false
+            ),
+            LaterTaskItem(
+                id = "l3",
+                title = "Watch Interstellar",
+                note = "Weekend idea",
+                isImportant = false
+            ),
+            LaterTaskItem(
+                id = "l4",
+                title = "Call college friend",
+                note = "Catch up when free",
+                isImportant = true
+            ),
+            LaterTaskItem(
+                id = "l5",
+                title = "Research weekend trip",
+                note = "Somewhere quiet",
+                isImportant = false
             )
         )
     }
