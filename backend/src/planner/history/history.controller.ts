@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../auth/auth.middleware';
-import { UnauthorizedError } from '../../errors/http-errors';
-import { validatePlannerDate } from '../domain/date-validation';
+import { BadRequestError, UnauthorizedError } from '../../errors/http-errors';
+import { validatePlausiblePlannerToday } from '../domain/date-validation';
 import { HistoryService } from './history.service';
 
 export class HistoryController {
@@ -17,9 +17,21 @@ export class HistoryController {
         throw new UnauthorizedError();
       }
 
-      const plannerToday = validatePlannerDate(req.query.plannerToday, 'plannerToday');
-      const qParam = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
-      const search = qParam && qParam.length > 0 ? qParam : undefined;
+      const plannerToday = validatePlausiblePlannerToday(req.query.plannerToday);
+
+      let search: string | undefined = undefined;
+      if (req.query.q !== undefined) {
+        if (typeof req.query.q !== 'string') {
+          throw new BadRequestError('Invalid search query: must be a string');
+        }
+        if (req.query.q.length > 200) {
+          throw new BadRequestError('Invalid search query: max 200 characters');
+        }
+        const trimmed = req.query.q.trim();
+        if (trimmed.length > 0) {
+          search = trimmed;
+        }
+      }
 
       const response = await this.historyService.getHistory(req.user.id, plannerToday, search);
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validatePlannerDate } from './date-validation';
+import { validatePlannerDate, validatePlausiblePlannerToday } from './date-validation';
 import { BadRequestError } from '../../errors/http-errors';
 
 test('validatePlannerDate: accepts valid standard calendar dates', () => {
@@ -74,4 +74,45 @@ test('validatePlannerDate: rejects Gregorian year zero (0000-01-01)', () => {
     assert.match(err.message, /year must be between 0001 and 9999/);
     return true;
   });
+});
+
+test('validatePlausiblePlannerToday: accepts UTC-1, UTC, UTC+1 relative to reference date', () => {
+  const ref = new Date('2026-08-20T12:00:00Z');
+  assert.equal(validatePlausiblePlannerToday('2026-08-19', ref), '2026-08-19');
+  assert.equal(validatePlausiblePlannerToday('2026-08-20', ref), '2026-08-20');
+  assert.equal(validatePlausiblePlannerToday('2026-08-21', ref), '2026-08-21');
+});
+
+test('validatePlausiblePlannerToday: rejects dates outside UTC ± 1 day window', () => {
+  const ref = new Date('2026-08-20T12:00:00Z');
+  assert.throws(() => validatePlausiblePlannerToday('2026-08-18', ref), (err: any) => {
+    assert.ok(err instanceof BadRequestError);
+    assert.equal(err.message, 'plannerToday is outside plausible calendar range');
+    return true;
+  });
+  assert.throws(() => validatePlausiblePlannerToday('2026-08-22', ref), (err: any) => {
+    assert.ok(err instanceof BadRequestError);
+    assert.equal(err.message, 'plannerToday is outside plausible calendar range');
+    return true;
+  });
+  assert.throws(() => validatePlausiblePlannerToday('1900-01-01', ref), BadRequestError);
+  assert.throws(() => validatePlausiblePlannerToday('2099-01-01', ref), BadRequestError);
+});
+
+test('validatePlausiblePlannerToday: handles Year rollover boundary correctly', () => {
+  const refJan1 = new Date('2026-01-01T02:00:00Z');
+  assert.equal(validatePlausiblePlannerToday('2025-12-31', refJan1), '2025-12-31');
+  assert.equal(validatePlausiblePlannerToday('2026-01-01', refJan1), '2026-01-01');
+  assert.equal(validatePlausiblePlannerToday('2026-01-02', refJan1), '2026-01-02');
+  assert.throws(() => validatePlausiblePlannerToday('2025-12-30', refJan1), BadRequestError);
+  assert.throws(() => validatePlausiblePlannerToday('2026-01-03', refJan1), BadRequestError);
+});
+
+test('validatePlausiblePlannerToday: handles Leap year boundary correctly', () => {
+  const refMar1 = new Date('2024-03-01T15:00:00Z');
+  assert.equal(validatePlausiblePlannerToday('2024-02-29', refMar1), '2024-02-29');
+  assert.equal(validatePlausiblePlannerToday('2024-03-01', refMar1), '2024-03-01');
+  assert.equal(validatePlausiblePlannerToday('2024-03-02', refMar1), '2024-03-02');
+  assert.throws(() => validatePlausiblePlannerToday('2024-02-28', refMar1), BadRequestError);
+  assert.throws(() => validatePlausiblePlannerToday('2024-03-03', refMar1), BadRequestError);
 });

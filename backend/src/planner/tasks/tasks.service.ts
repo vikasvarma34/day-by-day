@@ -1,6 +1,6 @@
 import { TasksRepository } from './tasks.repository';
 import { CreateTaskDto, PlannerTaskResponse, EditTaskDto } from './tasks.types';
-import { validatePlannerDate } from '../domain/date-validation';
+import { validatePlannerDate, validatePlausiblePlannerToday } from '../domain/date-validation';
 import { isScheduleOccurringOnDate, PlannerSchedule } from '../domain/recurrence';
 import { BadRequestError } from '../../errors/http-errors';
 
@@ -27,6 +27,10 @@ export class TasksService {
     if (typeof payload.title !== 'string' || payload.title.trim() === '') {
       throw new BadRequestError('Invalid title: cannot be blank');
     }
+    const trimmedTitle = payload.title.trim();
+    if (trimmedTitle.length > 255) {
+      throw new BadRequestError('Invalid title: max 255 characters');
+    }
 
     let note = payload.note;
     if (typeof note === 'string') {
@@ -52,7 +56,7 @@ export class TasksService {
 
     const dto: CreateTaskDto = {
       id: payload.id,
-      title: payload.title.trim(),
+      title: trimmedTitle,
       note: note || null,
       isImportant,
       schedule: null,
@@ -68,12 +72,17 @@ export class TasksService {
       if (!plannerToday) {
         throw new BadRequestError('plannerToday is required for scheduled task creation');
       }
-      const today = validatePlannerDate(plannerToday, 'plannerToday');
+      const today = validatePlausiblePlannerToday(plannerToday);
 
       const startDate = validatePlannerDate(s.startDate, 'startDate');
 
       if (startDate < today) {
-        throw new BadRequestError('Scheduled start date cannot be before plannerToday');
+        if (s.type !== 'ONCE') {
+          throw new BadRequestError('Recurring schedules cannot start before plannerToday');
+        }
+        if (s.reminderMinutesBefore !== undefined && s.reminderMinutesBefore !== null) {
+          throw new BadRequestError('Reminders cannot be set for historical tasks');
+        }
       }
 
       let endDate: string | null = null;
@@ -192,7 +201,11 @@ export class TasksService {
       if (typeof payload.title !== 'string' || payload.title.trim() === '') {
         throw new BadRequestError('Invalid title: cannot be blank');
       }
-      dto.title = payload.title.trim();
+      const trimmedTitle = payload.title.trim();
+      if (trimmedTitle.length > 255) {
+        throw new BadRequestError('Invalid title: max 255 characters');
+      }
+      dto.title = trimmedTitle;
     }
 
     if (payload.note !== undefined) {
@@ -231,7 +244,7 @@ export class TasksService {
       if (!payload.effectiveDate) {
         throw new BadRequestError('effectiveDate is required for schedule changes');
       }
-      dto.plannerToday = validatePlannerDate(payload.plannerToday, 'plannerToday');
+      dto.plannerToday = validatePlausiblePlannerToday(payload.plannerToday);
       dto.effectiveDate = validatePlannerDate(payload.effectiveDate, 'effectiveDate');
 
       if (dto.effectiveDate < dto.plannerToday) {
@@ -351,6 +364,11 @@ export class TasksService {
       throw new BadRequestError('Invalid id: must be a UUID v4');
     }
 
+    if (!payload.plannerToday) {
+      throw new BadRequestError('plannerToday is required');
+    }
+    const plannerToday = validatePlausiblePlannerToday(payload.plannerToday);
+
     if (!payload.completedDate) {
       throw new BadRequestError('completedDate is required');
     }
@@ -369,11 +387,24 @@ export class TasksService {
         throw new BadRequestError('scheduledDate is required when scheduleId is provided');
       }
       scheduledDate = validatePlannerDate(payload.scheduledDate, 'scheduledDate');
+
+      if (completedDate > plannerToday) {
+        throw new BadRequestError('completedDate cannot be after plannerToday');
+      }
+      const minDate = scheduledDate < plannerToday ? scheduledDate : plannerToday;
+      if (completedDate < minDate) {
+        throw new BadRequestError('completedDate cannot be before scheduledDate');
+      }
     } else if (payload.scheduledDate) {
       throw new BadRequestError('scheduleId is required when scheduledDate is provided');
+    } else {
+      if (completedDate !== plannerToday) {
+        throw new BadRequestError('completedDate for Later task must equal plannerToday');
+      }
     }
 
     await this.tasksRepository.completeTask(userId, taskId, {
+      plannerToday,
       completedDate,
       scheduleId,
       scheduledDate
@@ -431,7 +462,7 @@ export class TasksService {
     if (!payload.plannerToday) {
       throw new BadRequestError('plannerToday is required');
     }
-    const plannerToday = validatePlannerDate(payload.plannerToday, 'plannerToday');
+    const plannerToday = validatePlausiblePlannerToday(payload.plannerToday);
 
     await this.tasksRepository.stopRecurrence(userId, taskId, { plannerToday });
   }

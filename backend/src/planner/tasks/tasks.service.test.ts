@@ -14,6 +14,10 @@ describe('TasksService', () => {
       createIdempotent: mock.fn(),
       findTaskWithSchedules: mock.fn(),
       updateTask: mock.fn(),
+      completeTask: mock.fn(),
+      undoTask: mock.fn(),
+      deleteTask: mock.fn(),
+      stopRecurrence: mock.fn(),
     };
     service = new TasksService(mockRepository as any);
   });
@@ -77,16 +81,29 @@ describe('TasksService', () => {
     );
   });
 
-  it('rejects ONCE start date before plannerToday', async () => {
+  it('allows historical ONCE start date before plannerToday without reminder', async () => {
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: {} }));
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Task',
       plannerToday: '2026-08-19',
       schedule: { type: 'ONCE', startDate: '2026-08-18' }
     };
+    await service.createTask(mockUserId, payload);
+    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(callArgs[1].schedule.startDate, '2026-08-18');
+  });
+
+  it('rejects historical ONCE start date before plannerToday when reminder is provided', async () => {
+    const payload = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Task',
+      plannerToday: '2026-08-19',
+      schedule: { type: 'ONCE', startDate: '2026-08-18', scheduledTime: '10:00:00', reminderMinutesBefore: 15 }
+    };
     await assert.rejects(
       service.createTask(mockUserId, payload),
-      /Scheduled start date cannot be before plannerToday/
+      /Reminders cannot be set for historical tasks/
     );
   });
 
@@ -120,12 +137,12 @@ describe('TasksService', () => {
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Task',
-      plannerToday: '2026-08-18',
-      schedule: { type: 'WEEKDAYS', startDate: '2026-08-17', weekdaysMask: 65 }
+      plannerToday: '2026-08-20',
+      schedule: { type: 'WEEKDAYS', startDate: '2026-08-19', weekdaysMask: 65 }
     };
     await assert.rejects(
       service.createTask(mockUserId, payload),
-      /Scheduled start date cannot be before plannerToday/
+      /Recurring schedules cannot start before plannerToday/
     );
   });
 
@@ -134,21 +151,21 @@ describe('TasksService', () => {
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Task',
-      plannerToday: '2026-08-18',
-      schedule: { type: 'ONCE', startDate: '2026-08-18', endDate: '2026-08-20' }
+      plannerToday: '2026-08-20',
+      schedule: { type: 'ONCE', startDate: '2026-08-20', endDate: '2026-08-22' }
     };
     await service.createTask(mockUserId, payload);
     const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
     assert.equal(callArgs[0], mockUserId);
-    assert.equal(callArgs[1].schedule.endDate, '2026-08-18');
+    assert.equal(callArgs[1].schedule.endDate, '2026-08-20');
   });
 
   it('rejects finite recurring range containing no occurrences', async () => {
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Task',
-      plannerToday: '2026-08-10',
-      schedule: { type: 'WEEKDAYS', startDate: '2026-08-15', endDate: '2026-08-16', weekdaysMask: 2 } // 2 is Monday
+      plannerToday: '2026-08-20',
+      schedule: { type: 'WEEKDAYS', startDate: '2026-08-25', endDate: '2026-08-26', weekdaysMask: 1 } // 1 is Monday (Aug 25 is Tue, Aug 26 is Wed)
     };
     await assert.rejects(
       service.createTask(mockUserId, payload),
@@ -181,8 +198,8 @@ describe('TasksService', () => {
       service.createTask(mockUserId, {
         id: '00000000-0000-4000-a000-000000000000', 
         title: 'T', 
-        plannerToday: '2026-08-18',
-        schedule: { type: 'ONCE', startDate: '2026-08-18', scheduledTime: '' }
+        plannerToday: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-20', scheduledTime: '' }
       }),
       BadRequestError
     );
@@ -193,7 +210,7 @@ describe('TasksService', () => {
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Task',
-      plannerToday: '2026-08-18',
+      plannerToday: '2026-08-20',
       schedule: { type: 'WEEKDAYS', startDate: '2050-01-01', endDate: '2050-01-05', weekdaysMask: 127 }
     };
     await service.createTask(mockUserId, payload);
@@ -222,5 +239,104 @@ describe('TasksService', () => {
     };
     await service.updateTask(mockUserId, '00000000-0000-4000-a000-000000000000', payload);
     assert.equal(mockRepository.updateTask.mock.calls.length, 1);
+  });
+
+  it('completeTask rejects missing plannerToday', async () => {
+    await assert.rejects(
+      service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', { completedDate: '2026-08-20' }),
+      /plannerToday is required/
+    );
+  });
+
+  it('completeTask for scheduled task allows completedDate between scheduledDate and plannerToday', async () => {
+    mockRepository.completeTask.mock.mockImplementation(async () => {});
+    await service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
+      plannerToday: '2026-08-20',
+      completedDate: '2026-08-18',
+      scheduleId: '00000000-0000-4000-a000-000000000001',
+      scheduledDate: '2026-08-16'
+    });
+    assert.equal(mockRepository.completeTask.mock.calls.length, 1);
+  });
+
+  it('completeTask for scheduled task rejects completedDate before scheduledDate', async () => {
+    await assert.rejects(
+      service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
+        plannerToday: '2026-08-20',
+        completedDate: '2026-08-15',
+        scheduleId: '00000000-0000-4000-a000-000000000001',
+        scheduledDate: '2026-08-16'
+      }),
+      /completedDate cannot be before scheduledDate/
+    );
+  });
+
+  it('completeTask for scheduled task rejects completedDate after plannerToday', async () => {
+    await assert.rejects(
+      service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
+        plannerToday: '2026-08-20',
+        completedDate: '2026-08-21',
+        scheduleId: '00000000-0000-4000-a000-000000000001',
+        scheduledDate: '2026-08-16'
+      }),
+      /completedDate cannot be after plannerToday/
+    );
+  });
+
+  it('completeTask for future scheduled task allows completedDate equal to plannerToday', async () => {
+    mockRepository.completeTask.mock.mockImplementation(async () => {});
+    await service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
+      plannerToday: '2026-08-20',
+      completedDate: '2026-08-20',
+      scheduleId: '00000000-0000-4000-a000-000000000001',
+      scheduledDate: '2026-08-25'
+    });
+    assert.equal(mockRepository.completeTask.mock.calls.length, 1);
+  });
+
+  it('completeTask for future scheduled task rejects completedDate before plannerToday or after plannerToday', async () => {
+    await assert.rejects(
+      service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
+        plannerToday: '2026-08-20',
+        completedDate: '2026-08-19',
+        scheduleId: '00000000-0000-4000-a000-000000000001',
+        scheduledDate: '2026-08-25'
+      }),
+      /completedDate cannot be before scheduledDate/
+    );
+    await assert.rejects(
+      service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
+        plannerToday: '2026-08-20',
+        completedDate: '2026-08-25',
+        scheduleId: '00000000-0000-4000-a000-000000000001',
+        scheduledDate: '2026-08-25'
+      }),
+      /completedDate cannot be after plannerToday/
+    );
+  });
+
+  it('completeTask for Later task requires completedDate == plannerToday', async () => {
+    mockRepository.completeTask.mock.mockImplementation(async () => {});
+    await service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
+      plannerToday: '2026-08-20',
+      completedDate: '2026-08-20'
+    });
+    assert.equal(mockRepository.completeTask.mock.calls.length, 1);
+
+    await assert.rejects(
+      service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
+        plannerToday: '2026-08-20',
+        completedDate: '2026-08-19'
+      }),
+      /completedDate for Later task must equal plannerToday/
+    );
+
+    await assert.rejects(
+      service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
+        plannerToday: '2026-08-20',
+        completedDate: '2026-08-21'
+      }),
+      /completedDate for Later task must equal plannerToday/
+    );
   });
 });

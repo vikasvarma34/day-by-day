@@ -79,7 +79,7 @@ test('POST /tasks Integration Suite', async (t) => {
     assert.equal(body.task.schedules.length, 0);
   });
 
-  await t.test('rejects creating ONCE task when startDate < plannerToday with 400', async () => {
+  await t.test('creates historical ONCE task when startDate < plannerToday without reminder', async () => {
     const id = getValidId();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
@@ -87,13 +87,84 @@ test('POST /tasks Integration Suite', async (t) => {
       body: JSON.stringify({
         id,
         title: 'Past Once Task',
-        plannerToday: '2026-08-19',
-        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+        plannerToday: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-16' }
+      }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.task.id, id);
+    assert.equal(body.task.schedules.length, 1);
+    assert.equal(body.task.schedules[0].type, 'ONCE');
+    assert.equal(body.task.schedules[0].startDate, '2026-08-16');
+  });
+
+  await t.test('creates historical ONCE task with optional scheduledTime', async () => {
+    const id = getValidId();
+    const res = await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+      body: JSON.stringify({
+        id,
+        title: 'Past Once Task With Time',
+        plannerToday: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-16', scheduledTime: '14:30:00' }
+      }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.task.schedules[0].scheduledTime, '14:30:00');
+  });
+
+  await t.test('rejects creating historical ONCE task when reminder is provided with 400', async () => {
+    const id = getValidId();
+    const res = await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+      body: JSON.stringify({
+        id,
+        title: 'Past Once Task With Reminder',
+        plannerToday: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-16', scheduledTime: '14:30:00', reminderMinutesBefore: 15 }
       }),
     });
     assert.equal(res.status, 400);
     const body = await res.json();
-    assert.match(body.error.message, /Scheduled start date cannot be before plannerToday/);
+    assert.match(body.error.message, /Reminders cannot be set for historical tasks/);
+  });
+
+  await t.test('rejects creating historical INTERVAL_DAYS task when startDate < plannerToday with 400', async () => {
+    const id = getValidId();
+    const res = await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+      body: JSON.stringify({
+        id,
+        title: 'Past Interval Task',
+        plannerToday: '2026-08-20',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-16', intervalDays: 1 }
+      }),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error.message, /Recurring schedules cannot start before plannerToday/);
+  });
+
+  await t.test('rejects creating historical WEEKDAYS task when startDate < plannerToday with 400', async () => {
+    const id = getValidId();
+    const res = await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+      body: JSON.stringify({
+        id,
+        title: 'Past Weekdays Task',
+        plannerToday: '2026-08-20',
+        schedule: { type: 'WEEKDAYS', startDate: '2026-08-16', weekdaysMask: 31 }
+      }),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error.message, /Recurring schedules cannot start before plannerToday/);
   });
 
   await t.test('creates a task with ONCE schedule atomically when startDate >= plannerToday', async () => {
@@ -104,8 +175,8 @@ test('POST /tasks Integration Suite', async (t) => {
       body: JSON.stringify({
         id,
         title: 'Once Task',
-        plannerToday: '2026-08-18',
-        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+        plannerToday: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-20' }
       }),
     });
     assert.equal(res.status, 201);
@@ -113,8 +184,8 @@ test('POST /tasks Integration Suite', async (t) => {
     assert.equal(body.task.id, id);
     assert.equal(body.task.schedules.length, 1);
     assert.equal(body.task.schedules[0].type, 'ONCE');
-    assert.equal(body.task.schedules[0].startDate, '2026-08-18');
-    assert.equal(body.task.schedules[0].endDate, '2026-08-18');
+    assert.equal(body.task.schedules[0].startDate, '2026-08-20');
+    assert.equal(body.task.schedules[0].endDate, '2026-08-20');
   });
 
   await t.test('creates a task with INTERVAL_DAYS schedule', async () => {
@@ -122,7 +193,7 @@ test('POST /tasks Integration Suite', async (t) => {
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-      body: JSON.stringify({ id, title: 'Interval Task', plannerToday: '2026-08-18', schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-20', intervalDays: 3 } }),
+      body: JSON.stringify({ id, title: 'Interval Task', plannerToday: '2026-08-20', schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-20', intervalDays: 3 } }),
     });
 
     assert.equal(res.status, 201);
@@ -153,8 +224,8 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('handles genuinely concurrent requests idempotently and safely', async () => {
     const id = getValidId();
-    const payloadA = { id, title: 'Concurrent Winner', note: 'Payload A', plannerToday: '2026-08-18', schedule: { type: 'ONCE', startDate: '2026-08-18' } };
-    const payloadB = { id, title: 'Concurrent Loser', note: 'Payload B', plannerToday: '2026-08-18', schedule: { type: 'ONCE', startDate: '2026-08-19' } };
+    const payloadA = { id, title: 'Concurrent Winner', note: 'Payload A', plannerToday: '2026-08-20', schedule: { type: 'ONCE', startDate: '2026-08-20' } };
+    const payloadB = { id, title: 'Concurrent Loser', note: 'Payload B', plannerToday: '2026-08-20', schedule: { type: 'ONCE', startDate: '2026-08-21' } };
 
     const reqA = fetch(`${baseUrl}/tasks`, {
       method: 'POST',

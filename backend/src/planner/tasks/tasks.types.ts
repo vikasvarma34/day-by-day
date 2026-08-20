@@ -58,6 +58,7 @@ export interface EditTaskDto {
 }
 
 export interface CompleteTaskDto {
+  plannerToday: string;
   completedDate: string;
   scheduleId?: string;
   scheduledDate?: string;

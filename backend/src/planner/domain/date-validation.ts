@@ -57,3 +57,40 @@ export function validatePlannerDate(dateStr: unknown, paramName: string = 'date'
 
   return dateStr;
 }
+
+/**
+ * Formats a Date object to YYYY-MM-DD using its UTC calendar components.
+ */
+export function formatUtcDate(date: Date): string {
+  const y = date.getUTCFullYear().toString().padStart(4, '0');
+  const m = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+  const d = date.getUTCDate().toString().padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Validates that an incoming plannerToday parameter is:
+ * 1. A valid Gregorian calendar date in YYYY-MM-DD format.
+ * 2. Plausibly the user's current date: within ±1 calendar day of the server's current UTC date.
+ *
+ * This provides a security boundary preventing arbitrary spoofed dates (e.g. 1900 or 2099)
+ * while accommodating all legitimate global time zones (UTC-12 to UTC+14).
+ *
+ * @param dateStr The date string claiming to be the client's current date.
+ * @param referenceNow Optional reference Date (defaults to server current time) for deterministic testing.
+ */
+export function validatePlausiblePlannerToday(dateStr: unknown, referenceNow: Date = new Date()): string {
+  const validated = validatePlannerDate(dateStr, 'plannerToday');
+
+  const refUtcMs = Date.UTC(referenceNow.getUTCFullYear(), referenceNow.getUTCMonth(), referenceNow.getUTCDate());
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
+  const minUtcDate = formatUtcDate(new Date(refUtcMs - oneDayMs));
+  const maxUtcDate = formatUtcDate(new Date(refUtcMs + oneDayMs));
+
+  if (validated < minUtcDate || validated > maxUtcDate) {
+    throw new BadRequestError('plannerToday is outside plausible calendar range');
+  }
+
+  return validated;
+}

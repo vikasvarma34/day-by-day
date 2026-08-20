@@ -30,7 +30,7 @@ This document defines the frozen HTTP/JSON contract between the Android client a
 * **Planner Dates (`YYYY-MM-DD`)**: Calendar dates (`startDate`, `endDate`, `scheduledDate`, `completedDate`, `intervalAnchorDate`, `plannerToday`, `effectiveDate`) are plain ISO 8601 calendar strings. They are never shifted across timezones.
 * **Planner Times (`HH:mm:ss`)**: Time of day (`scheduledTime`) is a plain 24-hour time string without timezone offsets.
 * **Timestamps (`ISO 8601`)**: System audit times (`createdAt`, `updatedAt`, `completedAt`) are UTC ISO strings (`YYYY-MM-DDTHH:mm:ss.sssZ`).
-* **`plannerToday`**: The client defines local today explicitly to decouple server time from user timezones.
+* **`plannerToday`**: The client defines local today explicitly to decouple server time from user timezones. For security and invariant integrity, the server validates that `plannerToday` is within `±1` calendar day of the server's current UTC date (`[server UTC date - 1 day, server UTC date + 1 day]`). Server UTC is used exclusively for this plausibility guard, never for planner business calculations.
 
 ---
 
@@ -153,7 +153,7 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
 ---
 
 ### 4.4 History View (`GET /planner/history`)
-* **Query Parameters**: `plannerToday=YYYY-MM-DD` (required), `search=string` (optional)
+* **Query Parameters**: `plannerToday=YYYY-MM-DD` (required), `q=string` (optional, max 200 characters)
 * **Response (HTTP 200)**:
 ```json
 {
@@ -182,8 +182,8 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
 ```json
 {
   "id": "UUID v4",
-  "title": "String",
-  "note": "String | null",
+  "title": "String (non-blank, max 255 characters)",
+  "note": "String | null (max 500 characters)",
   "isImportant": false,
   "plannerToday": "YYYY-MM-DD (required if task has a schedule)",
   "schedule": {
@@ -197,7 +197,13 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
   }
 }
 ```
-* **Notes**: For any scheduled task creation (`ONCE`, `INTERVAL_DAYS`, `WEEKDAYS`), `plannerToday` is required and `schedule.startDate` must be `>= plannerToday`. Later tasks without a schedule do not require `plannerToday`.
+* **Notes**:
+  - `title` is required, non-blank, and max 255 characters.
+  - `note` is optional, max 500 characters.
+  - For scheduled task creation, `plannerToday` is required.
+  - Historical `ONCE` task creation (`schedule.startDate < plannerToday` and `schedule.type === 'ONCE'`) is allowed as backfill without reminders (`reminderMinutesBefore` must be absent/null).
+  - Historical recurring task creation (`INTERVAL_DAYS`, `WEEKDAYS` where `schedule.startDate < plannerToday`) is blocked.
+  - Later tasks without a schedule do not require `plannerToday`.
 * **Response**: `HTTP 201 Created` (or `HTTP 200 OK` on idempotent retry with existing task).
 
 #### Edit (`PATCH /tasks/:taskId`)
@@ -206,24 +212,30 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
 {
   "plannerToday": "YYYY-MM-DD (required if updating schedule)",
   "effectiveDate": "YYYY-MM-DD (required if updating schedule)",
-  "title": "Updated Title",
-  "note": "Updated note",
+  "title": "Updated Title (non-blank, max 255 characters)",
+  "note": "Updated note (max 500 characters)",
   "isImportant": true,
   "schedule": { /* new schedule */ }
 }
 ```
-* **Notes**: For any schedule update (`ONCE`, `INTERVAL_DAYS`, `WEEKDAYS`), `plannerToday` and `effectiveDate` are required with `effectiveDate >= plannerToday` and `schedule.startDate >= plannerToday`. Content-only updates do not require `plannerToday`/`effectiveDate` and do not modify existing schedules.
+* **Notes**: For any schedule update (`ONCE`, `INTERVAL_DAYS`, `WEEKDAYS`), `plannerToday` and `effectiveDate` are required with `effectiveDate >= plannerToday` and `schedule.startDate >= plannerToday`. Rescheduling existing tasks into the past remains blocked. Content-only updates do not require `plannerToday`/`effectiveDate` and do not modify existing schedules. Changing `isImportant` on an already-completed eligible `ONCE` or direct-Later task atomically updates its History inclusion while keeping the original completion date and timestamp unchanged.
 * **Response**: `HTTP 200 OK` with updated task and schedules.
 
 #### Complete (`POST /tasks/:taskId/complete`)
 * **Request**:
 ```json
 {
+  "plannerToday": "YYYY-MM-DD",
   "completedDate": "YYYY-MM-DD",
   "scheduleId": "UUID (required for scheduled task)",
   "scheduledDate": "YYYY-MM-DD (required for scheduled task)"
 }
 ```
+* **Notes**:
+  - `plannerToday` is required and represents the client's current calendar date.
+  - For scheduled tasks: `completedDate` must satisfy `min(scheduledDate, plannerToday) <= completedDate <= plannerToday`. Historical backfill may use `completedDate = scheduledDate` in the past.
+  - For direct Later tasks: `completedDate` must equal `plannerToday`.
+  - When `completedDate < plannerToday`, an important eligible completion immediately becomes visible in History under that historical completion date.
 * **Response**: `HTTP 200 OK` (idempotent).
 
 #### Undo (`POST /tasks/:taskId/undo`)
@@ -247,3 +259,9 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
 }
 ```
 * **Response**: `HTTP 200 OK` (or `HTTP 409 Conflict` if a completion exists strictly after `plannerToday`).
+
+---
+
+## 5. Known Limitations
+
+* History/refresh responses are currently unpaginated in V1 and may require pagination for large long-lived datasets.

@@ -117,10 +117,10 @@ test('GET /planner/refresh Integration Suite', async (t) => {
           title: 'Doctor Appointment',
           note: 'Checkup',
           isImportant: true,
-          plannerToday: '2026-08-18',
+          plannerToday: '2026-08-20',
           schedule: {
             type: 'ONCE',
-            startDate: '2026-08-18',
+            startDate: '2026-08-20',
             scheduledTime: '14:30:00',
             reminderMinutesBefore: 30,
           },
@@ -138,9 +138,10 @@ test('GET /planner/refresh Integration Suite', async (t) => {
           Authorization: `Bearer ${tokenA}`,
         },
         body: JSON.stringify({
-          completedDate: '2026-08-18',
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
           scheduleId: schedId1,
-          scheduledDate: '2026-08-18',
+          scheduledDate: '2026-08-20',
         }),
       });
       assert.equal(compRes1.status, 200);
@@ -156,10 +157,10 @@ test('GET /planner/refresh Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskId2,
           title: 'Water Plants',
-          plannerToday: '2026-08-18',
+          plannerToday: '2026-08-20',
           schedule: {
             type: 'INTERVAL_DAYS',
-            startDate: '2026-08-18',
+            startDate: '2026-08-20',
             endDate: '2026-09-30',
             intervalDays: 3,
           },
@@ -178,10 +179,10 @@ test('GET /planner/refresh Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskId3,
           title: 'Daily Standup',
-          plannerToday: '2026-08-18',
+          plannerToday: '2026-08-20',
           schedule: {
             type: 'WEEKDAYS',
-            startDate: '2026-08-18',
+            startDate: '2026-08-20',
             weekdaysMask: 31, // Mon-Fri
             scheduledTime: '09:00:00',
           },
@@ -226,7 +227,8 @@ test('GET /planner/refresh Integration Suite', async (t) => {
           Authorization: `Bearer ${tokenA}`,
         },
         body: JSON.stringify({
-          completedDate: '2026-08-18',
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
         }),
       });
       assert.equal(compRes5.status, 200);
@@ -283,10 +285,10 @@ test('GET /planner/refresh Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskId,
           title: 'Timezone Check Task',
-          plannerToday: '2026-08-18',
+          plannerToday: '2026-08-20',
           schedule: {
             type: 'ONCE',
-            startDate: '2026-08-18',
+            startDate: '2026-08-20',
             scheduledTime: '15:45:00',
             reminderMinutesBefore: 15,
           },
@@ -303,8 +305,8 @@ test('GET /planner/refresh Integration Suite', async (t) => {
       assert.equal(snapshot.schedules.length, 1);
       const sched = snapshot.schedules[0];
 
-      assert.equal(sched.startDate, '2026-08-18');
-      assert.equal(sched.endDate, '2026-08-18');
+      assert.equal(sched.startDate, '2026-08-20');
+      assert.equal(sched.endDate, '2026-08-20');
       assert.equal(sched.scheduledTime, '15:45:00');
       assert.equal(sched.reminderMinutesBefore, 15);
 
@@ -336,6 +338,9 @@ test('GET /planner/refresh Integration Suite', async (t) => {
 
   await t.test('Streaming Capability', async (sub) => {
     await sub.test('streams chunked response that can be read incrementally', async () => {
+      // Clean state for User A
+      await pool.query('DELETE FROM tasks WHERE user_id = $1', [userA.id]);
+
       // Create a task
       const taskId = getValidId();
       await fetch(`${baseUrl}/tasks`, {
@@ -383,6 +388,9 @@ test('GET /planner/refresh Integration Suite', async (t) => {
 
   await t.test('PostgreSQL REPEATABLE READ Snapshot Isolation', async (sub) => {
     await sub.test('proves REPEATABLE READ consistency across concurrent database mutations', async () => {
+      // Ensure clean state for User A
+      await pool.query('DELETE FROM tasks WHERE user_id = $1', [userA.id]);
+
       // Setup initial baseline: Task 1 + Schedule 1
       const taskId1 = getValidId();
       await pool.query(
@@ -391,7 +399,7 @@ test('GET /planner/refresh Integration Suite', async (t) => {
       );
       const schedId1 = getValidId();
       await pool.query(
-        `INSERT INTO task_schedules (id, task_id, schedule_type, start_date, end_date) VALUES ($1, $2, 'ONCE', '2026-08-18', '2026-08-18')`,
+        `INSERT INTO task_schedules (id, task_id, schedule_type, start_date, end_date) VALUES ($1, $2, 'ONCE', '2026-08-20', '2026-08-20')`,
         [schedId1, taskId1]
       );
 
@@ -436,6 +444,9 @@ test('GET /planner/refresh Integration Suite', async (t) => {
 
         // Commit Client A transaction
         await clientA.query('COMMIT');
+      } catch (err) {
+        await clientA.query('ROLLBACK').catch(() => {});
+        throw err;
       } finally {
         clientA.release();
       }

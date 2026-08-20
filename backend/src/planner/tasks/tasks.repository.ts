@@ -109,6 +109,27 @@ export class TasksRepository {
       }
       if (dto.isImportant !== undefined) {
         await client.query(`UPDATE tasks SET is_important = $1 WHERE id = $2`, [dto.isImportant, taskId]);
+
+        const preUpdateTitle = taskRes.rows[0].title;
+        await client.query(
+          `UPDATE task_completions
+           SET is_important_snapshot = $1,
+               title_snapshot = CASE
+                 WHEN title_snapshot IS NULL AND $1 = true THEN $2
+                 ELSE title_snapshot
+               END
+           WHERE task_id = $3
+             AND (
+               (schedule_id IS NULL AND scheduled_date IS NULL)
+               OR EXISTS (
+                 SELECT 1 FROM task_schedules s
+                 WHERE s.id = task_completions.schedule_id
+                   AND s.task_id = task_completions.task_id
+                   AND s.schedule_type = 'ONCE'
+               )
+             )`,
+          [dto.isImportant, preUpdateTitle, taskId]
+        );
       }
 
       if (dto.schedule !== undefined && dto.schedule !== null) {
@@ -329,7 +350,7 @@ export class TasksRepository {
           [taskId]
         );
         if (compRes.rows.length === 0) {
-          const titleSnapshot = taskRow.is_important ? taskRow.title : null;
+          const titleSnapshot = taskRow.title;
           await client.query(
             `INSERT INTO task_completions (
               task_id, schedule_id, scheduled_date, completed_date, completed_at, title_snapshot, is_important_snapshot
@@ -366,8 +387,7 @@ export class TasksRepository {
           [taskId, dto.scheduleId, dto.scheduledDate]
         );
         if (compRes.rows.length === 0) {
-          const isHistoryEligible = schedule.schedule_type === 'ONCE' && taskRow.is_important;
-          const titleSnapshot = isHistoryEligible ? taskRow.title : null;
+          const titleSnapshot = schedule.schedule_type === 'ONCE' ? taskRow.title : null;
 
           await client.query(
             `INSERT INTO task_completions (

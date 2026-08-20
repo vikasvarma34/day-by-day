@@ -63,7 +63,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
 
       const res = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token2}` },
-        body: JSON.stringify({ completedDate: '2026-08-18' })
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20' })
       });
       assert.equal(res.status, 404);
     });
@@ -105,7 +105,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       
       const res = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ completedDate: '2026-08-18' })
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20' })
       });
       assert.equal(res.status, 200);
 
@@ -116,7 +116,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       
       const retryRes = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ completedDate: '2026-08-18' })
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20' })
       });
       assert.equal(retryRes.status, 200);
       
@@ -132,7 +132,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       });
       await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ completedDate: '2026-08-18' })
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20' })
       });
       
       const res = await fetch(`${baseUrl}/tasks/${taskId}/undo`, {
@@ -157,12 +157,12 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       const taskId = getValidId();
       const createRes = await fetch(`${baseUrl}/tasks`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ id: taskId, title: 'Once Task', plannerToday: '2026-08-18', schedule: { type: 'ONCE', startDate: '2026-08-18' } })
+        body: JSON.stringify({ id: taskId, title: 'Once Task', plannerToday: '2026-08-20', schedule: { type: 'ONCE', startDate: '2026-08-20' } })
       });
       const createBody = await createRes.json();
       const scheduleId = createBody.task.schedules[0].id;
 
-      const completePayload = { completedDate: '2026-08-18', scheduleId, scheduledDate: '2026-08-18' };
+      const completePayload = { plannerToday: '2026-08-20', completedDate: '2026-08-20', scheduleId, scheduledDate: '2026-08-20' };
       
       const res = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
@@ -187,14 +187,14 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       const taskId = getValidId();
       const createRes = await fetch(`${baseUrl}/tasks`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ id: taskId, title: 'Weekly Task', plannerToday: '2026-08-10', schedule: { type: 'WEEKDAYS', weekdaysMask: 64, startDate: '2026-08-10' } }) // Saturday only
+        body: JSON.stringify({ id: taskId, title: 'Weekly Task', plannerToday: '2026-08-20', schedule: { type: 'WEEKDAYS', weekdaysMask: 32, startDate: '2026-08-20' } }) // Saturday only (Aug 22)
       });
       const createBody = await createRes.json();
       const scheduleId = createBody.task.schedules[0].id;
       
       const res = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ completedDate: '2026-08-14', scheduleId, scheduledDate: '2026-08-14' })
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20', scheduleId, scheduledDate: '2026-08-20' })
       });
       assert.equal(res.status, 409);
     });
@@ -205,7 +205,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       const taskId = getValidId();
       await fetch(`${baseUrl}/tasks`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ id: taskId, title: 'To Delete', plannerToday: '2026-08-18', schedule: { type: 'ONCE', startDate: '2026-08-18' } })
+        body: JSON.stringify({ id: taskId, title: 'To Delete', plannerToday: '2026-08-20', schedule: { type: 'ONCE', startDate: '2026-08-20' } })
       });
       
       const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
@@ -225,36 +225,37 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       const taskId = getValidId();
       const createRes = await fetch(`${baseUrl}/tasks`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ id: taskId, title: 'Recurring', plannerToday: '2026-08-01', schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-01' } })
+        body: JSON.stringify({ id: taskId, title: 'Recurring', plannerToday: '2026-08-19', schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-19' } })
       });
       const createBody = await createRes.json();
       const scheduleId = createBody.task.schedules[0].id;
       
       await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ completedDate: '2026-08-02', scheduleId, scheduledDate: '2026-08-02' })
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-19', scheduleId, scheduledDate: '2026-08-19' })
       });
       
       const res = await fetch(`${baseUrl}/tasks/${taskId}/stop-recurrence`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ plannerToday: '2026-08-03' })
+        body: JSON.stringify({ plannerToday: '2026-08-20' })
       });
       assert.equal(res.status, 200);
       
       const schedCheck = await pool.query('SELECT end_date::text FROM task_schedules WHERE id = $1', [scheduleId]);
-      assert.equal(schedCheck.rows[0].end_date, '2026-08-03');
+      assert.equal(schedCheck.rows[0].end_date, '2026-08-20');
     });
 
     await sub.test('hard deletes task if it never generated any occurrence and has no completions', async () => {
       const taskId = getValidId();
-      await fetch(`${baseUrl}/tasks`, {
+      const createRes = await fetch(`${baseUrl}/tasks`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ id: taskId, title: 'Never generated', plannerToday: '2026-08-20', schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-20' } })
+        body: JSON.stringify({ id: taskId, title: 'Never generated', plannerToday: '2026-08-20', schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-25' } })
       });
+      assert.equal(createRes.status, 201);
       
       const res = await fetch(`${baseUrl}/tasks/${taskId}/stop-recurrence`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ plannerToday: '2026-08-10' })
+        body: JSON.stringify({ plannerToday: '2026-08-20' })
       });
       assert.equal(res.status, 200);
       
@@ -266,21 +267,24 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       const taskId = getValidId();
       const createRes = await fetch(`${baseUrl}/tasks`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ id: taskId, title: 'Future Completion', plannerToday: '2026-08-18', schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-18' } })
+        body: JSON.stringify({ id: taskId, title: 'Future Completion', plannerToday: '2026-08-20', schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-20' } })
       });
       const createBody = await createRes.json();
       const scheduleId = createBody.task.schedules[0].id;
       
-      // Complete it on Aug 25
+      // Complete it on Aug 25 (future occurrence relative to plannerToday 2026-08-20)
       await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ completedDate: '2026-08-25', scheduleId, scheduledDate: '2026-08-25' })
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20', scheduleId, scheduledDate: '2026-08-25' })
       });
 
-      // Attempt to stop recurrence on Aug 18
+      // Manually set scheduled_date completion in db to test future completion guard
+      await pool.query('UPDATE task_completions SET scheduled_date = $1 WHERE task_id = $2', ['2026-08-25', taskId]);
+
+      // Attempt to stop recurrence on Aug 20
       const res = await fetch(`${baseUrl}/tasks/${taskId}/stop-recurrence`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ plannerToday: '2026-08-18' })
+        body: JSON.stringify({ plannerToday: '2026-08-20' })
       });
       
       // Must return 409 Conflict because of the future completion
@@ -291,25 +295,25 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       const taskId = getValidId();
       const createRes = await fetch(`${baseUrl}/tasks`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ id: taskId, title: 'Future Segment', plannerToday: '2026-08-01', schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-01' } })
+        body: JSON.stringify({ id: taskId, title: 'Future Segment', plannerToday: '2026-08-19', schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-19' } })
       });
       const createBody = await createRes.json();
 
       // Manually add a future segment with a completion
       const futureSchedRes = await pool.query(
-        `INSERT INTO task_schedules (task_id, schedule_type, start_date, end_date, interval_days, interval_anchor_date) VALUES ($1, 'INTERVAL_DAYS', '2026-08-20', '2026-08-30', 1, '2026-08-20') RETURNING id`,
+        `INSERT INTO task_schedules (task_id, schedule_type, start_date, end_date, interval_days, interval_anchor_date) VALUES ($1, 'INTERVAL_DAYS', '2026-08-25', '2026-08-30', 1, '2026-08-25') RETURNING id`,
         [taskId]
       );
       const schedule2Id = futureSchedRes.rows[0].id;
       await pool.query(
-        `INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, title_snapshot, is_important_snapshot) VALUES ($1, $2, '2026-08-20', '2026-08-20', NOW(), 'Future Segment', false)`,
+        `INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, title_snapshot, is_important_snapshot) VALUES ($1, $2, '2026-08-25', '2026-08-20', NOW(), 'Future Segment', false)`,
         [taskId, schedule2Id]
       );
 
-      // Attempt to stop recurrence on Aug 10
+      // Attempt to stop recurrence on Aug 20
       const res = await fetch(`${baseUrl}/tasks/${taskId}/stop-recurrence`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ plannerToday: '2026-08-10' })
+        body: JSON.stringify({ plannerToday: '2026-08-20' })
       });
 
       // Must return 409 Conflict because of the future segment completion
@@ -323,8 +327,8 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskId,
           title: 'Finite Recurring Task',
-          plannerToday: '2026-08-01',
-          schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-01', endDate: '2026-08-31' }
+          plannerToday: '2026-08-19',
+          schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-19', endDate: '2026-08-31' }
         })
       });
       const createBody = await createRes.json();
@@ -332,17 +336,17 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
 
       const res = await fetch(`${baseUrl}/tasks/${taskId}/stop-recurrence`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ plannerToday: '2026-08-18' })
+        body: JSON.stringify({ plannerToday: '2026-08-20' })
       });
       assert.equal(res.status, 200);
 
       const schedCheck = await pool.query('SELECT end_date::text FROM task_schedules WHERE id = $1', [scheduleId]);
-      assert.equal(schedCheck.rows[0].end_date, '2026-08-18');
+      assert.equal(schedCheck.rows[0].end_date, '2026-08-20');
 
-      // Attempting completion after Aug 18 should now fail with 409 Conflict
+      // Attempting completion after Aug 20 should now fail with 409 Conflict
       const compRes = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ completedDate: '2026-08-19', scheduleId, scheduledDate: '2026-08-19' })
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20', scheduleId, scheduledDate: '2026-08-21' })
       });
       assert.equal(compRes.status, 409);
     });
@@ -354,23 +358,23 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskId,
           title: 'Historical Task',
-          plannerToday: '2026-07-01',
-          schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-07-01', endDate: '2026-07-31' }
+          plannerToday: '2026-08-19',
+          schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-19', endDate: '2026-08-19' }
         })
       });
       const createBody = await createRes.json();
       const histScheduleId = createBody.task.schedules[0].id;
 
-      // Add a future recurring segment that will never generate an occurrence before Aug 10
+      // Add a future recurring segment that will never generate an occurrence before Aug 20
       const futureSchedRes = await pool.query(
-        `INSERT INTO task_schedules (task_id, schedule_type, start_date, end_date, interval_days, interval_anchor_date) VALUES ($1, 'INTERVAL_DAYS', '2026-08-20', '2026-08-31', 1, '2026-08-20') RETURNING id`,
+        `INSERT INTO task_schedules (task_id, schedule_type, start_date, end_date, interval_days, interval_anchor_date) VALUES ($1, 'INTERVAL_DAYS', '2026-08-25', '2026-08-31', 1, '2026-08-25') RETURNING id`,
         [taskId]
       );
       const futureScheduleId = futureSchedRes.rows[0].id;
 
       const res = await fetch(`${baseUrl}/tasks/${taskId}/stop-recurrence`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ plannerToday: '2026-08-10' })
+        body: JSON.stringify({ plannerToday: '2026-08-20' })
       });
       assert.equal(res.status, 200);
 
@@ -400,7 +404,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
       let fetchCompleted = false;
       const fetchPromise = fetch(`${baseUrl}/tasks/${taskId}/complete`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ completedDate: '2026-08-18' })
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20' })
       }).then(r => { fetchCompleted = true; return r; });
 
       // Wait a bit to prove it's blocked
@@ -424,7 +428,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
         await client.query('BEGIN');
         await client.query(`UPDATE tasks SET title = 'Changed' WHERE id = $1`, [taskId]);
         // Force PG error (invalid UUID syntax)
-        await client.query(`INSERT INTO task_completions (task_id, completed_date) VALUES ('not-a-uuid', '2026-08-18')`);
+        await client.query(`INSERT INTO task_completions (task_id, completed_date) VALUES ('not-a-uuid', '2026-08-20')`);
         await client.query('COMMIT');
       } catch (err) {
         await client.query('ROLLBACK');
@@ -434,6 +438,688 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
 
       const check = await pool.query(`SELECT title FROM tasks WHERE id = $1`, [taskId]);
       assert.equal(check.rows[0].title, 'Rollback Test', 'Title should not be changed');
+    });
+  });
+
+  await t.test('Completion Date Business Integrity Validation', async (sub) => {
+    await sub.test('1-5: past occurrence completedDate boundary rules (scheduledDate=2026-08-16, plannerToday=2026-08-20)', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Past Task',
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-16' }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const scheduleId = (await createRes.json()).task.schedules[0].id;
+
+      // 4. completedDate before scheduledDate fails with 400
+      const resBefore = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-15',
+          scheduleId,
+          scheduledDate: '2026-08-16'
+        })
+      });
+      assert.equal(resBefore.status, 400);
+
+      // 5. completedDate after plannerToday fails with 400
+      const resAfter = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-21',
+          scheduleId,
+          scheduledDate: '2026-08-16'
+        })
+      });
+      assert.equal(resAfter.status, 400);
+
+      // 1. completedDate = scheduledDate succeeds
+      const resBackfill = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-16',
+          scheduleId,
+          scheduledDate: '2026-08-16'
+        })
+      });
+      assert.equal(resBackfill.status, 200);
+
+      // Undo
+      await fetch(`${baseUrl}/tasks/${taskId}/undo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ scheduleId, scheduledDate: '2026-08-16' })
+      });
+
+      // 2. completedDate between scheduledDate and plannerToday succeeds
+      const resBetween = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-18',
+          scheduleId,
+          scheduledDate: '2026-08-16'
+        })
+      });
+      assert.equal(resBetween.status, 200);
+
+      // Undo
+      await fetch(`${baseUrl}/tasks/${taskId}/undo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ scheduleId, scheduledDate: '2026-08-16' })
+      });
+
+      // 3. completedDate = plannerToday succeeds
+      const resToday = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
+          scheduleId,
+          scheduledDate: '2026-08-16'
+        })
+      });
+      assert.equal(resToday.status, 200);
+    });
+
+    await sub.test('6-7: future occurrence completion rules (scheduledDate=2026-08-27, plannerToday=2026-08-20)', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Future Task',
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-27' }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const scheduleId = (await createRes.json()).task.schedules[0].id;
+
+      // 7a. completedDate < plannerToday fails
+      const resBeforeToday = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-19',
+          scheduleId,
+          scheduledDate: '2026-08-27'
+        })
+      });
+      assert.equal(resBeforeToday.status, 400);
+
+      // 7b. completedDate in future relative to plannerToday fails
+      const resFuture = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-27',
+          scheduleId,
+          scheduledDate: '2026-08-27'
+        })
+      });
+      assert.equal(resFuture.status, 400);
+
+      // 6. completedDate = plannerToday succeeds (early completion today)
+      const resEarly = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
+          scheduleId,
+          scheduledDate: '2026-08-27'
+        })
+      });
+      assert.equal(resEarly.status, 200);
+    });
+
+    await sub.test('8-10: Later task completion rules (plannerToday=2026-08-20)', async () => {
+      const taskId = getValidId();
+      await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ id: taskId, title: 'Later Task Strict' })
+      });
+
+      // 9. Historical completedDate fails for Later
+      const resHist = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-19' })
+      });
+      assert.equal(resHist.status, 400);
+
+      // 10. Future completedDate fails for Later
+      const resFut = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-21' })
+      });
+      assert.equal(resFut.status, 400);
+
+      // 8. completedDate = plannerToday succeeds
+      const resOk = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20' })
+      });
+      assert.equal(resOk.status, 200);
+    });
+
+    await sub.test('11: missing or malformed plannerToday fails with 400', async () => {
+      const taskId = getValidId();
+      await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ id: taskId, title: 'Later Task Missing Today' })
+      });
+
+      const resMissing = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ completedDate: '2026-08-20' })
+      });
+      assert.equal(resMissing.status, 400);
+
+      const resMalformed = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ plannerToday: 'not-a-date', completedDate: '2026-08-20' })
+      });
+      assert.equal(resMalformed.status, 400);
+    });
+  });
+
+  await t.test('Adversarial plannerToday Ingress Guard Tests', async (sub) => {
+    await sub.test('POST /tasks rejects implausible plannerToday spoofing (1900 and 2099)', async () => {
+      const taskId1 = getValidId();
+      const res1900 = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          id: taskId1,
+          title: 'Spoofed 1900 Task',
+          plannerToday: '1900-01-01',
+          schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2020-01-01' }
+        })
+      });
+      assert.equal(res1900.status, 400);
+      const body1900 = await res1900.json();
+      assert.match(body1900.error.message, /plannerToday is outside plausible calendar range/);
+
+      const taskId2 = getValidId();
+      const res2099 = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          id: taskId2,
+          title: 'Spoofed 2099 Task',
+          plannerToday: '2099-01-01',
+          schedule: { type: 'ONCE', startDate: '2099-01-01' }
+        })
+      });
+      assert.equal(res2099.status, 400);
+      const body2099 = await res2099.json();
+      assert.match(body2099.error.message, /plannerToday is outside plausible calendar range/);
+    });
+
+    await sub.test('PATCH /tasks/:taskId rejects implausible plannerToday spoofing (1900-01-01)', async () => {
+      const taskId = getValidId();
+      await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ id: taskId, title: 'Task to Patch' })
+      });
+
+      const patchRes = await fetch(`${baseUrl}/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '1900-01-01',
+          effectiveDate: '2020-01-01',
+          schedule: { type: 'ONCE', startDate: '2020-01-01' }
+        })
+      });
+      assert.equal(patchRes.status, 400);
+      const patchBody = await patchRes.json();
+      assert.match(patchBody.error.message, /plannerToday is outside plausible calendar range/);
+    });
+
+    await sub.test('POST /tasks/:taskId/complete rejects implausible plannerToday spoofing (2099-01-01)', async () => {
+      const taskId = getValidId();
+      await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ id: taskId, title: 'Task to Complete Spoofed' })
+      });
+
+      const compRes = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2099-01-01',
+          completedDate: '2099-01-01'
+        })
+      });
+      assert.equal(compRes.status, 400);
+      const compBody = await compRes.json();
+      assert.match(compBody.error.message, /plannerToday is outside plausible calendar range/);
+    });
+
+    await sub.test('POST /tasks/:taskId/stop-recurrence rejects implausible plannerToday spoofing', async () => {
+      const taskId = getValidId();
+      await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Recurring Task to Stop',
+          plannerToday: '2026-08-20',
+          schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-20' }
+        })
+      });
+
+      const stopRes = await fetch(`${baseUrl}/tasks/${taskId}/stop-recurrence`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ plannerToday: '2099-01-01' })
+      });
+      assert.equal(stopRes.status, 400);
+      const stopBody = await stopRes.json();
+      assert.match(stopBody.error.message, /plannerToday is outside plausible calendar range/);
+    });
+
+    await sub.test('GET /planner/history rejects implausible plannerToday spoofing', async () => {
+      const histRes = await fetch(`${baseUrl}/planner/history?plannerToday=2099-01-01`, {
+        headers: { 'Authorization': `Bearer ${token1}` }
+      });
+      assert.equal(histRes.status, 400);
+      const histBody = await histRes.json();
+      assert.match(histBody.error.message, /plannerToday is outside plausible calendar range/);
+    });
+  });
+
+  await t.test('Adversarial Authorization, Malformed Input & Boundary Regression Tests', async (sub) => {
+    await sub.test('User A uses User B scheduleId against User A task completion is rejected safely', async () => {
+      const taskAId = getValidId();
+      const taskBId = getValidId();
+
+      const createARes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ id: taskAId, title: 'Task A', plannerToday: '2026-08-20', schedule: { type: 'ONCE', startDate: '2026-08-20' } })
+      });
+      assert.equal(createARes.status, 201);
+
+      const createBRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token2}` },
+        body: JSON.stringify({ id: taskBId, title: 'Task B', plannerToday: '2026-08-20', schedule: { type: 'ONCE', startDate: '2026-08-20' } })
+      });
+      assert.equal(createBRes.status, 201);
+      const bodyB = await createBRes.json();
+      const scheduleBId = bodyB.task.schedules[0].id;
+
+      // User A attempts to complete Task A using User B's scheduleId
+      const crossCompRes = await fetch(`${baseUrl}/tasks/${taskAId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
+          scheduleId: scheduleBId,
+          scheduledDate: '2026-08-20'
+        })
+      });
+      assert.equal(crossCompRes.status, 409);
+    });
+
+    await sub.test('User A stop-recurrence against User B task returns 404 without mutation', async () => {
+      const taskBId = getValidId();
+      await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token2}` },
+        body: JSON.stringify({
+          id: taskBId,
+          title: 'User B Recurring',
+          plannerToday: '2026-08-20',
+          schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-20' }
+        })
+      });
+
+      const stopRes = await fetch(`${baseUrl}/tasks/${taskBId}/stop-recurrence`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ plannerToday: '2026-08-20' })
+      });
+      assert.equal(stopRes.status, 404);
+
+      // Verify schedule is untouched
+      const check = await pool.query('SELECT end_date FROM task_schedules WHERE task_id = $1', [taskBId]);
+      assert.equal(check.rows.length, 1);
+      assert.equal(check.rows[0].end_date, null);
+    });
+
+    await sub.test('Same client-generated task UUID by different users blocks second owner', async () => {
+      const sharedTaskId = getValidId();
+
+      const user1Res = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ id: sharedTaskId, title: 'User 1 Task' })
+      });
+      assert.equal(user1Res.status, 201);
+
+      const user2Res = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token2}` },
+        body: JSON.stringify({ id: sharedTaskId, title: 'User 2 Hijack Attempt' })
+      });
+      assert.equal(user2Res.status, 409);
+
+      // Verify ownership remains User 1
+      const check = await pool.query('SELECT user_id, title FROM tasks WHERE id = $1', [sharedTaskId]);
+      assert.equal(check.rows[0].user_id, user1.id);
+      assert.equal(check.rows[0].title, 'User 1 Task');
+    });
+
+    await sub.test('POST /tasks Content-Type text/plain returns 415', async () => {
+      const res = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain', 'Authorization': `Bearer ${token1}` },
+        body: '{"title":"Plain text"}'
+      });
+      assert.equal(res.status, 415);
+    });
+
+    await sub.test('POST /tasks array JSON body returns 400', async () => {
+      const res = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify([{ id: getValidId(), title: 'Array body' }])
+      });
+      assert.equal(res.status, 400);
+    });
+
+    await sub.test('POST /tasks primitive JSON body returns 400', async () => {
+      const res = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify('just a string')
+      });
+      assert.equal(res.status, 400);
+    });
+
+    await sub.test('malformed taskId on PATCH returns 400', async () => {
+      const res = await fetch(`${baseUrl}/tasks/invalid-uuid-123`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ title: 'New Title' })
+      });
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.match(body.error.message, /must be a UUID v4/);
+    });
+
+    await sub.test('malformed taskId on complete returns 400', async () => {
+      const res = await fetch(`${baseUrl}/tasks/invalid-uuid-123/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ plannerToday: '2026-08-20', completedDate: '2026-08-20' })
+      });
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.match(body.error.message, /must be a UUID v4/);
+    });
+
+    await sub.test('malformed taskId on DELETE returns 400', async () => {
+      const res = await fetch(`${baseUrl}/tasks/invalid-uuid-123`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token1}` }
+      });
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.match(body.error.message, /must be a UUID v4/);
+    });
+
+    await sub.test('duplicate plannerToday query parameters on History returns controlled 400', async () => {
+      const res = await fetch(`${baseUrl}/planner/history?plannerToday=2026-08-20&plannerToday=2026-08-21`, {
+        headers: { 'Authorization': `Bearer ${token1}` }
+      });
+      assert.equal(res.status, 400);
+    });
+
+    await sub.test('POST /tasks with title exactly 255 chars is accepted', async () => {
+      const taskId = getValidId();
+      const title255 = 'A'.repeat(255);
+      const res = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ id: taskId, title: title255 })
+      });
+      assert.equal(res.status, 201);
+      const body = await res.json();
+      assert.equal(body.task.title, title255);
+    });
+
+    await sub.test('POST /tasks with title 256 chars is rejected with 400', async () => {
+      const taskId = getValidId();
+      const title256 = 'A'.repeat(256);
+      const res = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ id: taskId, title: title256 })
+      });
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.equal(body.error.message, 'Invalid title: max 255 characters');
+    });
+
+    await sub.test('PATCH /tasks/:taskId with title 256 chars is rejected with 400', async () => {
+      const taskId = getValidId();
+      await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ id: taskId, title: 'Valid Short' })
+      });
+
+      const title256 = 'B'.repeat(256);
+      const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({ title: title256 })
+      });
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.equal(body.error.message, 'Invalid title: max 255 characters');
+    });
+
+    await sub.test('GET /planner/history with q exactly 200 chars is accepted', async () => {
+      const q200 = 'x'.repeat(200);
+      const res = await fetch(`${baseUrl}/planner/history?plannerToday=2026-08-20&q=${q200}`, {
+        headers: { 'Authorization': `Bearer ${token1}` }
+      });
+      assert.equal(res.status, 200);
+    });
+
+    await sub.test('GET /planner/history with q 201 chars is rejected with 400', async () => {
+      const q201 = 'x'.repeat(201);
+      const res = await fetch(`${baseUrl}/planner/history?plannerToday=2026-08-20&q=${q201}`, {
+        headers: { 'Authorization': `Bearer ${token1}` }
+      });
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.equal(body.error.message, 'Invalid search query: max 200 characters');
+    });
+  });
+
+  await t.test('Concurrency & Race Condition Regression Tests', async (sub) => {
+    await sub.test('A: concurrent complete requests for same occurrence yield exactly one completion row', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Concurrent Complete Target',
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-20' }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const createBody = await createRes.json();
+      const scheduleId = createBody.task.schedules[0].id;
+
+      const payload = {
+        plannerToday: '2026-08-20',
+        completedDate: '2026-08-20',
+        scheduleId,
+        scheduledDate: '2026-08-20'
+      };
+
+      // Launch 5 parallel complete requests
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+            body: JSON.stringify(payload)
+          })
+        )
+      );
+
+      for (const r of results) {
+        assert.equal(r.status, 200);
+      }
+
+      const countRes = await pool.query('SELECT COUNT(*)::int as count FROM task_completions WHERE task_id = $1', [taskId]);
+      assert.equal(countRes.rows[0].count, 1);
+    });
+
+    await sub.test('B: concurrent complete vs undo produces no deadlock and serialized valid outcome', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Complete vs Undo',
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-20' }
+        })
+      });
+      const createBody = await createRes.json();
+      const scheduleId = createBody.task.schedules[0].id;
+
+      const payload = {
+        plannerToday: '2026-08-20',
+        completedDate: '2026-08-20',
+        scheduleId,
+        scheduledDate: '2026-08-20'
+      };
+
+      // Run complete and undo concurrently
+      const [compRes, undoRes] = await Promise.all([
+        fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+          body: JSON.stringify(payload)
+        }),
+        fetch(`${baseUrl}/tasks/${taskId}/undo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+          body: JSON.stringify(payload)
+        })
+      ]);
+
+      assert.equal(compRes.status, 200);
+      assert.equal(undoRes.status, 200);
+
+      const countRes = await pool.query('SELECT COUNT(*)::int as count FROM task_completions WHERE task_id = $1', [taskId]);
+      assert.ok(countRes.rows[0].count === 0 || countRes.rows[0].count === 1);
+    });
+
+    await sub.test('C: concurrent stop-recurrence vs complete produces clean valid state', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Recurring Race Task',
+          plannerToday: '2026-08-20',
+          schedule: { type: 'INTERVAL_DAYS', intervalDays: 1, startDate: '2026-08-20' }
+        })
+      });
+      const createBody = await createRes.json();
+      const scheduleId = createBody.task.schedules[0].id;
+
+      const [stopRes, compRes] = await Promise.all([
+        fetch(`${baseUrl}/tasks/${taskId}/stop-recurrence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+          body: JSON.stringify({ plannerToday: '2026-08-20' })
+        }),
+        fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+          body: JSON.stringify({
+            plannerToday: '2026-08-20',
+            completedDate: '2026-08-20',
+            scheduleId,
+            scheduledDate: '2026-08-20'
+          })
+        })
+      ]);
+
+      assert.equal(stopRes.status, 200);
+      assert.equal(compRes.status, 200);
+
+      const schedCheck = await pool.query('SELECT end_date::text FROM task_schedules WHERE task_id = $1', [taskId]);
+      assert.equal(schedCheck.rows.length, 1);
+      assert.equal(schedCheck.rows[0].end_date, '2026-08-20');
+    });
+
+    await sub.test('D: concurrent same UUID create by two users assigns exactly one owner', async () => {
+      const sharedTaskId = getValidId();
+
+      const [resUser1, resUser2] = await Promise.all([
+        fetch(`${baseUrl}/tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
+          body: JSON.stringify({ id: sharedTaskId, title: 'User 1 Concurrent' })
+        }),
+        fetch(`${baseUrl}/tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token2}` },
+          body: JSON.stringify({ id: sharedTaskId, title: 'User 2 Concurrent' })
+        })
+      ]);
+
+      const statuses = [resUser1.status, resUser2.status].sort();
+      assert.deepEqual(statuses, [201, 409]);
+
+      const dbCheck = await pool.query('SELECT COUNT(*)::int as count FROM tasks WHERE id = $1', [sharedTaskId]);
+      assert.equal(dbCheck.rows[0].count, 1);
     });
   });
 });

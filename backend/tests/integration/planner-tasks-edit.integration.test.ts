@@ -59,7 +59,7 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     const res = await fetch(`${baseUrl}/tasks/00000000-0000-4000-a000-000000000000`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plannerToday: '2026-08-18', effectiveDate: '2026-08-18' }),
+      body: JSON.stringify({ plannerToday: '2026-08-20', effectiveDate: '2026-08-20' }),
     });
     assert.equal(res.status, 401);
   });
@@ -69,13 +69,13 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
-      body: JSON.stringify({ id: taskId, title: 'U1 Task', plannerToday: '2026-08-18' }),
+      body: JSON.stringify({ id: taskId, title: 'U1 Task', plannerToday: '2026-08-20' }),
     });
 
     const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token2}` },
-      body: JSON.stringify({ plannerToday: '2026-08-18', effectiveDate: '2026-08-18', title: 'Hacked' }),
+      body: JSON.stringify({ plannerToday: '2026-08-20', effectiveDate: '2026-08-20', title: 'Hacked' }),
     });
     assert.equal(res.status, 404);
   });
@@ -85,15 +85,15 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
-      body: JSON.stringify({ id: taskId, title: 'Old', note: 'Old Note', plannerToday: '2026-08-18' }),
+      body: JSON.stringify({ id: taskId, title: 'Old', note: 'Old Note', plannerToday: '2026-08-20' }),
     });
 
     const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-18',
-        effectiveDate: '2026-08-18',
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
         title: 'New',
         note: 'New Note',
         isImportant: true
@@ -118,9 +118,9 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-19',
-        effectiveDate: '2026-08-19',
-        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-19' }
       }),
     });
     assert.equal(res.status, 400);
@@ -140,15 +140,15 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-18',
-        effectiveDate: '2026-08-18',
-        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-20' }
       }),
     });
     assert.equal(res.status, 200);
     const body = await (res.json() as any);
     assert.equal(body.task.schedules.length, 1);
-    assert.equal(body.task.schedules[0].startDate, '2026-08-18');
+    assert.equal(body.task.schedules[0].startDate, '2026-08-20');
   });
 
   await t.test('ONCE reschedule rejects moving to date before plannerToday', async () => {
@@ -159,8 +159,8 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       body: JSON.stringify({
         id: taskId,
         title: 'ONCE Today',
-        plannerToday: '2026-08-19',
-        schedule: { type: 'ONCE', startDate: '2026-08-19' }
+        plannerToday: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-20' }
       }),
     });
 
@@ -168,9 +168,9 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-19',
-        effectiveDate: '2026-08-19',
-        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-19' }
       }),
     });
     assert.equal(res.status, 400);
@@ -186,8 +186,8 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       body: JSON.stringify({
         id: taskId,
         title: 'ONCE',
-        plannerToday: '2026-08-18',
-        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+        plannerToday: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-20' }
       }),
     });
 
@@ -195,15 +195,15 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-18',
-        effectiveDate: '2026-08-18',
-        schedule: { type: 'ONCE', startDate: '2026-08-19' }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-21' }
       }),
     });
     assert.equal(res.status, 200);
     const body = await (res.json() as any);
     assert.equal(body.task.schedules.length, 1);
-    assert.equal(body.task.schedules[0].startDate, '2026-08-19');
+    assert.equal(body.task.schedules[0].startDate, '2026-08-21');
   });
 
   await t.test('content-only edit of a historical task with past schedule is not blocked', async () => {
@@ -236,8 +236,8 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       body: JSON.stringify({
         id: taskId,
         title: 'Daily Task',
-        plannerToday: '2026-08-10',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-10', intervalDays: 1 }
+        plannerToday: '2026-08-19',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-19', intervalDays: 1 }
       }),
     });
 
@@ -245,17 +245,17 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-15',
-        effectiveDate: '2026-08-15',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-15', intervalDays: 2 }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-20', intervalDays: 2 }
       }),
     });
     assert.equal(res.status, 200);
     const body = await (res.json() as any);
     const schedules = body.task.schedules;
     assert.equal(schedules.length, 2);
-    assert.equal(schedules[0].endDate, '2026-08-14');
-    assert.equal(schedules[1].startDate, '2026-08-15');
+    assert.equal(schedules[0].endDate, '2026-08-19');
+    assert.equal(schedules[1].startDate, '2026-08-20');
   });
 
   await t.test('Later → INTERVAL_DAYS schedule', async () => {
@@ -263,16 +263,16 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
-      body: JSON.stringify({ id: taskId, title: 'Later Task', plannerToday: '2026-08-18' }),
+      body: JSON.stringify({ id: taskId, title: 'Later Task', plannerToday: '2026-08-20' }),
     });
 
     const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-18',
-        effectiveDate: '2026-08-18',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-18', intervalDays: 3 }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-20', intervalDays: 3 }
       }),
     });
     assert.equal(res.status, 200);
@@ -287,16 +287,16 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
-      body: JSON.stringify({ id: taskId, title: 'Later Task', plannerToday: '2026-08-18' }),
+      body: JSON.stringify({ id: taskId, title: 'Later Task', plannerToday: '2026-08-20' }),
     });
 
     const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-18',
-        effectiveDate: '2026-08-18',
-        schedule: { type: 'WEEKDAYS', startDate: '2026-08-18', weekdaysMask: 62 }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'WEEKDAYS', startDate: '2026-08-20', weekdaysMask: 62 }
       }),
     });
     assert.equal(res.status, 200);
@@ -312,22 +312,22 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        id: taskId, title: 'T2', plannerToday: '2026-08-18',
-        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+        id: taskId, title: 'T2', plannerToday: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-20' }
       }),
     });
 
     const schedRes = await pool.query('SELECT id FROM task_schedules WHERE task_id = $1', [taskId]);
-    await pool.query(`INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, is_important_snapshot) VALUES ($1, $2, '2026-08-18', '2026-08-18', '2026-08-18 00:00:00+00', false)`, [taskId, schedRes.rows[0].id]);
+    await pool.query(`INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, is_important_snapshot) VALUES ($1, $2, '2026-08-20', '2026-08-20', '2026-08-20 00:00:00+00', false)`, [taskId, schedRes.rows[0].id]);
 
     const patchRes = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-18',
-        effectiveDate: '2026-08-18',
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
         title: 'Hacked Title',
-        schedule: { type: 'ONCE', startDate: '2026-08-19' }
+        schedule: { type: 'ONCE', startDate: '2026-08-21' }
       }),
     });
     assert.equal(patchRes.status, 409); // Conflict
@@ -342,20 +342,20 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        id: taskId, title: 'T', plannerToday: '2026-08-18',
-        schedule: { type: 'ONCE', startDate: '2026-08-18' }
+        id: taskId, title: 'T', plannerToday: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-20' }
       }),
     });
     const schedRes = await pool.query('SELECT id FROM task_schedules WHERE task_id = $1', [taskId]);
-    await pool.query(`INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, is_important_snapshot) VALUES ($1, $2, '2026-08-18', '2026-08-18', '2026-08-18 00:00:00+00', false)`, [taskId, schedRes.rows[0].id]);
+    await pool.query(`INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, is_important_snapshot) VALUES ($1, $2, '2026-08-20', '2026-08-20', '2026-08-20 00:00:00+00', false)`, [taskId, schedRes.rows[0].id]);
 
     const patchRes = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-18',
-        effectiveDate: '2026-08-18',
-        schedule: { type: 'ONCE', startDate: '2026-08-19' }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'ONCE', startDate: '2026-08-21' }
       }),
     });
     assert.equal(patchRes.status, 409);
@@ -367,20 +367,20 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        id: taskId, title: 'Recur', plannerToday: '2026-08-10',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-10', intervalDays: 1 }
+        id: taskId, title: 'Recur', plannerToday: '2026-08-19',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-19', intervalDays: 1 }
       }),
     });
     const schedRes = await pool.query('SELECT id FROM task_schedules WHERE task_id = $1', [taskId]);
-    await pool.query(`INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, is_important_snapshot) VALUES ($1, $2, '2026-08-15', '2026-08-15', '2026-08-15 00:00:00+00', false)`, [taskId, schedRes.rows[0].id]);
+    await pool.query(`INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, is_important_snapshot) VALUES ($1, $2, '2026-08-20', '2026-08-20', '2026-08-20 00:00:00+00', false)`, [taskId, schedRes.rows[0].id]);
 
     const patchRes = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-12',
-        effectiveDate: '2026-08-12',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-12', intervalDays: 2 }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-20', intervalDays: 2 }
       }),
     });
     assert.equal(patchRes.status, 409);
@@ -392,21 +392,21 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        id: taskId, title: 'Recur', plannerToday: '2026-08-10',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-10', intervalDays: 1 }
+        id: taskId, title: 'Recur', plannerToday: '2026-08-19',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-19', intervalDays: 1 }
       }),
     });
     const schedRes = await pool.query('SELECT id FROM task_schedules WHERE task_id = $1', [taskId]);
-    await pool.query(`UPDATE task_schedules SET start_date = '2026-08-15' WHERE id = $1`, [schedRes.rows[0].id]);
-    await pool.query(`INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, is_important_snapshot) VALUES ($1, $2, '2026-08-16', '2026-08-16', '2026-08-16 00:00:00+00', false)`, [taskId, schedRes.rows[0].id]);
+    await pool.query(`UPDATE task_schedules SET start_date = '2026-08-25' WHERE id = $1`, [schedRes.rows[0].id]);
+    await pool.query(`INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, is_important_snapshot) VALUES ($1, $2, '2026-08-26', '2026-08-20', '2026-08-20 00:00:00+00', false)`, [taskId, schedRes.rows[0].id]);
 
     const patchRes = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-12',
-        effectiveDate: '2026-08-12',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-12', intervalDays: 2 }
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-20', intervalDays: 2 }
       }),
     });
     assert.equal(patchRes.status, 409);
@@ -418,8 +418,8 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        id: taskId, title: 'Recur', plannerToday: '2026-08-10',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-10', intervalDays: 3 }
+        id: taskId, title: 'Recur', plannerToday: '2026-08-19',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-19', intervalDays: 3 }
       }),
     });
 
@@ -427,28 +427,28 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-15',
-        effectiveDate: '2026-08-15',
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
         title: 'New Title',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-15', intervalDays: 3 }
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-20', intervalDays: 3 }
       }),
     });
     assert.equal(patchRes.status, 200);
     let body = await (patchRes.json() as any);
-    assert.equal(body.task.schedules[1].intervalAnchorDate, '2026-08-10');
+    assert.equal(body.task.schedules[1].intervalAnchorDate, '2026-08-19');
 
     patchRes = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
         plannerToday: '2026-08-20',
-        effectiveDate: '2026-08-20',
-        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-20', intervalDays: 4 }
+        effectiveDate: '2026-08-21',
+        schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-21', intervalDays: 4 }
       }),
     });
     assert.equal(patchRes.status, 200);
     body = await (patchRes.json() as any);
-    assert.equal(body.task.schedules[2].intervalAnchorDate, '2026-08-20');
+    assert.equal(body.task.schedules[body.task.schedules.length - 1].intervalAnchorDate, '2026-08-21');
   });
 
   await t.test('Finite preserved-segment validity: leaves no empty WEEKDAYS', async () => {
@@ -457,17 +457,17 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        id: taskId, title: 'Recur', plannerToday: '2026-08-10', // Monday
-        schedule: { type: 'WEEKDAYS', startDate: '2026-08-10', weekdaysMask: 1 } // Mon
+        id: taskId, title: 'Recur', plannerToday: '2026-08-19', // Wednesday
+        schedule: { type: 'WEEKDAYS', startDate: '2026-08-19', weekdaysMask: 4 } // Wed
       }),
     });
     let patchRes = await fetch(`${baseUrl}/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-11',
-        effectiveDate: '2026-08-11',
-        schedule: { type: 'WEEKDAYS', startDate: '2026-08-11', weekdaysMask: 2 } // Tue
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'WEEKDAYS', startDate: '2026-08-20', weekdaysMask: 8 } // Thu
       }),
     });
     assert.equal(patchRes.status, 200);
@@ -479,23 +479,23 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        id: taskId2, title: 'Recur2', plannerToday: '2026-08-11', // Tuesday
-        schedule: { type: 'WEEKDAYS', startDate: '2026-08-11', weekdaysMask: 8 } // Thursday
+        id: taskId2, title: 'Recur2', plannerToday: '2026-08-19', // Wednesday
+        schedule: { type: 'WEEKDAYS', startDate: '2026-08-19', weekdaysMask: 16 } // Friday (Aug 21)
       }),
     });
     patchRes = await fetch(`${baseUrl}/tasks/${taskId2}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-12',
-        effectiveDate: '2026-08-12',
-        schedule: { type: 'WEEKDAYS', startDate: '2026-08-12', weekdaysMask: 16 } // Friday
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
+        schedule: { type: 'WEEKDAYS', startDate: '2026-08-20', weekdaysMask: 32 } // Saturday
       }),
     });
     assert.equal(patchRes.status, 200);
     body = await (patchRes.json() as any);
     assert.equal(body.task.schedules.length, 1);
-    assert.equal(body.task.schedules[0].startDate, '2026-08-12');
+    assert.equal(body.task.schedules[0].startDate, '2026-08-20');
   });
 
   await t.test('Concurrency: FOR UPDATE lock serializes edits', async () => {
@@ -503,7 +503,7 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
-      body: JSON.stringify({ id: taskId, title: 'Original', plannerToday: '2026-08-18' }),
+      body: JSON.stringify({ id: taskId, title: 'Original', plannerToday: '2026-08-20' }),
     });
 
     const lockClient = await pool.connect();
@@ -514,8 +514,8 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
       body: JSON.stringify({
-        plannerToday: '2026-08-18',
-        effectiveDate: '2026-08-18',
+        plannerToday: '2026-08-20',
+        effectiveDate: '2026-08-20',
         title: 'Updated After Lock'
       }),
     });
