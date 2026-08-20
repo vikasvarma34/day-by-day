@@ -831,4 +831,351 @@ test('HTTP Authentication E2E Suite', async (t) => {
       assert.equal(newLoginData.user.id, testUser.id);
     });
   });
+
+  await t.test('PATCH /auth/profile scenarios', async (profileSuite) => {
+    async function getAuthenticatedUser(label: string) {
+      const user = await createTestUser(label);
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, password: user.rawPassword }),
+      });
+      assert.equal(loginRes.status, 200);
+      const { token } = await loginRes.json();
+      return { user, token };
+    }
+
+    await profileSuite.test('1. unauthenticated request returns HTTP 401 UNAUTHORIZED', async () => {
+      const res = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firstName: 'Alex' }),
+      });
+      assert.equal(res.status, 401);
+      const data = await res.json();
+      assert.equal(data.error.code, 'UNAUTHORIZED');
+    });
+
+    await profileSuite.test('2. update firstName updates successfully and trims whitespace', async () => {
+      const { user, token } = await getAuthenticatedUser('profile_fn');
+      const res = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ firstName: '  Alexander  ' }),
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.user.id, user.id);
+      assert.equal(data.user.firstName, 'Alexander');
+      assert.equal(data.user.lastName, user.lastName);
+      assert.equal(data.user.nickname, user.nickname);
+    });
+
+    await profileSuite.test('3. update lastName updates successfully and trims whitespace', async () => {
+      const { user, token } = await getAuthenticatedUser('profile_ln');
+      const res = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ lastName: '  Hamilton  ' }),
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.user.id, user.id);
+      assert.equal(data.user.firstName, user.firstName);
+      assert.equal(data.user.lastName, 'Hamilton');
+    });
+
+    await profileSuite.test('4. update nickname updates successfully', async () => {
+      const { user, token } = await getAuthenticatedUser('profile_nick');
+      const res = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: '  Vicky  ' }),
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.user.id, user.id);
+      assert.equal(data.user.nickname, 'Vicky');
+    });
+
+    await profileSuite.test('5. partial update preserves omitted fields', async () => {
+      const { user, token } = await getAuthenticatedUser('profile_partial');
+      const res = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: 'NewNick' }),
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.user.firstName, user.firstName);
+      assert.equal(data.user.lastName, user.lastName);
+      assert.equal(data.user.nickname, 'NewNick');
+    });
+
+    await profileSuite.test('6. nickname "" / whitespace-only / null normalizes to null', async () => {
+      const { user, token } = await getAuthenticatedUser('profile_null_nick');
+
+      // First set a nickname
+      await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: 'Temporary' }),
+      });
+
+      // Clear with empty string
+      const resEmpty = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: '' }),
+      });
+      assert.equal(resEmpty.status, 200);
+      assert.equal((await resEmpty.json()).user.nickname, null);
+
+      // Set nickname again
+      await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: 'Another' }),
+      });
+
+      // Clear with whitespace only
+      const resWhitespace = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: '   ' }),
+      });
+      assert.equal(resWhitespace.status, 200);
+      assert.equal((await resWhitespace.json()).user.nickname, null);
+
+      // Set nickname again
+      await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: 'YetAnother' }),
+      });
+
+      // Clear with null
+      const resNull = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: null }),
+      });
+      assert.equal(resNull.status, 200);
+      assert.equal((await resNull.json()).user.nickname, null);
+    });
+
+    await profileSuite.test('7-8. invalid blank required name returns HTTP 400', async () => {
+      const { token } = await getAuthenticatedUser('profile_blank');
+
+      const resBlankFn = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ firstName: '   ' }),
+      });
+      assert.equal(resBlankFn.status, 400);
+      const dataFn = await resBlankFn.json();
+      assert.equal(dataFn.error.code, 'BAD_REQUEST');
+      assert.match(dataFn.error.message, /cannot be blank/);
+
+      const resBlankLn = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ lastName: '' }),
+      });
+      assert.equal(resBlankLn.status, 400);
+      const dataLn = await resBlankLn.json();
+      assert.equal(dataLn.error.code, 'BAD_REQUEST');
+      assert.match(dataLn.error.message, /cannot be blank/);
+    });
+
+    await profileSuite.test('9. malformed / non-object request returns controlled HTTP 400', async () => {
+      const { token } = await getAuthenticatedUser('profile_malformed');
+
+      const resArray = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(['firstName', 'test']),
+      });
+      assert.equal(resArray.status, 400);
+      assert.equal((await resArray.json()).error.code, 'BAD_REQUEST');
+
+      const resNonStringNick = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nickname: 12345 }),
+      });
+      assert.equal(resNonStringNick.status, 400);
+      assert.equal((await resNonStringNick.json()).error.code, 'BAD_REQUEST');
+    });
+
+    await profileSuite.test('10. request cannot update email, password, or userId', async () => {
+      const { user, token } = await getAuthenticatedUser('profile_immutable');
+
+      const res = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: '00000000-0000-0000-0000-000000000000',
+          userId: '00000000-0000-0000-0000-000000000000',
+          email: 'hacked@example.com',
+          password: 'HackedPassword12345!',
+          passwordHash: 'dummy_hash',
+          firstName: 'SafeUpdate',
+        }),
+      });
+
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.user.id, user.id);
+      assert.equal(data.user.email, user.email);
+      assert.equal(data.user.firstName, 'SafeUpdate');
+
+      // Verify in DB directly
+      const dbUser = await pool.query('SELECT * FROM users WHERE id = $1', [user.id]);
+      assert.equal(dbUser.rows[0].email, user.email);
+      assert.equal(dbUser.rows[0].id, user.id);
+
+      // Password remains valid
+      const loginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, password: user.rawPassword }),
+      });
+      assert.equal(loginRes.status, 200);
+    });
+
+    await profileSuite.test('11. authenticated user cannot modify another users profile', async () => {
+      const userA = await getAuthenticatedUser('profile_isolation_a');
+      const userB = await getAuthenticatedUser('profile_isolation_b');
+
+      // User A attempts to send user B's ID in body
+      const res = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userA.token}`,
+        },
+        body: JSON.stringify({
+          userId: userB.user.id,
+          id: userB.user.id,
+          firstName: 'AttackerName',
+        }),
+      });
+
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.user.id, userA.user.id);
+      assert.equal(data.user.firstName, 'AttackerName');
+
+      // User B's profile is completely unchanged
+      const meBRes = await fetch(`${baseUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${userB.token}` },
+      });
+      const dataB = await meBRes.json();
+      assert.equal(dataB.user.id, userB.user.id);
+      assert.equal(dataB.user.firstName, userB.user.firstName);
+    });
+
+    await profileSuite.test('12. GET /auth/me reflects the updated values', async () => {
+      const { user, token } = await getAuthenticatedUser('profile_me_reflect');
+
+      const patchRes = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          firstName: 'UpdatedFirst',
+          lastName: 'UpdatedLast',
+          nickname: 'ReflectedNick',
+        }),
+      });
+      assert.equal(patchRes.status, 200);
+
+      const meRes = await fetch(`${baseUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      assert.equal(meRes.status, 200);
+      const meData = await meRes.json();
+      assert.deepEqual(meData.user, {
+        id: user.id,
+        email: user.email,
+        firstName: 'UpdatedFirst',
+        lastName: 'UpdatedLast',
+        nickname: 'ReflectedNick',
+      });
+    });
+
+    await profileSuite.test('13. response contains no sensitive auth fields', async () => {
+      const { token } = await getAuthenticatedUser('profile_no_leak');
+
+      const res = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ firstName: 'Sanitized' }),
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json();
+
+      assert.equal((data as any).password, undefined);
+      assert.equal((data as any).passwordHash, undefined);
+      assert.equal((data as any).password_hash, undefined);
+      assert.equal((data.user as any).password, undefined);
+      assert.equal((data.user as any).passwordHash, undefined);
+      assert.equal((data.user as any).password_hash, undefined);
+      assert.equal((data as any).token, undefined);
+      assert.equal((data as any).tokenHash, undefined);
+      assert.equal((data as any).failedAttempts, undefined);
+      assert.equal((data as any).blockedUntil, undefined);
+    });
+  });
 });

@@ -230,4 +230,77 @@ export class AuthRepository {
       client.release();
     }
   }
+
+  /**
+   * Updates user profile fields (firstName, lastName, nickname) for a given userId.
+   * Returns updated safe AuthUser.
+   */
+  async updateUserProfile(
+    userId: string,
+    updates: { firstName?: string; lastName?: string; nickname?: string | null }
+  ): Promise<AuthUser> {
+    const setClauses: string[] = [];
+    const params: unknown[] = [userId];
+    let paramIndex = 2;
+
+    if (updates.firstName !== undefined) {
+      setClauses.push(`first_name = $${paramIndex++}`);
+      params.push(updates.firstName);
+    }
+
+    if (updates.lastName !== undefined) {
+      setClauses.push(`last_name = $${paramIndex++}`);
+      params.push(updates.lastName);
+    }
+
+    if ('nickname' in updates) {
+      setClauses.push(`nickname = $${paramIndex++}`);
+      params.push(updates.nickname ?? null);
+    }
+
+    const pool = getPool();
+
+    if (setClauses.length === 0) {
+      const result = await pool.query(
+        `SELECT id, email, first_name, last_name, nickname
+         FROM users
+         WHERE id = $1`,
+        [userId]
+      );
+      if (result.rows.length === 0) {
+        throw new Error('User not found');
+      }
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        email: row.email,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        nickname: row.nickname,
+      };
+    }
+
+    setClauses.push(`updated_at = NOW()`);
+
+    const result = await pool.query(
+      `UPDATE users
+       SET ${setClauses.join(', ')}
+       WHERE id = $1
+       RETURNING id, email, first_name, last_name, nickname`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('User not found');
+    }
+
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      email: row.email,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      nickname: row.nickname,
+    };
+  }
 }

@@ -38,6 +38,11 @@ This document defines the frozen HTTP/JSON contract between the Android client a
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/auth/me` | Current authenticated user profile |
+| `PATCH` | `/auth/profile` | Update profile fields (`firstName`, `lastName`, `nickname`) |
+| `POST` | `/auth/login` | Authenticate user credentials and issue session |
+| `POST` | `/auth/logout` | Invalidate current session token |
+| `POST` | `/auth/change-password` | Authenticated password change and session revocation |
 | `GET` | `/planner/refresh` | Authoritative point-in-time snapshot for Room cache sync |
 | `GET` | `/planner/days/:date` | Day view occurrences (`timed`, `anytime`, `completed`) |
 | `GET` | `/planner/later` | Unscheduled, incomplete tasks |
@@ -52,6 +57,30 @@ This document defines the frozen HTTP/JSON contract between the Android client a
 ---
 
 ## 4. Endpoint Details
+
+### 4.0 Profile Management (`PATCH /auth/profile`)
+Allows the authenticated user to update their own profile fields (`firstName`, `lastName`, `nickname`). Omitted fields remain unchanged. `nickname: ""` or `nickname: null` clears the nickname to `null`.
+
+* **Request**:
+```json
+{
+  "firstName": "String (optional, non-blank)",
+  "lastName": "String (optional, non-blank)",
+  "nickname": "String | null (optional)"
+}
+```
+* **Response (HTTP 200)**:
+```json
+{
+  "user": {
+    "id": "UUID",
+    "email": "user@example.com",
+    "firstName": "String",
+    "lastName": "String",
+    "nickname": "String | null"
+  }
+}
+```
 
 ### 4.1 Manual Refresh (`GET /planner/refresh`)
 Returns the complete canonical database snapshot under `REPEATABLE READ` isolation. Stream-capable chunked JSON.

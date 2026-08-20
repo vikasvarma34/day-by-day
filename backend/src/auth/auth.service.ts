@@ -1,5 +1,5 @@
 import { AuthRepository } from './auth.repository';
-import { AuthUser, LoginResult } from './types';
+import { AuthUser, LoginResult, UpdateProfileInput } from './types';
 import { normalizeEmail, validateEmail, validatePassword } from '../security/validation';
 import { verifyPassword, hashPassword, DUMMY_ARGON2_HASH } from '../security/password';
 import { BadRequestError, UnauthorizedError } from '../errors/http-errors';
@@ -154,5 +154,12 @@ export class AuthService {
 
     const newPasswordHash = await hashPassword(newPassword);
     await this.authRepository.updatePasswordAndRevokeSessions(userId, newPasswordHash);
+  }
+
+  /**
+   * Updates profile fields for the authenticated user.
+   */
+  async updateProfile(userId: string, input: UpdateProfileInput): Promise<AuthUser> {
+    return await this.authRepository.updateUserProfile(userId, input);
   }
 }

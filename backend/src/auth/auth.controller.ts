@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from './auth.service';
 import { AuthenticatedRequest } from './auth.middleware';
-import { UnauthorizedError } from '../errors/http-errors';
+import { BadRequestError, UnauthorizedError } from '../errors/http-errors';
 import { requireObject, requireString } from '../validation/request-validator';
+import { UpdateProfileInput } from './types';
 
 export class AuthController {
   constructor(private readonly authService: AuthService = new AuthService()) {}
@@ -93,6 +94,58 @@ export class AuthController {
       await this.authService.changePassword(req.user.id, currentPassword, newPassword);
 
       res.status(200).json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * PATCH /auth/profile
+   * Authenticated endpoint to update profile fields (firstName, lastName, nickname)
+   * for the currently authenticated user.
+   */
+  updateProfile = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new UnauthorizedError('Authentication required');
+      }
+
+      const body = requireObject(req.body);
+      const updates: UpdateProfileInput = {};
+
+      if ('firstName' in body) {
+        const firstNameStr = requireString(body.firstName, 'firstName', { nonBlank: true, maxLength: 100 });
+        updates.firstName = firstNameStr.trim();
+      }
+
+      if ('lastName' in body) {
+        const lastNameStr = requireString(body.lastName, 'lastName', { nonBlank: true, maxLength: 100 });
+        updates.lastName = lastNameStr.trim();
+      }
+
+      if ('nickname' in body) {
+        if (body.nickname === null) {
+          updates.nickname = null;
+        } else if (typeof body.nickname === 'string') {
+          const nicknameStr = requireString(body.nickname, 'nickname', { maxLength: 100 });
+          const trimmed = nicknameStr.trim();
+          updates.nickname = trimmed.length > 0 ? trimmed : null;
+        } else {
+          throw new BadRequestError('Invalid nickname: must be a string or null');
+        }
+      }
+
+      const updatedUser = await this.authService.updateProfile(req.user.id, updates);
+
+      res.status(200).json({
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          nickname: updatedUser.nickname,
+        },
+      });
     } catch (error) {
       next(error);
     }

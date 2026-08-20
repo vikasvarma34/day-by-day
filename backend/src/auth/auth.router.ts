@@ -11,6 +11,7 @@ export function createAuthRouter(authService: AuthService = new AuthService()): 
   router.post('/login', controller.login);
   router.post('/logout', controller.logout);
   router.get('/me', authMiddleware, controller.getMe);
+  router.patch('/profile', authMiddleware, controller.updateProfile);
   router.post('/change-password', authMiddleware, controller.changePassword);
 
   return router;

@@ -6,6 +6,12 @@ export interface AuthUser {
   nickname: string | null;
 }
 
+export interface UpdateProfileInput {
+  firstName?: string;
+  lastName?: string;
+  nickname?: string | null;
+}
+
 export interface UserWithPasswordHash extends AuthUser {
   passwordHash: string;
 }
