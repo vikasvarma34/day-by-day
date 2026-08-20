@@ -39,6 +39,7 @@ import androidx.navigation3.ui.NavDisplay
 import com.vikaspokala.daybyday.ui.navigation.ProfileFieldType
 import com.vikaspokala.daybyday.ui.navigation.Screen
 import com.vikaspokala.daybyday.ui.screens.history.HistoryScreen
+import com.vikaspokala.daybyday.ui.screens.history.HistoryViewModel
 import com.vikaspokala.daybyday.ui.screens.later.LaterScreen
 import com.vikaspokala.daybyday.ui.screens.later.LaterViewModel
 import com.vikaspokala.daybyday.ui.screens.later.ScheduleItemScreen
@@ -60,7 +61,8 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 fun AppShell(
     todayViewModel: TodayViewModel = viewModel(),
     scheduleViewModel: ScheduleViewModel = viewModel(),
-    laterViewModel: LaterViewModel = viewModel()
+    laterViewModel: LaterViewModel = viewModel(),
+    historyViewModel: HistoryViewModel = viewModel()
 ) {
     val backStack = rememberNavBackStack(Screen.Today as NavKey)
 
@@ -199,7 +201,7 @@ fun AppShell(
                             }
                         )
                     }
-                    is Screen.History -> NavEntry(key) { HistoryScreen() }
+                    is Screen.History -> NavEntry(key) { HistoryScreen(viewModel = historyViewModel) }
                     is Screen.Settings -> NavEntry(key) {
                         SettingsScreen(
                             firstName = firstName,
@@ -297,7 +299,6 @@ fun AppShell(
                                         else -> {
                                             val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
                                             todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
-                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                         }
                                     }
                                 } else {
@@ -313,7 +314,6 @@ fun AppShell(
                                             else -> {
                                                 val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
                                                 todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
-                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                             }
                                         }
                                     }
@@ -325,8 +325,6 @@ fun AppShell(
                             onConfirmDelete = {
                                 key.taskId?.let { id ->
                                     todayViewModel.deleteTask(id)
-                                    scheduleViewModel.deleteTask(id)
-                                    laterViewModel.deleteTask(id)
                                 }
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)
@@ -346,15 +344,15 @@ fun AppShell(
                                 }
                             },
                             onSchedule = { title, note, date, time, reminder, recurrence, isImportant ->
-                                laterViewModel.deleteTask(key.taskId)
-                                todayViewModel.addTask(
+                                laterViewModel.scheduleTask(
+                                    taskId = key.taskId,
                                     title = title,
                                     note = note,
+                                    isImportant = isImportant,
                                     date = date,
                                     time = time,
                                     reminder = reminder,
-                                    recurrence = recurrence,
-                                    isImportant = isImportant
+                                    recurrence = recurrence
                                 )
                                 // Pop both ScheduleItem and TaskScreen to land directly on LaterScreen
                                 while (backStack.isNotEmpty() && (backStack.last() is Screen.ScheduleItem || backStack.last() is Screen.Task)) {

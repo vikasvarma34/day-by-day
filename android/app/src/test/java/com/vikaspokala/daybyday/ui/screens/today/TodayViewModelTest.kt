@@ -2,29 +2,31 @@ package com.vikaspokala.daybyday.ui.screens.today
 
 import java.time.LocalDate
 import java.time.LocalTime
+import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
+import com.vikaspokala.daybyday.ui.models.Recurrence
+import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import com.vikaspokala.daybyday.ui.fake.InMemoryDatedTaskStore
-import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 
 class TodayViewModelTest {
 
-    private lateinit var store: InMemoryDatedTaskStore
+    private lateinit var database: InMemoryPlannerDatabase
     private lateinit var viewModel: TodayViewModel
     private val testToday: LocalDate = LocalDate.of(2026, 8, 19)
 
     @Before
     fun setUp() {
-        store = InMemoryDatedTaskStore(initialDate = testToday)
-        viewModel = TodayViewModel(taskStore = store, initialDate = testToday)
+        database = InMemoryPlannerDatabase(referenceDate = testToday)
+        viewModel = TodayViewModel(database = database, plannerTodayProvider = { testToday })
     }
 
     @Test
-    fun `initial tasks for testToday contains expected demo dataset`() {
+    fun `1 Today observes canonical plannerToday tasks with expected dataset`() {
         val tasksForToday = viewModel.getTasksForDate(testToday)
         assertEquals(6, tasksForToday.size)
 
@@ -39,7 +41,7 @@ class TodayViewModelTest {
     }
 
     @Test
-    fun `toggleCompletion updates task completion state`() {
+    fun `2 toggleCompletion updates task completion state`() {
         val initialTask = viewModel.tasks.value.first { it.id == "s1" }
         assertFalse(initialTask.isCompleted)
 
@@ -53,7 +55,7 @@ class TodayViewModelTest {
     }
 
     @Test
-    fun `toggleImportant updates task importance state`() {
+    fun `3 toggleImportant updates task importance state`() {
         val initialTask = viewModel.tasks.value.first { it.id == "s1" }
         assertFalse(initialTask.isImportant)
 
@@ -67,7 +69,10 @@ class TodayViewModelTest {
     }
 
     @Test
-    fun `addTask and updateTask persist note correctly`() {
+    fun `4 create from Today creates exactly one canonical task and schedule`() {
+        val initialTaskCount = database.tasks.value.size
+        val initialSchedCount = database.schedules.value.size
+
         val newId = viewModel.addTask(
             title = "Test Note Task",
             note = "This is a test note for today task",
@@ -76,34 +81,83 @@ class TodayViewModelTest {
             isImportant = true
         )
 
+        assertEquals(initialTaskCount + 1, database.tasks.value.size)
+        assertEquals(initialSchedCount + 1, database.schedules.value.size)
+
         val addedTask = viewModel.tasks.value.first { it.id == newId }
         assertEquals("Test Note Task", addedTask.title)
         assertEquals("This is a test note for today task", addedTask.note)
         assertEquals("10:00 AM", addedTask.time)
+        assertTrue(addedTask.isImportant)
+    }
+
+    @Test
+    fun `5 created Today task automatically appears in Schedule for same date`() {
+        val scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
+        scheduleViewModel.selectDate(testToday)
+
+        val newId = viewModel.addTask(
+            title = "Sync Task",
+            date = testToday,
+            time = "11:30 AM"
+        )
+
+        val scheduleTasks = scheduleViewModel.tasks.value
+        assertTrue(scheduleTasks.any { it.id == newId && it.title == "Sync Task" })
+    }
+
+    @Test
+    fun `6 edit from one view is visible in the other`() {
+        val scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
+        scheduleViewModel.selectDate(testToday)
+
+        val newId = viewModel.addTask(
+            title = "Before Edit",
+            note = "Initial Note",
+            date = testToday
+        )
 
         viewModel.updateTask(
             id = newId,
-            title = "Updated Note Task",
-            note = "Updated note content",
+            title = "After Edit",
+            note = "Updated Note",
             date = testToday,
-            time = "11:00 AM",
-            isImportant = false
+            time = "02:00 PM",
+            isImportant = true
         )
 
-        val updatedTask = viewModel.tasks.value.first { it.id == newId }
-        assertEquals("Updated Note Task", updatedTask.title)
-        assertEquals("Updated note content", updatedTask.note)
+        val taskInSchedule = scheduleViewModel.tasks.value.first { it.id == newId }
+        assertEquals("After Edit", taskInSchedule.title)
+        assertEquals("Updated Note", taskInSchedule.note)
+        assertEquals("2:00 PM", taskInSchedule.time)
+        assertTrue(taskInSchedule.isImportant)
+    }
 
-        viewModel.updateTask(
-            id = newId,
-            title = "Updated Note Task",
-            note = "   ",
-            date = testToday,
-            time = "11:00 AM",
-            isImportant = false
-        )
-        val emptyNoteTask = viewModel.tasks.value.first { it.id == newId }
-        assertNull(emptyNoteTask.note)
+    @Test
+    fun `7 delete from one view removes it from both`() {
+        val scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
+        scheduleViewModel.selectDate(testToday)
+
+        val newId = viewModel.addTask(title = "To Delete", date = testToday)
+        assertTrue(viewModel.tasks.value.any { it.id == newId })
+        assertTrue(scheduleViewModel.tasks.value.any { it.id == newId })
+
+        viewModel.deleteTask(newId)
+
+        assertFalse(viewModel.tasks.value.any { it.id == newId })
+        assertFalse(scheduleViewModel.tasks.value.any { it.id == newId })
+    }
+
+    @Test
+    fun `8 completion in Today updates Schedule same occurrence`() {
+        val scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
+        scheduleViewModel.selectDate(testToday)
+
+        assertFalse(scheduleViewModel.tasks.value.first { it.id == "s1" }.isCompleted)
+
+        viewModel.toggleCompletion("s1")
+
+        assertTrue(scheduleViewModel.tasks.value.first { it.id == "s1" }.isCompleted)
     }
 
     @Test
@@ -173,37 +227,6 @@ class TodayViewModelTest {
         // Tomorrow tasks (plus 1 day) has 3 tasks
         val tomorrowTasks = viewModel.getTasksForDate(testToday.plusDays(1))
         assertEquals(3, tomorrowTasks.size)
-    }
-
-    @Test
-    fun `Today and Schedule share the same dated task state`() {
-        val scheduleViewModel = ScheduleViewModel(taskStore = store, initialDate = testToday)
-        val targetDate = testToday.plusDays(1)
-
-        // Create task in Schedule for targetDate
-        val newId = scheduleViewModel.addTask(
-            title = "Shared Team Meeting",
-            note = "Important sync",
-            date = targetDate,
-            time = "10:00 AM",
-            isImportant = true
-        )
-
-        // Today browsing targetDate immediately sees the same task
-        val todayTasksOnTargetDate = viewModel.getTasksForDate(targetDate)
-        assertTrue(todayTasksOnTargetDate.any { it.id == newId && it.title == "Shared Team Meeting" })
-
-        // Complete the task from Today
-        viewModel.toggleCompletion(newId)
-
-        // Schedule immediately reflects completed state
-        val scheduleTasksOnTargetDate = scheduleViewModel.getTasksForDate(targetDate)
-        val taskInSchedule = scheduleTasksOnTargetDate.first { it.id == newId }
-        assertTrue(taskInSchedule.isCompleted)
-
-        // Delete from Today -> disappears from Schedule
-        viewModel.deleteTask(newId)
-        assertFalse(scheduleViewModel.getTasksForDate(targetDate).any { it.id == newId })
     }
 
     @Test

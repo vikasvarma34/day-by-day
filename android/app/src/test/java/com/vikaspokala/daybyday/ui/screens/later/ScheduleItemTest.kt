@@ -7,13 +7,13 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import com.vikaspokala.daybyday.ui.fake.InMemoryDatedTaskStore
+import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 import com.vikaspokala.daybyday.ui.screens.today.TodayViewModel
 
 class ScheduleItemTest {
 
-    private lateinit var store: InMemoryDatedTaskStore
+    private lateinit var database: InMemoryPlannerDatabase
     private lateinit var laterViewModel: LaterViewModel
     private lateinit var todayViewModel: TodayViewModel
     private lateinit var scheduleViewModel: ScheduleViewModel
@@ -21,14 +21,14 @@ class ScheduleItemTest {
 
     @Before
     fun setUp() {
-        store = InMemoryDatedTaskStore(initialDate = testToday)
-        laterViewModel = LaterViewModel()
-        todayViewModel = TodayViewModel(taskStore = store, initialDate = testToday)
-        scheduleViewModel = ScheduleViewModel(taskStore = store, initialDate = testToday)
+        database = InMemoryPlannerDatabase(referenceDate = testToday)
+        laterViewModel = LaterViewModel(database = database, plannerTodayProvider = { testToday })
+        todayViewModel = TodayViewModel(database = database, plannerTodayProvider = { testToday })
+        scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
     }
 
     @Test
-    fun `scheduling an active Later task removes it from Later and adds it to dated tasks`() {
+    fun `scheduling an active Later task removes it from Later and adds it to dated tasks preserving ID`() {
         val laterTasks = laterViewModel.getActiveTasks()
         val targetLaterTask = laterTasks.first { it.id == "l1" }
         assertEquals("Read Atomic Habits", targetLaterTask.title)
@@ -39,33 +39,33 @@ class ScheduleItemTest {
         val scheduledTime = "08:00 PM"
 
         // Perform scheduling flow
-        laterViewModel.deleteTask(targetLaterTask.id)
-        val newTaskId = todayViewModel.addTask(
+        laterViewModel.scheduleTask(
+            taskId = targetLaterTask.id,
             title = targetLaterTask.title,
             note = targetLaterTask.note,
+            isImportant = targetLaterTask.isImportant,
             date = scheduledDate,
-            time = scheduledTime,
-            isImportant = targetLaterTask.isImportant
+            time = scheduledTime
         )
 
         // 1. Removed from Later
         assertFalse(laterViewModel.tasks.value.any { it.id == targetLaterTask.id })
         assertFalse(laterViewModel.getActiveTasks().any { it.title == "Read Atomic Habits" })
 
-        // 2. Visible in Schedule for that date with preserved properties
+        // 2. Visible in Schedule for that date with preserved ID and properties
         val scheduledTasksOnDate = scheduleViewModel.getTasksForDate(scheduledDate)
-        val scheduledTask = scheduledTasksOnDate.firstOrNull { it.id == newTaskId }
+        val scheduledTask = scheduledTasksOnDate.firstOrNull { it.id == targetLaterTask.id }
         assertNotNull(scheduledTask)
         assertEquals("Read Atomic Habits", scheduledTask?.title)
         assertEquals("A chapter or two when there is time", scheduledTask?.note)
-        assertEquals("08:00 PM", scheduledTask?.time)
+        assertEquals("8:00 PM", scheduledTask?.time)
         assertEquals(true, scheduledTask?.isImportant)
         assertEquals(false, scheduledTask?.isCompleted)
 
         // 3. Visible in Today when browsing that date
         todayViewModel.selectDate(scheduledDate)
         val todayTasksOnDate = todayViewModel.getTasksForDate(scheduledDate)
-        assertTrue(todayTasksOnDate.any { it.id == newTaskId && it.title == "Read Atomic Habits" })
+        assertTrue(todayTasksOnDate.any { it.id == targetLaterTask.id && it.title == "Read Atomic Habits" })
     }
 
     @Test

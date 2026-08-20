@@ -7,7 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import com.vikaspokala.daybyday.ui.fake.InMemoryDatedTaskStore
+import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
 import com.vikaspokala.daybyday.ui.screens.later.LaterViewModel
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 import com.vikaspokala.daybyday.ui.screens.today.TodayViewModel
@@ -16,7 +16,7 @@ import com.vikaspokala.daybyday.ui.models.toDisplayString
 
 class TaskSaveContractTest {
 
-    private lateinit var store: InMemoryDatedTaskStore
+    private lateinit var database: InMemoryPlannerDatabase
     private lateinit var todayViewModel: TodayViewModel
     private lateinit var scheduleViewModel: ScheduleViewModel
     private lateinit var laterViewModel: LaterViewModel
@@ -24,10 +24,10 @@ class TaskSaveContractTest {
 
     @Before
     fun setUp() {
-        store = InMemoryDatedTaskStore(initialDate = testToday)
-        todayViewModel = TodayViewModel(taskStore = store, initialDate = testToday)
-        scheduleViewModel = ScheduleViewModel(taskStore = store, initialDate = testToday)
-        laterViewModel = LaterViewModel()
+        database = InMemoryPlannerDatabase(referenceDate = testToday)
+        todayViewModel = TodayViewModel(database = database, plannerTodayProvider = { testToday })
+        scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
+        laterViewModel = LaterViewModel(database = database, plannerTodayProvider = { testToday })
     }
 
     private fun handleSaveTask(
@@ -92,7 +92,7 @@ class TaskSaveContractTest {
             isImp = false
         )
 
-        val createdTaskInToday = todayViewModel.tasks.value.first()
+        val createdTaskInToday = todayViewModel.tasks.value.first { it.title == "Doctor" }
         assertEquals("Doctor", createdTaskInToday.title)
         assertEquals("Bring reports", createdTaskInToday.note)
         assertEquals("15 minutes before", createdTaskInToday.reminder)
@@ -146,10 +146,10 @@ class TaskSaveContractTest {
             isImp = true
         )
 
-        val createdTask = scheduleViewModel.tasks.value.first()
+        val createdTask = scheduleViewModel.tasks.value.first { it.title == "Dentist appointment" }
         assertEquals("Dentist appointment", createdTask.title)
         assertEquals("Check teeth whitening", createdTask.note)
-        assertEquals("02:00 PM", createdTask.time)
+        assertEquals("2:00 PM", createdTask.time)
         assertEquals("30 minutes before", createdTask.reminder)
         assertEquals(Recurrence.IntervalDays(1), createdTask.recurrence)
 
@@ -208,8 +208,8 @@ class TaskSaveContractTest {
     @Test
     fun `1 historical task + title edit is allowed`() {
         val pastDate = testToday.minusDays(1)
-        val taskId = store.addTask(title = "Original Title", note = "Note", date = pastDate, isImportant = false)
-        val original = store.tasks.value.first { it.id == taskId }
+        val taskId = scheduleViewModel.addTask(title = "Original Title", note = "Note", date = pastDate, isImportant = false)
+        val original = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
 
         val blocked = isSaveBlocked(
             isCreateMode = false,
@@ -224,16 +224,16 @@ class TaskSaveContractTest {
         )
         assertFalse("Title-only change on historical task must not be blocked", blocked)
 
-        store.updateTask(id = taskId, title = "Updated Title", note = original.note, date = original.date, isImportant = original.isImportant)
-        val updated = store.tasks.value.first { it.id == taskId }
+        scheduleViewModel.updateTask(id = taskId, title = "Updated Title", note = original.note, date = original.date, isImportant = original.isImportant)
+        val updated = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
         assertEquals("Updated Title", updated.title)
     }
 
     @Test
     fun `2 historical task + note edit is allowed`() {
         val pastDate = testToday.minusDays(1)
-        val taskId = store.addTask(title = "Past Task", note = "Old Note", date = pastDate, isImportant = false)
-        val original = store.tasks.value.first { it.id == taskId }
+        val taskId = scheduleViewModel.addTask(title = "Past Task", note = "Old Note", date = pastDate, isImportant = false)
+        val original = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
 
         val blocked = isSaveBlocked(
             isCreateMode = false,
@@ -248,16 +248,16 @@ class TaskSaveContractTest {
         )
         assertFalse("Note-only change on historical task must not be blocked", blocked)
 
-        store.updateTask(id = taskId, title = original.title, note = "Updated Note", date = original.date, isImportant = original.isImportant)
-        val updated = store.tasks.value.first { it.id == taskId }
+        scheduleViewModel.updateTask(id = taskId, title = original.title, note = "Updated Note", date = original.date, isImportant = original.isImportant)
+        val updated = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
         assertEquals("Updated Note", updated.note)
     }
 
     @Test
     fun `3 historical task + Important edit is allowed`() {
         val pastDate = testToday.minusDays(1)
-        val taskId = store.addTask(title = "Past Task", note = "Note", date = pastDate, isImportant = false)
-        val original = store.tasks.value.first { it.id == taskId }
+        val taskId = scheduleViewModel.addTask(title = "Past Task", note = "Note", date = pastDate, isImportant = false)
+        val original = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
 
         val blocked = isSaveBlocked(
             isCreateMode = false,
@@ -272,16 +272,16 @@ class TaskSaveContractTest {
         )
         assertFalse("Important-only change on historical task must not be blocked", blocked)
 
-        store.updateTask(id = taskId, title = original.title, note = original.note, date = original.date, isImportant = true)
-        val updated = store.tasks.value.first { it.id == taskId }
+        scheduleViewModel.updateTask(id = taskId, title = original.title, note = original.note, date = original.date, isImportant = true)
+        val updated = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
         assertTrue(updated.isImportant)
     }
 
     @Test
     fun `4 historical task + time change is blocked`() {
         val pastDate = testToday.minusDays(1)
-        val taskId = store.addTask(title = "Past Task", note = "Note", date = pastDate, time = "10:00 AM")
-        val original = store.tasks.value.first { it.id == taskId }
+        val taskId = scheduleViewModel.addTask(title = "Past Task", note = "Note", date = pastDate, time = "10:00 AM")
+        val original = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
 
         val blocked = isSaveBlocked(
             isCreateMode = false,
@@ -300,8 +300,8 @@ class TaskSaveContractTest {
     @Test
     fun `5 historical task + reminder change is blocked`() {
         val pastDate = testToday.minusDays(1)
-        val taskId = store.addTask(title = "Past Task", note = "Note", date = pastDate, time = "10:00 AM", reminder = "10 minutes before")
-        val original = store.tasks.value.first { it.id == taskId }
+        val taskId = scheduleViewModel.addTask(title = "Past Task", note = "Note", date = pastDate, time = "10:00 AM")
+        val original = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
 
         val blocked = isSaveBlocked(
             isCreateMode = false,
@@ -320,8 +320,8 @@ class TaskSaveContractTest {
     @Test
     fun `6 historical task + recurrence change is blocked`() {
         val pastDate = testToday.minusDays(1)
-        val taskId = store.addTask(title = "Past Task", note = "Note", date = pastDate, recurrence = null)
-        val original = store.tasks.value.first { it.id == taskId }
+        val taskId = scheduleViewModel.addTask(title = "Past Task", note = "Note", date = pastDate, recurrence = null)
+        val original = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
 
         val blocked = isSaveBlocked(
             isCreateMode = false,
@@ -341,8 +341,8 @@ class TaskSaveContractTest {
     fun `7 historical task moved to another past date is blocked`() {
         val pastDate = testToday.minusDays(1)
         val earlierDate = testToday.minusDays(2)
-        val taskId = store.addTask(title = "Past Task", note = "Note", date = pastDate)
-        val original = store.tasks.value.first { it.id == taskId }
+        val taskId = scheduleViewModel.addTask(title = "Past Task", note = "Note", date = pastDate)
+        val original = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
 
         val blocked = isSaveBlocked(
             isCreateMode = false,
@@ -361,8 +361,8 @@ class TaskSaveContractTest {
     @Test
     fun `8 historical task moved to today or future is allowed`() {
         val pastDate = testToday.minusDays(1)
-        val taskId = store.addTask(title = "Past Task", note = "Note", date = pastDate)
-        val original = store.tasks.value.first { it.id == taskId }
+        val taskId = scheduleViewModel.addTask(title = "Past Task", note = "Note", date = pastDate)
+        val original = scheduleViewModel.getTasksForDate(pastDate).first { it.id == taskId }
 
         val blockedToday = isSaveBlocked(
             isCreateMode = false,
@@ -408,7 +408,7 @@ class TaskSaveContractTest {
     }
 
     @Test
-    fun `reopening task from store restores exact recurrence and optional end date`() {
+    fun `reopening task from database restores exact recurrence and optional end date`() {
         val endDate = testToday.plusDays(30)
         val recurrence = Recurrence.IntervalDays(intervalDays = 3, endDate = endDate)
 
@@ -546,7 +546,7 @@ class TaskSaveContractTest {
     }
 
     @Test
-    fun `6 UI validation blocks invalid end date and store stores recurrence without silent mutations`() {
+    fun `6 UI validation blocks invalid end date and database stores recurrence without silent mutations`() {
         val start = LocalDate.of(2026, 8, 25)
         val invalidEnd = LocalDate.of(2026, 8, 20)
         val invalidRecurrence = Recurrence.IntervalDays(1, endDate = invalidEnd)
@@ -556,13 +556,13 @@ class TaskSaveContractTest {
 
         // Store preserves valid recurrence without hidden mutation
         val validRecurrence = Recurrence.IntervalDays(1, endDate = LocalDate.of(2026, 8, 30))
-        val taskId = store.addTask(
+        val taskId = scheduleViewModel.addTask(
             title = "Task with valid end",
             date = start,
             recurrence = validRecurrence
         )
 
-        val storedTask = store.tasks.value.first { it.id == taskId }
+        val storedTask = scheduleViewModel.getTasksForDate(start).first { it.id == taskId }
         assertEquals(validRecurrence, storedTask.recurrence)
     }
 }

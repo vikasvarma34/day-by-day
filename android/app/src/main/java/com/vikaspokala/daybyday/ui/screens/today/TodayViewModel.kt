@@ -3,23 +3,50 @@ package com.vikaspokala.daybyday.ui.screens.today
 import java.time.LocalDate
 import java.time.LocalTime
 import androidx.lifecycle.ViewModel
-import com.vikaspokala.daybyday.ui.fake.InMemoryDatedTaskStore
+import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
 import com.vikaspokala.daybyday.ui.models.Recurrence
+import com.vikaspokala.daybyday.ui.screens.later.LaterViewModel
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
+import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+@OptIn(ExperimentalForInheritanceCoroutinesApi::class)
+private class DerivedDatedTasksStateFlow(
+    private val database: InMemoryPlannerDatabase,
+    private val dateProvider: () -> LocalDate
+) : StateFlow<List<ScheduleTaskItem>> {
+    override val value: List<ScheduleTaskItem> get() = database.getTasksForDate(dateProvider())
+    override val replayCache: List<List<ScheduleTaskItem>> get() = listOf(value)
+    override suspend fun collect(collector: FlowCollector<List<ScheduleTaskItem>>): Nothing {
+        database.observeTasksForDate(dateProvider()).collect(collector)
+        awaitCancellation()
+    }
+}
+
 class TodayViewModel(
-    private val taskStore: InMemoryDatedTaskStore = InMemoryDatedTaskStore.defaultStore,
-    initialDate: LocalDate = LocalDate.now()
+    private val database: InMemoryPlannerDatabase = InMemoryPlannerDatabase.defaultDatabase,
+    private val plannerTodayProvider: () -> LocalDate = { LocalDate.now() }
 ) : ViewModel() {
 
-    private val _selectedDate = MutableStateFlow(initialDate)
+    constructor(referenceDate: LocalDate) : this(
+        database = InMemoryPlannerDatabase.defaultDatabase,
+        plannerTodayProvider = { referenceDate }
+    )
+
+    constructor(database: InMemoryPlannerDatabase, referenceDate: LocalDate) : this(
+        database = database,
+        plannerTodayProvider = { referenceDate }
+    )
+
+    private val _selectedDate = MutableStateFlow(plannerTodayProvider())
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
 
-    val tasks: StateFlow<List<ScheduleTaskItem>> = taskStore.tasks
+    val tasks: StateFlow<List<ScheduleTaskItem>> = DerivedDatedTasksStateFlow(database, { _selectedDate.value })
 
     fun selectPreviousDay() {
         _selectedDate.update { it.minusDays(1) }
@@ -33,20 +60,48 @@ class TodayViewModel(
         _selectedDate.value = date
     }
 
-    fun selectToday(todayDate: LocalDate = LocalDate.now()) {
+    fun selectToday(todayDate: LocalDate = plannerTodayProvider()) {
         _selectedDate.value = todayDate
     }
 
-    fun toggleCompletion(taskId: String) {
-        taskStore.toggleCompletion(taskId)
+    fun toggleCompletion(taskId: String, scheduledDate: LocalDate = _selectedDate.value) {
+        val occurs = database.getTasksForDate(scheduledDate).any { it.id == taskId }
+        if (!occurs && database.tasks.value.none { it.id == taskId }) return
+        val isCompleted = database.completions.value.any {
+            it.taskId == taskId && it.scheduledDate == scheduledDate
+        }
+        val nextCompleted = !isCompleted
+        if (nextCompleted) {
+            val plannerToday = plannerTodayProvider()
+            val completedDate = if (scheduledDate.isBefore(plannerToday)) scheduledDate else plannerToday
+            database.completeScheduledOccurrence(
+                taskId = taskId,
+                scheduledDate = scheduledDate,
+                completedDate = completedDate,
+                plannerToday = plannerToday
+            )
+        } else {
+            database.undoScheduledOccurrence(
+                taskId = taskId,
+                scheduledDate = scheduledDate
+            )
+        }
     }
 
     fun toggleImportant(taskId: String) {
-        taskStore.toggleImportant(taskId)
+        val task = database.tasks.value.find { it.id == taskId } ?: return
+        val nextImportant = !task.isImportant
+        database.updateTask(
+            taskId = taskId,
+            title = task.title,
+            note = task.note,
+            isImportant = nextImportant,
+            plannerToday = plannerTodayProvider()
+        )
     }
 
     fun deleteTask(taskId: String) {
-        taskStore.deleteTask(taskId)
+        database.deleteTask(taskId)
     }
 
     fun addTask(
@@ -58,14 +113,17 @@ class TodayViewModel(
         recurrence: Recurrence? = null,
         isImportant: Boolean = false
     ): String {
-        return taskStore.addTask(
+        val parsedTime = LaterViewModel.parseDisplayStringToLocalTime(time)
+        val parsedReminder = if (parsedTime != null) LaterViewModel.parseDisplayStringToReminderMinutes(reminder) else null
+        return database.createDatedTask(
             title = title,
             note = note,
             date = date,
-            time = time,
-            reminder = reminder,
+            time = parsedTime,
+            reminderMinutesBefore = parsedReminder,
             recurrence = recurrence,
-            isImportant = isImportant
+            isImportant = isImportant,
+            plannerToday = plannerTodayProvider()
         )
     }
 
@@ -79,20 +137,23 @@ class TodayViewModel(
         recurrence: Recurrence? = null,
         isImportant: Boolean = false
     ) {
-        taskStore.updateTask(
-            id = id,
+        val parsedTime = LaterViewModel.parseDisplayStringToLocalTime(time)
+        val parsedReminder = if (parsedTime != null) LaterViewModel.parseDisplayStringToReminderMinutes(reminder) else null
+        database.updateTask(
+            taskId = id,
             title = title,
             note = note,
             date = date,
-            time = time,
-            reminder = reminder,
+            time = parsedTime,
+            reminderMinutesBefore = parsedReminder,
             recurrence = recurrence,
-            isImportant = isImportant
+            isImportant = isImportant,
+            plannerToday = plannerTodayProvider()
         )
     }
 
-    fun getTasksForDate(date: LocalDate, taskList: List<ScheduleTaskItem> = tasks.value): List<ScheduleTaskItem> {
-        val dateTasks = taskList.filter { it.date == date }
+    fun getTasksForDate(date: LocalDate, taskList: List<ScheduleTaskItem> = database.getTasksForDate(date)): List<ScheduleTaskItem> {
+        val dateTasks = if (taskList.isNotEmpty() && taskList.first().date == date) taskList else database.getTasksForDate(date)
 
         val incompleteTimed = dateTasks.filter { !it.isCompleted && it.time != null }
             .sortedBy { parseTimeToMinutes(it.time) }

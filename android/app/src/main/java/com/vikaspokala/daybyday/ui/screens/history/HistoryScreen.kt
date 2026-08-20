@@ -132,7 +132,7 @@ fun HistoryScreen(
             }
 
             // Empty States & Grouped History Entries
-            if (tasks.isEmpty()) {
+            if (filteredGroupedHistory.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier
@@ -141,22 +141,11 @@ fun HistoryScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No important history yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = DayByDaySecondaryText
-                        )
-                    }
-                }
-            } else if (filteredGroupedHistory.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No matching important history.",
+                            text = if (searchQuery.trim().isNotEmpty()) {
+                                "No matching important history."
+                            } else {
+                                "No important history yet."
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = DayByDaySecondaryText
                         )
