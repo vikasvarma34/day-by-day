@@ -1,5 +1,8 @@
 import { getPool, closePool } from '../src/db/pool';
 import { getNodeEnv, getEnv } from '../src/config/env';
+import { normalizeEmail } from '../src/security/validation';
+import { createUserAccount } from '../src/auth/user-creation';
+import { AuthRepository } from '../src/auth/auth.repository';
 
 export async function resetDevelopmentDatabase(): Promise<void> {
   const nodeEnv = getNodeEnv();
@@ -22,6 +25,9 @@ export async function resetDevelopmentDatabase(): Promise<void> {
     );
   }
 
+  const devEmail = normalizeEmail(getEnv('TEST_USER_EMAIL'));
+  const devPassword = getEnv('TEST_USER_PASSWORD');
+
   console.log(`Resetting development database (NODE_ENV=${nodeEnv})...`);
 
   const pool = getPool();
@@ -30,16 +36,32 @@ export async function resetDevelopmentDatabase(): Promise<void> {
     await client.query('BEGIN');
 
     // Remove user-owned and runtime data in foreign-key safe order
-    // Preserves schema, constraints, triggers, indexes, and pgmigrations table
+    // Preserves schema, constraints, triggers, indexes, pgmigrations table, and all existing users
     await client.query('DELETE FROM task_completions');
     await client.query('DELETE FROM task_schedules');
     await client.query('DELETE FROM tasks');
     await client.query('DELETE FROM auth_sessions');
     await client.query('DELETE FROM auth_throttles');
-    await client.query('DELETE FROM users');
 
     await client.query('COMMIT');
-    console.log('✓ Development database reset successfully. Preserved schema and migrations.');
+
+    // Ensure the configured persistent dev user exists; if missing, seed it
+    const repository = new AuthRepository();
+    const existing = await repository.findUserByEmail(devEmail);
+    if (!existing) {
+      const created = await createUserAccount({
+        email: devEmail,
+        password: devPassword,
+        firstName: 'Dev',
+        lastName: 'Tester',
+        nickname: 'Dev',
+      });
+      console.log(`✓ Development user seeded: ${created.email} (ID: ${created.id}).`);
+    } else {
+      console.log(`✓ Persistent development user confirmed: ${existing.email} (ID: ${existing.id}).`);
+    }
+
+    console.log('✓ Development database reset successfully. Preserved schema, migrations, and all users.');
   } catch (error: any) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('Database reset failed:', error.message || error);
