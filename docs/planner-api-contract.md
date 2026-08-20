@@ -153,6 +153,7 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
 ---
 
 ### 4.4 History View (`GET /planner/history`)
+* Returns completed eligible Important ONCE scheduled tasks and direct-Later tasks with `completedDate <= plannerToday`.
 * **Query Parameters**: `plannerToday=YYYY-MM-DD` (required), `q=string` (optional, max 200 characters)
 * **Response (HTTP 200)**:
 ```json
@@ -233,9 +234,9 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
 ```
 * **Notes**:
   - `plannerToday` is required and represents the client's current calendar date.
-  - For scheduled tasks: `completedDate` must satisfy `min(scheduledDate, plannerToday) <= completedDate <= plannerToday`. Historical backfill may use `completedDate = scheduledDate` in the past.
+  - For scheduled tasks: `completedDate` must satisfy `min(scheduledDate, plannerToday) <= completedDate <= plannerToday`. Historical backfill may use `completedDate = scheduledDate` in the past. Early completion of future scheduled tasks on `plannerToday` is supported.
   - For direct Later tasks: `completedDate` must equal `plannerToday`.
-  - When `completedDate < plannerToday`, an important eligible completion immediately becomes visible in History under that historical completion date.
+  - When `completedDate <= plannerToday`, an important eligible completion immediately becomes visible in History under that completion date.
 * **Response**: `HTTP 200 OK` (idempotent).
 
 #### Undo (`POST /tasks/:taskId/undo`)

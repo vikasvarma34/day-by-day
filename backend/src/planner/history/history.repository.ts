@@ -3,12 +3,12 @@ import { HistoryRow } from './history.types';
 
 export class HistoryRepository {
   /**
-   * Queries historical completions for a user before plannerToday.
+   * Queries historical completions for a user up to and including plannerToday.
    * Only includes:
    * - Important ONCE scheduled completions (s.schedule_type = 'ONCE')
    * - Important directly completed Later tasks (c.schedule_id IS NULL AND c.scheduled_date IS NULL)
    * Uses title_snapshot and is_important_snapshot.
-   * Excludes recurring schedules and completions on or after plannerToday.
+   * Excludes recurring schedules and completions after plannerToday.
    * Supports optional case-insensitive substring search on title_snapshot.
    * Orders deterministically: completed_date DESC, completed_at DESC, completion id DESC.
    */
@@ -29,7 +29,7 @@ export class HistoryRepository {
        JOIN tasks t ON t.id = c.task_id
        LEFT JOIN task_schedules s ON s.id = c.schedule_id AND s.task_id = c.task_id
        WHERE t.user_id = $1
-         AND c.completed_date < $2::date
+         AND c.completed_date <= $2::date
          AND c.is_important_snapshot = true
          AND c.title_snapshot IS NOT NULL
          AND (

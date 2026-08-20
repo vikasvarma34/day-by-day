@@ -240,25 +240,25 @@ test('GET /planner/history Integration Suite', async (t) => {
         [tNonImpLaterId]
       );
 
-      // 8. Exclusion: Completion on plannerToday itself (2026-08-20)
-      const tTodayRes = await pool.query(
+      // 8. Exclusion: Completion on a date strictly after plannerToday (2026-08-21 when plannerToday is 2026-08-20)
+      const tFutureCompRes = await pool.query(
         `INSERT INTO tasks (user_id, title, is_important)
-         VALUES ($1, 'Today Task', true)
+         VALUES ($1, 'Future Comp Task', true)
          RETURNING id`,
         [userA.id]
       );
-      const tTodayId = tTodayRes.rows[0].id;
-      const sTodayRes = await pool.query(
+      const tFutureCompId = tFutureCompRes.rows[0].id;
+      const sFutureCompRes = await pool.query(
         `INSERT INTO task_schedules (task_id, schedule_type, start_date, end_date)
-         VALUES ($1, 'ONCE', '2026-08-20', '2026-08-20')
+         VALUES ($1, 'ONCE', '2026-08-21', '2026-08-21')
          RETURNING id`,
-        [tTodayId]
+        [tFutureCompId]
       );
-      const sTodayId = sTodayRes.rows[0].id;
+      const sFutureCompId = sFutureCompRes.rows[0].id;
       await pool.query(
         `INSERT INTO task_completions (task_id, schedule_id, scheduled_date, completed_date, completed_at, title_snapshot, is_important_snapshot)
-         VALUES ($1, $2, '2026-08-20', '2026-08-20', '2026-08-20T11:00:00.000Z', 'Today Completed Snapshot', true)`,
-        [tTodayId, sTodayId]
+         VALUES ($1, $2, '2026-08-21', '2026-08-21', '2026-08-21T11:00:00.000Z', 'Future Completed Snapshot', true)`,
+        [tFutureCompId, sFutureCompId]
       );
 
       // 9. User B Task: Important qualifying ONCE completion for User B
@@ -665,6 +665,253 @@ test('GET /planner/history Integration Suite', async (t) => {
 
       const h2 = await getHistoryRequest({ plannerToday: '2026-08-20', q: 'Backfilled' }, tokenA);
       assert.equal(h2.body.groups.length, 0);
+    });
+  });
+
+  await t.test('Same-day and early future completion History integration suite', async (sub) => {
+    const getValidId = () => crypto.randomUUID();
+
+    await sub.test('1. Important ONCE completed today appears in History today', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Important Today Once',
+          isImportant: true,
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-20' }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const scheduleId = (await createRes.json()).task.schedules[0].id;
+
+      const compRes = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
+          scheduleId,
+          scheduledDate: '2026-08-20'
+        })
+      });
+      assert.equal(compRes.status, 200);
+
+      const h = await getHistoryRequest({ plannerToday: '2026-08-20', q: 'Important Today Once' }, tokenA);
+      assert.equal(h.body.groups.length, 1);
+      assert.equal(h.body.groups[0].date, '2026-08-20');
+      assert.equal(h.body.groups[0].items.length, 1);
+      assert.equal(h.body.groups[0].items[0].taskId, taskId);
+      assert.equal(h.body.groups[0].items[0].title, 'Important Today Once');
+    });
+
+    await sub.test('2-4. Important future ONCE completed early today appears in History today with original scheduledDate and grouped by completedDate', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Important Future Once Early',
+          isImportant: true,
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-21' }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const scheduleId = (await createRes.json()).task.schedules[0].id;
+
+      // Complete early on 2026-08-20 for a task scheduled on 2026-08-21
+      const compRes = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
+          scheduleId,
+          scheduledDate: '2026-08-21'
+        })
+      });
+      assert.equal(compRes.status, 200);
+
+      // Verify DB row preserves original scheduledDate = '2026-08-21' and completedDate = '2026-08-20'
+      const compDb = await pool.query('SELECT scheduled_date::text, completed_date::text FROM task_completions WHERE task_id = $1', [taskId]);
+      assert.equal(compDb.rows[0].scheduled_date, '2026-08-21');
+      assert.equal(compDb.rows[0].completed_date, '2026-08-20');
+
+      // History returns it under completedDate group '2026-08-20'
+      const h = await getHistoryRequest({ plannerToday: '2026-08-20', q: 'Important Future Once Early' }, tokenA);
+      assert.equal(h.body.groups.length, 1);
+      assert.equal(h.body.groups[0].date, '2026-08-20');
+      assert.equal(h.body.groups[0].items.length, 1);
+      assert.equal(h.body.groups[0].items[0].taskId, taskId);
+      assert.equal(h.body.groups[0].items[0].title, 'Important Future Once Early');
+    });
+
+    await sub.test('5. Historical Important completion still appears', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Historical Important Backfill',
+          isImportant: true,
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-16' }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const scheduleId = (await createRes.json()).task.schedules[0].id;
+
+      await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-16',
+          scheduleId,
+          scheduledDate: '2026-08-16'
+        })
+      });
+
+      const h = await getHistoryRequest({ plannerToday: '2026-08-20', q: 'Historical Important Backfill' }, tokenA);
+      assert.equal(h.body.groups.length, 1);
+      assert.equal(h.body.groups[0].date, '2026-08-16');
+      assert.equal(h.body.groups[0].items.length, 1);
+      assert.equal(h.body.groups[0].items[0].taskId, taskId);
+    });
+
+    await sub.test('6. Non-important completion remains excluded', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Non-important Today Task',
+          isImportant: false,
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-20' }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const scheduleId = (await createRes.json()).task.schedules[0].id;
+
+      await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
+          scheduleId,
+          scheduledDate: '2026-08-20'
+        })
+      });
+
+      const h = await getHistoryRequest({ plannerToday: '2026-08-20', q: 'Non-important Today Task' }, tokenA);
+      assert.deepEqual(h.body.groups, []);
+    });
+
+    await sub.test('7. Recurring completion remains excluded', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Recurring Today Task',
+          isImportant: true,
+          plannerToday: '2026-08-20',
+          schedule: { type: 'INTERVAL_DAYS', startDate: '2026-08-20', intervalDays: 1 }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const scheduleId = (await createRes.json()).task.schedules[0].id;
+
+      await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
+          scheduleId,
+          scheduledDate: '2026-08-20'
+        })
+      });
+
+      const h = await getHistoryRequest({ plannerToday: '2026-08-20', q: 'Recurring Today Task' }, tokenA);
+      assert.deepEqual(h.body.groups, []);
+    });
+
+    await sub.test('8. completedDate after plannerToday remains rejected', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Future Task Reject',
+          isImportant: true,
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-22' }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const scheduleId = (await createRes.json()).task.schedules[0].id;
+
+      const compRes = await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-21',
+          scheduleId,
+          scheduledDate: '2026-08-22'
+        })
+      });
+      assert.equal(compRes.status, 400);
+      const body = await compRes.json();
+      assert.match(body.error.message, /completedDate cannot be after plannerToday/);
+    });
+
+    await sub.test('9. existing History search behavior remains unchanged for today completions', async () => {
+      const taskId = getValidId();
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Searchable Target Task Today',
+          isImportant: true,
+          plannerToday: '2026-08-20',
+          schedule: { type: 'ONCE', startDate: '2026-08-20' }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const scheduleId = (await createRes.json()).task.schedules[0].id;
+
+      await fetch(`${baseUrl}/tasks/${taskId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenA}` },
+        body: JSON.stringify({
+          plannerToday: '2026-08-20',
+          completedDate: '2026-08-20',
+          scheduleId,
+          scheduledDate: '2026-08-20'
+        })
+      });
+
+      // Match query
+      const match = await getHistoryRequest({ plannerToday: '2026-08-20', q: 'sEaRcHaBlE tArGeT' }, tokenA);
+      assert.equal(match.body.groups.length, 1);
+      assert.equal(match.body.groups[0].items[0].title, 'Searchable Target Task Today');
+
+      // Non-match query
+      const noMatch = await getHistoryRequest({ plannerToday: '2026-08-20', q: 'unrelated string' }, tokenA);
+      assert.deepEqual(noMatch.body.groups, []);
     });
   });
 });
