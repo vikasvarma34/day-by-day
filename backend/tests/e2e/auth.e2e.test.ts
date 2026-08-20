@@ -73,7 +73,7 @@ test('HTTP Authentication E2E Suite', async (t) => {
 
     await ingressSuite.test('oversized JSON payload (>64 KB) returns HTTP 413 PAYLOAD_TOO_LARGE', async () => {
       const largePayload = {
-        email: 'test@example.com',
+        email: 'test@daybyday-test.invalid',
         password: 'ValidPassword12345!',
         padding: 'A'.repeat(70 * 1024), // 70 KB
       };
@@ -265,7 +265,7 @@ test('HTTP Authentication E2E Suite', async (t) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: 'unknown.user.12345@example.com',
+          email: 'unknown.user.12345@daybyday-test.invalid',
           password: 'ValidPassword12345!',
         }),
       });
@@ -286,7 +286,7 @@ test('HTTP Authentication E2E Suite', async (t) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: 'attacker.random.target@example.com',
+            email: 'attacker.random.target@daybyday-test.invalid',
             password: 'ValidPassword12345!',
           }),
         });
@@ -307,7 +307,7 @@ test('HTTP Authentication E2E Suite', async (t) => {
       const res1 = await fetch(`${baseUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'test@example.com' }),
+        body: JSON.stringify({ email: 'test@daybyday-test.invalid' }),
       });
       assert.equal(res1.status, 400);
       const data1 = await res1.json();
@@ -1062,7 +1062,7 @@ test('HTTP Authentication E2E Suite', async (t) => {
         body: JSON.stringify({
           id: '00000000-0000-0000-0000-000000000000',
           userId: '00000000-0000-0000-0000-000000000000',
-          email: 'hacked@example.com',
+          email: 'hacked@daybyday-test.invalid',
           password: 'HackedPassword12345!',
           passwordHash: 'dummy_hash',
           firstName: 'SafeUpdate',

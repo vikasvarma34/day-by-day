@@ -58,7 +58,7 @@ test('Authentication Service Integration Suite', async (t) => {
     });
 
     await loginSuite.test('unknown email fails with generic AuthenticationError and creates zero throttle/session rows', async () => {
-      const unknownEmail = 'nonexistent.user.12345@example.com';
+      const unknownEmail = 'nonexistent.user.12345@daybyday-test.invalid';
       await assert.rejects(
         async () => {
           await authService.login(unknownEmail, 'ValidPassword12345!');
@@ -105,7 +105,7 @@ test('Authentication Service Integration Suite', async (t) => {
 
       await assert.rejects(
         async () => {
-          await authService.login('valid@example.com', 'short');
+          await authService.login('valid@daybyday-test.invalid', 'short');
         },
         AuthenticationError
       );

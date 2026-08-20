@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getPool, closePool } from '../../src/db/pool';
 import { createUserAccount } from '../../src/auth/user-creation';
-import { deleteTestUserById } from './auth-test-fixtures';
+import { deleteTestUserById, generateAutomatedTestEmail } from './auth-test-fixtures';
 
 test('Planner Schema Integration Suite', async (t) => {
   const pool = getPool();
@@ -10,7 +10,7 @@ test('Planner Schema Integration Suite', async (t) => {
   let taskId: string;
 
   t.before(async () => {
-    const email = `planner.test.${Date.now()}@example.com`;
+    const email = generateAutomatedTestEmail('planner.schema');
     const user = await createUserAccount({
       email,
       password: 'StrongPassword12345!',

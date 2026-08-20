@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createUserAccount, UserCreationError } from '../../src/auth/user-creation';
 import { verifyPassword } from '../../src/security/password';
 import { getPool, closePool } from '../../src/db/pool';
-import { deleteTestUserById } from './auth-test-fixtures';
+import { deleteTestUserById, generateAutomatedTestEmail } from './auth-test-fixtures';
 
 test('User Creation Integration Suite', async (t) => {
   const pool = getPool();
@@ -17,7 +17,7 @@ test('User Creation Integration Suite', async (t) => {
   });
 
   function generateUniqueEmail(label: string): string {
-    return `test.create.${Date.now()}.${Math.floor(Math.random() * 100000)}.${label}@example.com`;
+    return generateAutomatedTestEmail(`create.${label}`);
   }
 
   await t.test('valid user creation data succeeds and stores Argon2 hash in database', async () => {
