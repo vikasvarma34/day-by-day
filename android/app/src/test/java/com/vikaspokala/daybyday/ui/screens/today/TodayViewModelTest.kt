@@ -246,10 +246,67 @@ class TodayViewModelTest {
         assertEquals("Good evening, Vicky", TodayViewModel.getGreeting(LocalTime.of(19, 0)))
         assertEquals("Good evening, Vicky", TodayViewModel.getGreeting(LocalTime.of(20, 59)))
 
-        // 21:00 to 04:59 -> Good night
+        // 21:00 to 21:59 -> Good night
         assertEquals("Good night, Vicky", TodayViewModel.getGreeting(LocalTime.of(21, 0)))
-        assertEquals("Good night, Vicky", TodayViewModel.getGreeting(LocalTime.of(23, 30)))
-        assertEquals("Good night, Vicky", TodayViewModel.getGreeting(LocalTime.of(0, 0)))
-        assertEquals("Good night, Vicky", TodayViewModel.getGreeting(LocalTime.of(4, 59)))
+        assertEquals("Good night, Vicky", TodayViewModel.getGreeting(LocalTime.of(21, 59)))
+
+        // 22:00 to 04:59 -> Time to rest
+        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(22, 0)))
+        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(23, 30)))
+        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(23, 59)))
+        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(0, 0)))
+        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(4, 59)))
+    }
+
+    @Test
+    fun `1 21-59 does not show Time to rest`() {
+        val greeting = TodayViewModel.getGreeting(LocalTime.of(21, 59), name = "Alex")
+        assertEquals("Good night, Alex", greeting)
+        assertFalse(greeting.contains("Time to rest"))
+    }
+
+    @Test
+    fun `2 22-00 shows Time to rest, name`() {
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(22, 0), name = "Alex"))
+    }
+
+    @Test
+    fun `3 23-59 shows Time to rest, name`() {
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(23, 59), name = "Alex"))
+    }
+
+    @Test
+    fun `4 existing overnight Good-night period uses Time to rest`() {
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(0, 0), name = "Alex"))
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(2, 30), name = "Alex"))
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(4, 59), name = "Alex"))
+    }
+
+    @Test
+    fun `5 morning greeting remains unchanged`() {
+        assertEquals("Good morning, Alex", TodayViewModel.getGreeting(LocalTime.of(5, 0), name = "Alex"))
+        assertEquals("Good morning, Alex", TodayViewModel.getGreeting(LocalTime.of(8, 30), name = "Alex"))
+        assertEquals("Good morning, Alex", TodayViewModel.getGreeting(LocalTime.of(11, 59), name = "Alex"))
+    }
+
+    @Test
+    fun `6 afternoon greeting remains unchanged`() {
+        assertEquals("Good afternoon, Alex", TodayViewModel.getGreeting(LocalTime.of(12, 0), name = "Alex"))
+        assertEquals("Good afternoon, Alex", TodayViewModel.getGreeting(LocalTime.of(14, 15), name = "Alex"))
+        assertEquals("Good afternoon, Alex", TodayViewModel.getGreeting(LocalTime.of(16, 59), name = "Alex"))
+    }
+
+    @Test
+    fun `7 evening greeting remains unchanged`() {
+        assertEquals("Good evening, Alex", TodayViewModel.getGreeting(LocalTime.of(17, 0), name = "Alex"))
+        assertEquals("Good evening, Alex", TodayViewModel.getGreeting(LocalTime.of(19, 0), name = "Alex"))
+        assertEquals("Good evening, Alex", TodayViewModel.getGreeting(LocalTime.of(20, 59), name = "Alex"))
+    }
+
+    @Test
+    fun `8 nickname and name selection remains unchanged`() {
+        assertEquals("Time to rest, CustomNickname", TodayViewModel.getGreeting(LocalTime.of(22, 30), name = "CustomNickname"))
+        assertEquals("Time to rest", TodayViewModel.getGreeting(LocalTime.of(22, 30), name = "  "))
+        assertEquals("Good morning", TodayViewModel.getGreeting(LocalTime.of(9, 0), name = ""))
     }
 }

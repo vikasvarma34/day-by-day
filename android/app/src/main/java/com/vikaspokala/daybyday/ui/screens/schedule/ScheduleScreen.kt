@@ -205,13 +205,14 @@ fun ScheduleScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
+                            .padding(horizontal = 20.dp, vertical = 48.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No tasks for this date",
+                            text = "Nothing planned for this day.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = DayByDaySecondaryText
+                            color = DayByDaySecondaryText,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }

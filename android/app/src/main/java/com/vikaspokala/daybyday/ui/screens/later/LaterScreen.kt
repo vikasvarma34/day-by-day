@@ -81,6 +81,25 @@ fun LaterScreen(
                 }
             }
 
+            // Empty state when no Later tasks exist
+            if (tasks.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 72.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Nothing waiting for later.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = DayByDaySecondaryText,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
+
             // Active Later Task List
             items(activeTasks, key = { it.id }) { task ->
                 Box(

@@ -137,17 +137,18 @@ fun HistoryScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
+                            .padding(horizontal = 20.dp, vertical = 64.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = if (searchQuery.trim().isNotEmpty()) {
                                 "No matching important history."
                             } else {
-                                "No important history yet."
+                                "No completed important tasks yet."
                             },
                             style = MaterialTheme.typography.bodyMedium,
-                            color = DayByDaySecondaryText
+                            color = DayByDaySecondaryText,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }

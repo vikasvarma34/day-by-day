@@ -193,7 +193,8 @@ class TodayViewModel(
                 in (5 * 60)..(11 * 60 + 59) -> "Good morning"
                 in (12 * 60)..(16 * 60 + 59) -> "Good afternoon"
                 in (17 * 60)..(20 * 60 + 59) -> "Good evening"
-                else -> "Good night"
+                in (21 * 60)..(21 * 60 + 59) -> "Good night"
+                else -> "Time to rest"
             }
             return if (name.isNotBlank()) "$greetingText, $name" else greetingText
         }
