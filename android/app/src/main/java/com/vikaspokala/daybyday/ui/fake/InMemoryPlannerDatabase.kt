@@ -774,9 +774,10 @@ class InMemoryPlannerDatabase(
     fun completeScheduledOccurrence(
         taskId: String,
         scheduledDate: LocalDate,
-        completedDate: LocalDate = scheduledDate,
+        completedDate: LocalDate? = null,
         plannerToday: LocalDate = LocalDate.now()
     ) {
+        val effectiveCompletedDate = completedDate ?: if (scheduledDate.isBefore(plannerToday)) scheduledDate else plannerToday
         val current = _state.value
         val schedule = current.schedules.find {
             it.taskId == taskId && isScheduleOccurringOnDate(it, scheduledDate)
@@ -786,7 +787,7 @@ class InMemoryPlannerDatabase(
             taskId = taskId,
             scheduleId = schedule.id,
             scheduledDate = scheduledDate,
-            completedDate = completedDate,
+            completedDate = effectiveCompletedDate,
             plannerToday = plannerToday
         )
     }
