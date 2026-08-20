@@ -103,7 +103,7 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun `4 completion on plannerToday does not appear`() {
+    fun `4 completion on plannerToday appears in History today`() {
         val today = referenceDate
         val taskId = database.createDatedTask(
             title = "Finished today's important task",
@@ -123,8 +123,8 @@ class HistoryViewModelTest {
         )
 
         val grouped = viewModel.getFilteredGroupedHistory(plannerToday = today)
-        assertFalse("Tasks completed today must not appear in history before tomorrow", grouped.containsKey(today))
-        assertFalse(grouped.values.flatten().any { it.id == taskId })
+        assertTrue("Tasks completed today must appear in history on the same day", grouped.containsKey(today))
+        assertTrue(grouped.values.flatten().any { it.id == taskId })
     }
 
     @Test
@@ -300,5 +300,240 @@ class HistoryViewModelTest {
     fun `flow collection works reactively with observeHistoryTasks`() = runBlocking {
         val tasksFromFlow = viewModel.tasks.first()
         assertTrue(tasksFromFlow.any { it.title == "Prep presentation slides" })
+    }
+
+    // ========================================================================
+    // SAME-DAY HISTORY TESTS
+    // ========================================================================
+
+    @Test
+    fun `same-day - 1 Important ONCE completed today appears today`() {
+        val taskId = database.createDatedTask(
+            title = "Crucial Report Today",
+            date = referenceDate,
+            recurrence = Recurrence.Once,
+            isImportant = true,
+            plannerToday = referenceDate
+        )
+        val scheduleId = database.schedules.value.first { it.taskId == taskId }.id
+
+        database.completeTask(
+            taskId = taskId,
+            scheduleId = scheduleId,
+            scheduledDate = referenceDate,
+            completedDate = referenceDate,
+            plannerToday = referenceDate
+        )
+
+        val grouped = viewModel.getFilteredGroupedHistory()
+        assertTrue("Today's date must be in history", grouped.containsKey(referenceDate))
+        val itemsToday = grouped[referenceDate].orEmpty()
+        assertTrue(itemsToday.any { it.id == taskId && it.title == "Crucial Report Today" })
+    }
+
+    @Test
+    fun `same-day - 2 Important direct-Later completed today appears today`() {
+        val taskId = database.createLaterTask(
+            title = "Crucial Later Idea",
+            note = null,
+            isImportant = true
+        )
+
+        database.completeTask(
+            taskId = taskId,
+            scheduleId = null,
+            scheduledDate = null,
+            completedDate = referenceDate,
+            plannerToday = referenceDate
+        )
+
+        val grouped = viewModel.getFilteredGroupedHistory()
+        assertTrue("Today's date must be in history", grouped.containsKey(referenceDate))
+        val itemsToday = grouped[referenceDate].orEmpty()
+        assertTrue(itemsToday.any { it.id == taskId && it.title == "Crucial Later Idea" })
+    }
+
+    @Test
+    fun `same-day - 3 historical Important completion still appears`() {
+        val pastDate = referenceDate.minusDays(4)
+        val taskId = database.createDatedTask(
+            title = "Historical Important Done",
+            date = pastDate,
+            recurrence = Recurrence.Once,
+            isImportant = true,
+            plannerToday = referenceDate
+        )
+        val scheduleId = database.schedules.value.first { it.taskId == taskId }.id
+
+        database.completeTask(
+            taskId = taskId,
+            scheduleId = scheduleId,
+            scheduledDate = pastDate,
+            completedDate = pastDate,
+            plannerToday = referenceDate
+        )
+
+        val grouped = viewModel.getFilteredGroupedHistory()
+        assertTrue("Historical date must be in history", grouped.containsKey(pastDate))
+        assertTrue(grouped[pastDate].orEmpty().any { it.id == taskId })
+    }
+
+    @Test
+    fun `same-day - 4 non-important completion remains excluded`() {
+        val taskId = database.createDatedTask(
+            title = "Casual Errands Today",
+            date = referenceDate,
+            recurrence = Recurrence.Once,
+            isImportant = false,
+            plannerToday = referenceDate
+        )
+        val scheduleId = database.schedules.value.first { it.taskId == taskId }.id
+
+        database.completeTask(
+            taskId = taskId,
+            scheduleId = scheduleId,
+            scheduledDate = referenceDate,
+            completedDate = referenceDate,
+            plannerToday = referenceDate
+        )
+
+        assertFalse(viewModel.tasks.value.any { it.id == taskId })
+    }
+
+    @Test
+    fun `same-day - 5 recurring completion remains excluded`() {
+        val taskId = database.createDatedTask(
+            title = "Daily Standup Meeting",
+            date = referenceDate,
+            recurrence = Recurrence.IntervalDays(1),
+            isImportant = true,
+            plannerToday = referenceDate
+        )
+        val scheduleId = database.schedules.value.first { it.taskId == taskId }.id
+
+        database.completeTask(
+            taskId = taskId,
+            scheduleId = scheduleId,
+            scheduledDate = referenceDate,
+            completedDate = referenceDate,
+            plannerToday = referenceDate
+        )
+
+        assertFalse(viewModel.tasks.value.any { it.id == taskId })
+    }
+
+    @Test
+    fun `same-day - 6 future completedDate remains excluded`() {
+        val futureDate = referenceDate.plusDays(2)
+        val task = com.vikaspokala.daybyday.ui.fake.TaskEntity(id = "future_task", title = "Future Completion", isImportant = true)
+        val schedule = com.vikaspokala.daybyday.ui.fake.ScheduleEntity(
+            id = "future_sched", taskId = "future_task", scheduleType = com.vikaspokala.daybyday.ui.fake.ScheduleType.ONCE,
+            startDate = futureDate, endDate = futureDate
+        )
+        val completion = com.vikaspokala.daybyday.ui.fake.CompletionEntity(
+            id = "future_comp", taskId = "future_task", scheduleId = "future_sched",
+            scheduledDate = futureDate, completedDate = futureDate,
+            completedAtEpochMillis = System.currentTimeMillis(), titleSnapshot = "Future Completion", isImportantSnapshot = true
+        )
+        val customDb = InMemoryPlannerDatabase(
+            seed = CanonicalPlannerSeed(listOf(task), listOf(schedule), listOf(completion)),
+            referenceDate = referenceDate
+        )
+
+        val historyTasks = customDb.getHistoryTasks(plannerToday = referenceDate)
+        assertFalse(historyTasks.any { it.id == "future_task" })
+    }
+
+    @Test
+    fun `same-day - 7 marking a completed-today eligible task Important makes it appear immediately`() {
+        val taskId = database.createDatedTask(
+            title = "Initially Non-Important Task",
+            date = referenceDate,
+            recurrence = Recurrence.Once,
+            isImportant = false,
+            plannerToday = referenceDate
+        )
+        val scheduleId = database.schedules.value.first { it.taskId == taskId }.id
+
+        database.completeTask(
+            taskId = taskId,
+            scheduleId = scheduleId,
+            scheduledDate = referenceDate,
+            completedDate = referenceDate,
+            plannerToday = referenceDate
+        )
+
+        assertFalse(viewModel.tasks.value.any { it.id == taskId })
+
+        // Mark Important
+        database.updateTask(
+            taskId = taskId,
+            title = "Initially Non-Important Task",
+            isImportant = true,
+            plannerToday = referenceDate
+        )
+
+        assertTrue(viewModel.tasks.value.any { it.id == taskId })
+        val grouped = viewModel.getFilteredGroupedHistory()
+        assertTrue(grouped[referenceDate].orEmpty().any { it.id == taskId })
+    }
+
+    @Test
+    fun `same-day - 8 unmarking removes it immediately`() {
+        val taskId = database.createDatedTask(
+            title = "Initially Important Task",
+            date = referenceDate,
+            recurrence = Recurrence.Once,
+            isImportant = true,
+            plannerToday = referenceDate
+        )
+        val scheduleId = database.schedules.value.first { it.taskId == taskId }.id
+
+        database.completeTask(
+            taskId = taskId,
+            scheduleId = scheduleId,
+            scheduledDate = referenceDate,
+            completedDate = referenceDate,
+            plannerToday = referenceDate
+        )
+
+        assertTrue(viewModel.tasks.value.any { it.id == taskId })
+
+        // Unmark Important
+        database.updateTask(
+            taskId = taskId,
+            title = "Initially Important Task",
+            isImportant = false,
+            plannerToday = referenceDate
+        )
+
+        assertFalse(viewModel.tasks.value.any { it.id == taskId })
+    }
+
+    @Test
+    fun `same-day - 9 History search still works for same-day items`() {
+        val taskId = database.createDatedTask(
+            title = "Searchable Unique Keyword Today",
+            date = referenceDate,
+            recurrence = Recurrence.Once,
+            isImportant = true,
+            plannerToday = referenceDate
+        )
+        val scheduleId = database.schedules.value.first { it.taskId == taskId }.id
+
+        database.completeTask(
+            taskId = taskId,
+            scheduleId = scheduleId,
+            scheduledDate = referenceDate,
+            completedDate = referenceDate,
+            plannerToday = referenceDate
+        )
+
+        val match = viewModel.getFilteredGroupedHistory("uNiQuE kEyWoRd")
+        assertEquals(1, match.size)
+        assertTrue(match[referenceDate].orEmpty().any { it.id == taskId })
+
+        val noMatch = viewModel.getFilteredGroupedHistory("unrelatedNonExistent")
+        assertTrue(noMatch.isEmpty())
     }
 }

@@ -203,7 +203,7 @@ class HistorySnapshotSemanticsTest {
     }
 
     @Test
-    fun `14 completion made today remains invisible from History today even if Important`() {
+    fun `14 completion made today is visible in History today when Important`() {
         val today = referenceDate
         val taskId = database.createDatedTask(title = "Task Completed Today", date = today, isImportant = true, plannerToday = today)
         val scheduleId = database.schedules.value.first { it.taskId == taskId }.id
@@ -212,8 +212,8 @@ class HistorySnapshotSemanticsTest {
         // Retained in database
         assertNotNull(database.completions.value.find { it.taskId == taskId })
 
-        // But invisible in History because completedDate is not before plannerToday
+        // And visible in History on the same day
         val visible = historyViewModel.getFilteredGroupedHistory(plannerToday = today)
-        assertFalse("Completed today must not appear in history today", visible.values.flatten().any { it.id == taskId })
+        assertTrue("Completed today must appear in history today", visible.values.flatten().any { it.id == taskId })
     }
 }

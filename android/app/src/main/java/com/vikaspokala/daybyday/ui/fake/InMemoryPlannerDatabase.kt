@@ -954,7 +954,7 @@ class InMemoryPlannerDatabase(
 
         return state.completions
             .filter { comp ->
-                comp.completedDate.isBefore(plannerToday) &&
+                !comp.completedDate.isAfter(plannerToday) &&
                     comp.isImportantSnapshot &&
                     (comp.scheduleId == null || scheduleMap[comp.scheduleId]?.scheduleType == ScheduleType.ONCE)
             }

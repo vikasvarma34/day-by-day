@@ -723,7 +723,8 @@ class InMemoryPlannerDatabaseTest {
         val db = InMemoryPlannerDatabase(seed = CanonicalPlannerSeed(listOf(task), listOf(schedule), listOf(completion)))
 
         val history = db.getHistoryTasks(plannerToday = fixedToday)
-        assertEquals("History must exclude completions made on plannerToday", 0, history.size)
+        assertEquals("History must include eligible completions made on plannerToday", 1, history.size)
+        assertEquals("Today Task", history[0].title)
     }
 
     @Test
@@ -1504,7 +1505,7 @@ class InMemoryPlannerDatabaseTest {
     }
 
     @Test
-    fun testCompletionMadeOnPlannerTodayRemainsOutsideHistoryThatDay() {
+    fun testCompletionMadeOnPlannerTodayAppearsInHistoryThatDay() {
         val db = InMemoryPlannerDatabase(seed = CanonicalPlannerSeed(emptyList(), emptyList(), emptyList()))
         val taskId = db.createDatedTask(title = "Today Done", isImportant = true, date = fixedToday, plannerToday = fixedToday)
         val scheduleId = db.schedules.value.first { it.taskId == taskId }.id
@@ -1513,10 +1514,11 @@ class InMemoryPlannerDatabaseTest {
 
         // Visible in today's dated tasks as completed
         assertTrue(db.getTasksForDate(fixedToday)[0].isCompleted)
-        // But NOT in History on the day it was completed
-        assertEquals(0, db.getHistoryTasks(plannerToday = fixedToday).size)
+        // And IN History on the day it was completed
+        assertEquals(1, db.getHistoryTasks(plannerToday = fixedToday).size)
+        assertEquals("Today Done", db.getHistoryTasks(plannerToday = fixedToday)[0].title)
 
-        // When plannerToday advances tomorrow, it appears in History!
+        // When plannerToday advances tomorrow, it still appears in History!
         val historyTomorrow = db.getHistoryTasks(plannerToday = fixedToday.plusDays(1))
         assertEquals(1, historyTomorrow.size)
         assertEquals("Today Done", historyTomorrow[0].title)

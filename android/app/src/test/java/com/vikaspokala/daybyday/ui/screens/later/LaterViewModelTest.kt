@@ -104,16 +104,19 @@ class LaterViewModelTest {
     }
 
     @Test
-    fun `7 completed Important Later becomes History eligible on subsequent days`() {
+    fun `7 completed Important Later becomes History eligible immediately today`() {
         val taskId = viewModel.addTask(title = "Important Later", note = null, isImportant = true)
 
         viewModel.toggleCompletion(taskId, completionDate = fixedToday)
 
-        // Today: visible in completed Later, but not in history yet
+        // Today: visible in completed Later, and in history today
         assertEquals(1, viewModel.getCompletedTasks().size)
-        assertFalse(historyViewModel.getFilteredGroupedHistory().containsKey(fixedToday))
+        assertTrue(historyViewModel.getFilteredGroupedHistory().containsKey(fixedToday))
+        val todayItem = historyViewModel.getFilteredGroupedHistory()[fixedToday]?.find { it.id == taskId }
+        assertNotNull(todayItem)
+        assertEquals("Important Later", todayItem?.title)
 
-        // Subsequent day (tomorrow): History screen created on tomorrow sees the item!
+        // Subsequent day (tomorrow): History screen created on tomorrow still sees the item!
         val historyViewModelTomorrow = HistoryViewModel(database = database, referenceDate = fixedToday.plusDays(1))
         val historyTomorrow = historyViewModelTomorrow.getFilteredGroupedHistory()
         assertTrue(historyTomorrow.containsKey(fixedToday))

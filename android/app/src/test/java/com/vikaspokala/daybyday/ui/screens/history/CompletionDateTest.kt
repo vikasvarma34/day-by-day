@@ -77,12 +77,12 @@ class CompletionDateTest {
     }
 
     @Test
-    fun `5 important ONCE completed today does not appear in History today`() {
+    fun `5 important ONCE completed today appears in History today`() {
         val taskId = todayViewModel.addTask(title = "Task", date = actualToday, isImportant = true)
         todayViewModel.toggleCompletion(taskId, scheduledDate = actualToday)
         
         val grouped = historyViewModel.getFilteredGroupedHistory()
-        assertFalse("Must not appear in history grouped view today", grouped.values.flatten().any { it.id == taskId })
+        assertTrue("Must appear in history grouped view today", grouped.values.flatten().any { it.id == taskId })
     }
 
     @Test
