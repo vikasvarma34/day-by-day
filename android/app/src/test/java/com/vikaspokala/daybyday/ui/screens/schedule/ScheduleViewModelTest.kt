@@ -231,4 +231,136 @@ class ScheduleViewModelTest {
         assertEquals("Updated Schedule Note", updatedTask.title)
         assertEquals("Modified note string", updatedTask.note)
     }
+
+    @Test
+    fun `14 timed Today task - star - time unchanged`() {
+        val taskId = viewModel.addTask(
+            title = "Morning Coffee",
+            date = testToday,
+            time = "8:30 AM",
+            isImportant = false
+        )
+        viewModel.selectDate(testToday)
+        val initial = viewModel.tasks.value.first { it.id == taskId }
+        assertEquals("8:30 AM", initial.time)
+        assertFalse(initial.isImportant)
+
+        viewModel.toggleImportant(taskId)
+
+        val afterStar = viewModel.tasks.value.first { it.id == taskId }
+        assertTrue(afterStar.isImportant)
+        assertEquals("8:30 AM", afterStar.time)
+    }
+
+    @Test
+    fun `15 timed Today task - unstar - time unchanged`() {
+        val taskId = viewModel.addTask(
+            title = "Important Review",
+            date = testToday,
+            time = "10:00 AM",
+            isImportant = true
+        )
+        viewModel.selectDate(testToday)
+        val initial = viewModel.tasks.value.first { it.id == taskId }
+        assertEquals("10:00 AM", initial.time)
+        assertTrue(initial.isImportant)
+
+        viewModel.toggleImportant(taskId)
+
+        val afterUnstar = viewModel.tasks.value.first { it.id == taskId }
+        assertFalse(afterUnstar.isImportant)
+        assertEquals("10:00 AM", afterUnstar.time)
+    }
+
+    @Test
+    fun `16 timed future task - star - time unchanged`() {
+        val futureDate = testToday.plusDays(3)
+        val taskId = viewModel.addTask(
+            title = "Future Dentist",
+            date = futureDate,
+            time = "2:30 PM",
+            isImportant = false
+        )
+        viewModel.selectDate(futureDate)
+        val initial = viewModel.tasks.value.first { it.id == taskId }
+        assertEquals("2:30 PM", initial.time)
+        assertFalse(initial.isImportant)
+
+        viewModel.toggleImportant(taskId)
+
+        val afterStar = viewModel.tasks.value.first { it.id == taskId }
+        assertTrue(afterStar.isImportant)
+        assertEquals("2:30 PM", afterStar.time)
+    }
+
+    @Test
+    fun `17 reminder remains unchanged after star`() {
+        val taskId = viewModel.addTask(
+            title = "Flight Checkin",
+            date = testToday,
+            time = "11:00 AM",
+            reminder = "30 minutes before",
+            isImportant = false
+        )
+        viewModel.selectDate(testToday)
+        val initial = viewModel.tasks.value.first { it.id == taskId }
+        assertEquals("30 minutes before", initial.reminder)
+
+        viewModel.toggleImportant(taskId)
+
+        val afterStar = viewModel.tasks.value.first { it.id == taskId }
+        assertTrue(afterStar.isImportant)
+        assertEquals("30 minutes before", afterStar.reminder)
+        assertEquals("11:00 AM", afterStar.time)
+    }
+
+    @Test
+    fun `18 recurrence remains unchanged after star`() {
+        val recurrence = Recurrence.IntervalDays(2)
+        val taskId = viewModel.addTask(
+            title = "Water Lawn",
+            date = testToday,
+            time = "7:00 AM",
+            recurrence = recurrence,
+            isImportant = false
+        )
+        viewModel.selectDate(testToday)
+        val initial = viewModel.tasks.value.first { it.id == taskId }
+        assertEquals(recurrence, initial.recurrence)
+
+        viewModel.toggleImportant(taskId)
+
+        val afterStar = viewModel.tasks.value.first { it.id == taskId }
+        assertTrue(afterStar.isImportant)
+        assertEquals(recurrence, afterStar.recurrence)
+        assertEquals("7:00 AM", afterStar.time)
+    }
+
+    @Test
+    fun `19 only isImportant changes for an incomplete task`() {
+        val futureDate = testToday.plusDays(4)
+        val recurrence = Recurrence.Weekdays(setOf(1, 3, 5))
+        val taskId = viewModel.addTask(
+            title = "Gym Session",
+            note = "Leg day",
+            date = futureDate,
+            time = "6:00 PM",
+            reminder = "15 minutes before",
+            recurrence = recurrence,
+            isImportant = false
+        )
+        val scheduleBefore = database.schedules.value.first { it.taskId == taskId }
+        val taskBefore = database.tasks.value.first { it.id == taskId }
+
+        viewModel.toggleImportant(taskId)
+
+        val scheduleAfter = database.schedules.value.first { it.taskId == taskId }
+        val taskAfter = database.tasks.value.first { it.id == taskId }
+
+        // ScheduleEntity is completely unchanged
+        assertEquals(scheduleBefore, scheduleAfter)
+
+        // Only isImportant on TaskEntity is modified
+        assertEquals(taskBefore.copy(isImportant = true), taskAfter)
+    }
 }

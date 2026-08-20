@@ -12,13 +12,17 @@ import com.vikaspokala.daybyday.ui.models.Recurrence
 import com.vikaspokala.daybyday.ui.screens.history.HistoryTaskItem
 import com.vikaspokala.daybyday.ui.screens.later.LaterTaskItem
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 enum class ScheduleType {
     ONCE,
@@ -70,36 +74,24 @@ data class PlannerState(
     val completions: List<CompletionEntity> = emptyList()
 )
 
-@OptIn(kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi::class)
-private class DerivedStateFlow<T>(
-    private val parent: StateFlow<PlannerState>,
-    private val selector: (PlannerState) -> T
-) : StateFlow<T> {
-    override val value: T get() = selector(parent.value)
-    override val replayCache: List<T> get() = listOf(value)
-    override suspend fun collect(collector: FlowCollector<T>): Nothing {
-        parent.map { selector(it) }.distinctUntilChanged().collect(collector)
-        kotlinx.coroutines.awaitCancellation()
-    }
-}
-
 class InMemoryPlannerDatabase(
     referenceDate: LocalDate = LocalDate.now(),
     val zoneId: ZoneId = ZoneId.systemDefault(),
-    seed: CanonicalPlannerSeed = FakePlannerData.getCanonicalSeed(referenceDate, zoneId)
+    seed: CanonicalPlannerSeed = FakePlannerData.getCanonicalSeed(referenceDate, zoneId),
+    scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
 ) {
     var nowEpochMillis: () -> Long = { System.currentTimeMillis() }
 
     private val _state = MutableStateFlow(PlannerState())
     val state: StateFlow<PlannerState> = _state.asStateFlow()
 
-    val tasks: StateFlow<List<TaskEntity>> = DerivedStateFlow(_state) { it.tasks }
-    val schedules: StateFlow<List<ScheduleEntity>> = DerivedStateFlow(_state) { it.schedules }
-    val completions: StateFlow<List<CompletionEntity>> = DerivedStateFlow(_state) { it.completions }
-
     init {
         loadCanonicalSeed(seed)
     }
+
+    val tasks: StateFlow<List<TaskEntity>> = _state.map { it.tasks }.stateIn(scope, SharingStarted.Eagerly, _state.value.tasks)
+    val schedules: StateFlow<List<ScheduleEntity>> = _state.map { it.schedules }.stateIn(scope, SharingStarted.Eagerly, _state.value.schedules)
+    val completions: StateFlow<List<CompletionEntity>> = _state.map { it.completions }.stateIn(scope, SharingStarted.Eagerly, _state.value.completions)
 
     @Synchronized
     fun loadCanonicalSeed(seed: CanonicalPlannerSeed) {
@@ -416,12 +408,12 @@ class InMemoryPlannerDatabase(
 
         var newSchedules = current.schedules
 
-        if (existingSchedule != null) {
+        if (existingSchedule != null && date != null) {
             val isHistorical = existingSchedule.startDate.isBefore(plannerToday)
-            val targetDate = date ?: existingSchedule.startDate
+            val targetDate = date
 
             if (isHistorical) {
-                if (date != null && date != existingSchedule.startDate) {
+                if (date != existingSchedule.startDate) {
                     throw IllegalArgumentException("Cannot modify schedule date of a historical task")
                 }
                 if (recurrence != null && scheduleEntityToRecurrence(existingSchedule) != recurrence) {

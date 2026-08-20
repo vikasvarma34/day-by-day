@@ -3,60 +3,26 @@ package com.vikaspokala.daybyday.ui.screens.schedule
 import java.time.LocalDate
 import java.time.YearMonth
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
 import com.vikaspokala.daybyday.ui.models.Recurrence
 import com.vikaspokala.daybyday.ui.screens.later.LaterViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-
-@OptIn(ExperimentalForInheritanceCoroutinesApi::class, ExperimentalCoroutinesApi::class)
-private class DerivedScheduleTasksStateFlow(
-    private val database: InMemoryPlannerDatabase,
-    private val selectedDateFlow: StateFlow<LocalDate>
-) : StateFlow<List<ScheduleTaskItem>> {
-    override val value: List<ScheduleTaskItem> get() = database.getTasksForDate(selectedDateFlow.value)
-    override val replayCache: List<List<ScheduleTaskItem>> get() = listOf(value)
-    override suspend fun collect(collector: FlowCollector<List<ScheduleTaskItem>>): Nothing {
-        selectedDateFlow.flatMapLatest { date ->
-            database.observeTasksForDate(date)
-        }.distinctUntilChanged().collect(collector)
-        awaitCancellation()
-    }
-}
-
-@OptIn(ExperimentalForInheritanceCoroutinesApi::class, ExperimentalCoroutinesApi::class)
-private class DerivedImportantDatesStateFlow(
-    private val database: InMemoryPlannerDatabase,
-    private val monthFlow: StateFlow<YearMonth>
-) : StateFlow<Set<LocalDate>> {
-    override val value: Set<LocalDate> get() {
-        val m = monthFlow.value
-        val start = m.atDay(1).minusDays(7)
-        val end = m.atEndOfMonth().plusDays(7)
-        return database.getImportantDates(start, end)
-    }
-    override val replayCache: List<Set<LocalDate>> get() = listOf(value)
-    override suspend fun collect(collector: FlowCollector<Set<LocalDate>>): Nothing {
-        monthFlow.flatMapLatest { m ->
-            val start = m.atDay(1).minusDays(7)
-            val end = m.atEndOfMonth().plusDays(7)
-            database.observeImportantDates(start, end)
-        }.distinctUntilChanged().collect(collector)
-        awaitCancellation()
-    }
-}
 
 class ScheduleViewModel(
     private val database: InMemoryPlannerDatabase = InMemoryPlannerDatabase.defaultDatabase,
-    private val plannerTodayProvider: () -> LocalDate = { LocalDate.now() }
+    private val plannerTodayProvider: () -> LocalDate = { LocalDate.now() },
+    scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
 ) : ViewModel() {
 
     constructor(referenceDate: LocalDate) : this(
@@ -75,9 +41,34 @@ class ScheduleViewModel(
     private val _selectedDate = MutableStateFlow(plannerTodayProvider())
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
 
-    val tasks: StateFlow<List<ScheduleTaskItem>> = DerivedScheduleTasksStateFlow(database, _selectedDate)
+    fun getPlannerToday(): LocalDate = plannerTodayProvider()
 
-    val importantDates: StateFlow<Set<LocalDate>> = DerivedImportantDatesStateFlow(database, _currentMonth)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val tasks: StateFlow<List<ScheduleTaskItem>> = _selectedDate
+        .flatMapLatest { date -> database.observeTasksForDate(date) }
+        .stateIn(
+            scope = scope,
+            started = SharingStarted.Eagerly,
+            initialValue = database.getTasksForDate(_selectedDate.value)
+        )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val importantDates: StateFlow<Set<LocalDate>> = _currentMonth
+        .flatMapLatest { m ->
+            val start = m.atDay(1).minusDays(7)
+            val end = m.atEndOfMonth().plusDays(7)
+            database.observeImportantDates(start, end)
+        }
+        .stateIn(
+            scope = scope,
+            started = SharingStarted.Eagerly,
+            initialValue = run {
+                val m = _currentMonth.value
+                val start = m.atDay(1).minusDays(7)
+                val end = m.atEndOfMonth().plusDays(7)
+                database.getImportantDates(start, end)
+            }
+        )
 
     fun selectDate(date: LocalDate) {
         _selectedDate.value = date

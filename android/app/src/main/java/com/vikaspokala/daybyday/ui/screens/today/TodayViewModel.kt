@@ -7,30 +7,22 @@ import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
 import com.vikaspokala.daybyday.ui.models.Recurrence
 import com.vikaspokala.daybyday.ui.screens.later.LaterViewModel
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleTaskItem
-import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-
-@OptIn(ExperimentalForInheritanceCoroutinesApi::class)
-private class DerivedDatedTasksStateFlow(
-    private val database: InMemoryPlannerDatabase,
-    private val dateProvider: () -> LocalDate
-) : StateFlow<List<ScheduleTaskItem>> {
-    override val value: List<ScheduleTaskItem> get() = database.getTasksForDate(dateProvider())
-    override val replayCache: List<List<ScheduleTaskItem>> get() = listOf(value)
-    override suspend fun collect(collector: FlowCollector<List<ScheduleTaskItem>>): Nothing {
-        database.observeTasksForDate(dateProvider()).collect(collector)
-        awaitCancellation()
-    }
-}
 
 class TodayViewModel(
     private val database: InMemoryPlannerDatabase = InMemoryPlannerDatabase.defaultDatabase,
-    private val plannerTodayProvider: () -> LocalDate = { LocalDate.now() }
+    private val plannerTodayProvider: () -> LocalDate = { LocalDate.now() },
+    scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
 ) : ViewModel() {
 
     constructor(referenceDate: LocalDate) : this(
@@ -46,7 +38,16 @@ class TodayViewModel(
     private val _selectedDate = MutableStateFlow(plannerTodayProvider())
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
 
-    val tasks: StateFlow<List<ScheduleTaskItem>> = DerivedDatedTasksStateFlow(database, { _selectedDate.value })
+    fun getPlannerToday(): LocalDate = plannerTodayProvider()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val tasks: StateFlow<List<ScheduleTaskItem>> = _selectedDate
+        .flatMapLatest { date -> database.observeTasksForDate(date) }
+        .stateIn(
+            scope = scope,
+            started = SharingStarted.Eagerly,
+            initialValue = database.getTasksForDate(_selectedDate.value)
+        )
 
     fun selectPreviousDay() {
         _selectedDate.update { it.minusDays(1) }

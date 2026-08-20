@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +53,29 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 import com.vikaspokala.daybyday.ui.components.ChooseRepeatModal
 import com.vikaspokala.daybyday.ui.models.toDisplayString
 
+fun parseTaskDate(dateStr: String?, referenceDate: java.time.LocalDate): java.time.LocalDate? {
+    if (dateStr.isNullOrEmpty()) return null
+    return try {
+        val formatter = java.time.format.DateTimeFormatterBuilder()
+            .appendPattern("EEEE, d MMMM")
+            .parseDefaulting(java.time.temporal.ChronoField.YEAR, referenceDate.year.toLong())
+            .toFormatter(Locale.getDefault())
+        java.time.LocalDate.parse(dateStr, formatter)
+    } catch (e: Exception) {
+        try {
+            val formatterWithYear = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault())
+            val withYearStr = if (!dateStr.contains(referenceDate.year.toString())) "$dateStr ${referenceDate.year}" else dateStr
+            java.time.LocalDate.parse(withYearStr, formatterWithYear)
+        } catch (e2: Exception) {
+            try {
+                java.time.LocalDate.parse(dateStr)
+            } catch (e3: Exception) {
+                null
+            }
+        }
+    }
+}
+
 @Composable
 fun TaskScreen(
     isCreateMode: Boolean,
@@ -64,6 +88,7 @@ fun TaskScreen(
     reminderString: String? = null,
     recurrence: com.vikaspokala.daybyday.ui.models.Recurrence? = null,
     isLaterTask: Boolean = false,
+    plannerToday: java.time.LocalDate = java.time.LocalDate.now(),
     onNavigateBack: () -> Unit,
     onSaveTask: (title: String, note: String?, dateString: String?, timeString: String?, reminderString: String?, recurrence: com.vikaspokala.daybyday.ui.models.Recurrence?, isImportant: Boolean) -> Unit = { _, _, _, _, _, _, _ -> },
     onScheduleThisClick: () -> Unit = {},
@@ -75,11 +100,21 @@ fun TaskScreen(
     var isImportant by remember(initialIsImportant) { mutableStateOf(initialIsImportant) }
     var currentDateString by remember(dateString) { mutableStateOf(dateString) }
     var currentTimeString by remember(timeString) { mutableStateOf(timeString) }
-    var currentReminderString by remember(reminderString, timeString) {
-        mutableStateOf(if (timeString != null) reminderString else null)
+    var currentReminderString by remember(reminderString, timeString, dateString, plannerToday) {
+        val pd = parseTaskDate(dateString, plannerToday)
+        if (pd != null && pd.isBefore(plannerToday)) {
+            mutableStateOf<String?>(null)
+        } else {
+            mutableStateOf(if (timeString != null) reminderString else null)
+        }
     }
-    var currentRecurrence by remember(recurrence, dateString) {
-        mutableStateOf(if (dateString != null) recurrence else null)
+    var currentRecurrence by remember(recurrence, dateString, plannerToday) {
+        val pd = parseTaskDate(dateString, plannerToday)
+        if (pd != null && pd.isBefore(plannerToday)) {
+            mutableStateOf<com.vikaspokala.daybyday.ui.models.Recurrence?>(null)
+        } else {
+            mutableStateOf(if (dateString != null) recurrence else null)
+        }
     }
 
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -90,10 +125,25 @@ fun TaskScreen(
     var showNoTimeWarning by remember { mutableStateOf(false) }
     var showNoDateWarning by remember { mutableStateOf(false) }
     var showPastDateWarning by remember { mutableStateOf(false) }
+    var showPastReminderWarning by remember { mutableStateOf(false) }
+    var showPastRepeatWarning by remember { mutableStateOf(false) }
     var showEndDateWarning by remember { mutableStateOf(false) }
 
+    // Auto-clear reminder & reset recurrence if currentDateString becomes historical
+    LaunchedEffect(currentDateString, plannerToday) {
+        val pd = parseTaskDate(currentDateString, plannerToday)
+        if (pd != null && pd.isBefore(plannerToday)) {
+            if (currentReminderString != null) {
+                currentReminderString = null
+            }
+            if (currentRecurrence != null && currentRecurrence !is com.vikaspokala.daybyday.ui.models.Recurrence.Once) {
+                currentRecurrence = null
+            }
+        }
+    }
+
     // Intercept system Back button when overlays/screens are open
-    BackHandler(enabled = showDeleteConfirmation || showDatePicker || showTimePickerModal || showReminderModal || showRepeatModal || showNoTimeWarning || showNoDateWarning || showPastDateWarning || showEndDateWarning) {
+    BackHandler(enabled = showDeleteConfirmation || showDatePicker || showTimePickerModal || showReminderModal || showRepeatModal || showNoTimeWarning || showNoDateWarning || showPastDateWarning || showPastReminderWarning || showPastRepeatWarning || showEndDateWarning) {
         when {
             showDeleteConfirmation -> showDeleteConfirmation = false
             showDatePicker -> showDatePicker = false
@@ -103,6 +153,8 @@ fun TaskScreen(
             showNoTimeWarning -> showNoTimeWarning = false
             showNoDateWarning -> showNoDateWarning = false
             showPastDateWarning -> showPastDateWarning = false
+            showPastReminderWarning -> showPastReminderWarning = false
+            showPastRepeatWarning -> showPastRepeatWarning = false
             showEndDateWarning -> showEndDateWarning = false
         }
     }
@@ -126,7 +178,6 @@ fun TaskScreen(
     }
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
-    val parseFormatter = remember { DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()) }
 
     Box(
         modifier = modifier
@@ -200,22 +251,38 @@ fun TaskScreen(
                             .then(
                                 if (isSaveEnabled) {
                                     Modifier.clickable {
-                                        val pd = try { currentDateString?.let { java.time.LocalDate.parse(it, parseFormatter) } } catch (e: Exception) { null }
+                                        val pd = parseTaskDate(currentDateString, plannerToday)
+                                        val initialPd = parseTaskDate(dateString, plannerToday)
+                                        val isHistoricalDate = pd != null && pd.isBefore(plannerToday)
+                                        val isInitialHistorical = initialPd != null && initialPd.isBefore(plannerToday)
+
                                         val recEndDate = currentRecurrence?.endDate
                                         val isEndDateInvalid = pd != null && recEndDate != null && recEndDate.isBefore(pd)
-                                        val isBlocked = pd != null && pd.isBefore(java.time.LocalDate.now()) && (isCreateMode || isScheduleChanged)
+
+                                        val isBlocked = if (isCreateMode) {
+                                            isHistoricalDate && ((currentRecurrence != null && currentRecurrence !is com.vikaspokala.daybyday.ui.models.Recurrence.Once) || currentReminderString != null)
+                                        } else {
+                                            if (isInitialHistorical) {
+                                                isHistoricalDate && isScheduleChanged
+                                            } else {
+                                                isHistoricalDate
+                                            }
+                                        }
+
                                         if (isEndDateInvalid) {
                                             showEndDateWarning = true
                                         } else if (isBlocked) {
                                             showPastDateWarning = true
                                         } else {
+                                            val finalReminder = if (isHistoricalDate) null else currentReminderString
+                                            val finalRecurrence = if (isHistoricalDate) null else currentRecurrence
                                             onSaveTask(
                                                 titleText,
                                                 noteText,
                                                 currentDateString,
                                                 currentTimeString,
-                                                currentReminderString,
-                                                currentRecurrence,
+                                                finalReminder,
+                                                finalRecurrence,
                                                 isImportant
                                             )
                                         }
@@ -365,6 +432,10 @@ fun TaskScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    val parsedDate = parseTaskDate(currentDateString, plannerToday)
+                    val isCurrentDateHistorical = parsedDate != null && parsedDate.isBefore(plannerToday)
+                    val isHistoricalCreate = isCreateMode && isCurrentDateHistorical
+
                     // TIME Field (72dp height)
                     StandardFieldRow(
                         label = "TIME",
@@ -375,43 +446,51 @@ fun TaskScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // REMINDER Field (72dp height)
-                    StandardFieldRow(
-                        label = "REMINDER",
-                        valueText = if (currentTimeString != null) (currentReminderString ?: "No reminder") else "No reminder",
-                        actionText = "Optional",
-                        onClick = {
-                            if (currentTimeString == null) {
-                                showNoTimeWarning = true
-                            } else {
-                                showReminderModal = true
+                    if (!isHistoricalCreate) {
+                        // REMINDER Field (72dp height)
+                        StandardFieldRow(
+                            label = "REMINDER",
+                            valueText = when {
+                                isCurrentDateHistorical -> "Unavailable for past tasks"
+                                currentTimeString != null -> currentReminderString ?: "No reminder"
+                                else -> "No reminder"
+                            },
+                            actionText = if (isCurrentDateHistorical) "" else "Optional",
+                            onClick = {
+                                if (isCurrentDateHistorical) {
+                                    showPastReminderWarning = true
+                                } else if (currentTimeString == null) {
+                                    showNoTimeWarning = true
+                                } else {
+                                    showReminderModal = true
+                                }
                             }
-                        }
-                    )
+                        )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    // REPEAT Field (72dp height)
-                    val parsedDate = try {
-                        currentDateString?.let { java.time.LocalDate.parse(it, parseFormatter) }
-                    } catch (e: Exception) { null }
-
-                    StandardFieldRow(
-                        label = "REPEAT",
-                        valueText = if (currentDateString != null) currentRecurrence.toDisplayString(parsedDate) else "Does not repeat",
-                        actionText = "›",
-                        onClick = {
-                            if (currentDateString == null) {
-                                showNoDateWarning = true
-                            } else if (parsedDate != null && parsedDate.isBefore(java.time.LocalDate.now())) {
-                                showPastDateWarning = true
-                            } else {
-                                showRepeatModal = true
+                        // REPEAT Field (72dp height)
+                        StandardFieldRow(
+                            label = "REPEAT",
+                            valueText = when {
+                                isCurrentDateHistorical -> "Does not repeat"
+                                currentDateString != null -> currentRecurrence.toDisplayString(parsedDate)
+                                else -> "Does not repeat"
+                            },
+                            actionText = if (isCurrentDateHistorical) "" else "›",
+                            onClick = {
+                                if (isCurrentDateHistorical) {
+                                    showPastRepeatWarning = true
+                                } else if (currentDateString == null) {
+                                    showNoDateWarning = true
+                                } else {
+                                    showRepeatModal = true
+                                }
                             }
-                        }
-                    )
+                        )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                 }
 
                 // IMPORTANT Toggle Row (64dp height)
@@ -620,9 +699,7 @@ fun TaskScreen(
 
         // Floating Choose Repeat Modal (ON TOP of Task screen)
         if (showRepeatModal && !isLaterTask && currentDateString != null) {
-            val parsedDate = try {
-                java.time.LocalDate.parse(currentDateString, parseFormatter)
-            } catch (e: Exception) { null }
+            val parsedDate = parseTaskDate(currentDateString, plannerToday)
 
             ChooseRepeatModal(
                 currentRepeat = currentRecurrence,
@@ -745,6 +822,136 @@ fun TaskScreen(
                                 .height(44.dp)
                                 .fillMaxWidth()
                                 .clickable { showPastDateWarning = false },
+                            shape = RoundedCornerShape(14.dp),
+                            color = DayByDayAccent
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "OK",
+                                    style = TextStyle(
+                                        fontFamily = DayByDayFontFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Warning when tapping Reminder on past date
+        if (showPastReminderWarning) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { showPastReminderWarning = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { /* Consume clicks */ },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, DayByDayNeutralBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Reminders are unavailable for past tasks.",
+                            style = TextStyle(
+                                fontFamily = DayByDayFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                color = DayByDayPrimaryText,
+                                textAlign = TextAlign.Center
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier
+                                .height(44.dp)
+                                .fillMaxWidth()
+                                .clickable { showPastReminderWarning = false },
+                            shape = RoundedCornerShape(14.dp),
+                            color = DayByDayAccent
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "OK",
+                                    style = TextStyle(
+                                        fontFamily = DayByDayFontFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Warning when tapping Repeat on past date
+        if (showPastRepeatWarning) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { showPastRepeatWarning = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = 32.dp)
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { /* Consume clicks */ },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, DayByDayNeutralBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Repeat is unavailable for past tasks.",
+                            style = TextStyle(
+                                fontFamily = DayByDayFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                color = DayByDayPrimaryText,
+                                textAlign = TextAlign.Center
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier
+                                .height(44.dp)
+                                .fillMaxWidth()
+                                .clickable { showPastRepeatWarning = false },
                             shape = RoundedCornerShape(14.dp),
                             color = DayByDayAccent
                         ) {

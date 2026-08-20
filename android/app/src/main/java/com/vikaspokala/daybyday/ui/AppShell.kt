@@ -268,6 +268,7 @@ fun AppShell(
                             reminderString = key.reminderString,
                             recurrence = key.recurrence,
                             isLaterTask = key.isLaterTask,
+                            plannerToday = todayViewModel.getPlannerToday(),
                             onNavigateBack = {
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)
@@ -293,11 +294,11 @@ fun AppShell(
                                             laterViewModel.addTask(title = title, note = note, isImportant = isImp)
                                         }
                                         key.sourceScreen == "SCHEDULE" -> {
-                                            val parsedDate = parseDateString(newDateStr) ?: scheduleViewModel.selectedDate.value
+                                            val parsedDate = parseDateString(newDateStr, scheduleViewModel.getPlannerToday()) ?: scheduleViewModel.selectedDate.value
                                             scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                         }
                                         else -> {
-                                            val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
+                                            val parsedDate = parseDateString(newDateStr, todayViewModel.getPlannerToday()) ?: todayViewModel.selectedDate.value
                                             todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                         }
                                     }
@@ -308,11 +309,11 @@ fun AppShell(
                                                 laterViewModel.updateTask(id = id, title = title, note = note, isImportant = isImp)
                                             }
                                             key.sourceScreen == "SCHEDULE" -> {
-                                                val parsedDate = parseDateString(newDateStr) ?: scheduleViewModel.selectedDate.value
+                                                val parsedDate = parseDateString(newDateStr, scheduleViewModel.getPlannerToday()) ?: scheduleViewModel.selectedDate.value
                                                 scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                             }
                                             else -> {
-                                                val parsedDate = parseDateString(newDateStr) ?: todayViewModel.selectedDate.value
+                                                val parsedDate = parseDateString(newDateStr, todayViewModel.getPlannerToday()) ?: todayViewModel.selectedDate.value
                                                 todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
                                             }
                                         }
@@ -373,14 +374,26 @@ fun AppShell(
     }
 }
 
-private fun parseDateString(dateStr: String?): LocalDate? {
+private fun parseDateString(dateStr: String?, referenceDate: LocalDate = LocalDate.now()): LocalDate? {
     if (dateStr.isNullOrEmpty()) return null
     return try {
-        val currentYear = LocalDate.now().year
-        val fullStr = if (!dateStr.contains(currentYear.toString())) "$dateStr $currentYear" else dateStr
-        val formatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault())
-        LocalDate.parse(fullStr, formatter)
+        val formatter = java.time.format.DateTimeFormatterBuilder()
+            .appendPattern("EEEE, d MMMM")
+            .parseDefaulting(java.time.temporal.ChronoField.YEAR, referenceDate.year.toLong())
+            .toFormatter(Locale.getDefault())
+        LocalDate.parse(dateStr, formatter)
     } catch (e: Exception) {
-        null
+        try {
+            val currentYear = referenceDate.year
+            val fullStr = if (!dateStr.contains(currentYear.toString())) "$dateStr $currentYear" else dateStr
+            val formatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault())
+            LocalDate.parse(fullStr, formatter)
+        } catch (e2: Exception) {
+            try {
+                LocalDate.parse(dateStr)
+            } catch (e3: Exception) {
+                null
+            }
+        }
     }
 }

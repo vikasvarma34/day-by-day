@@ -7,32 +7,28 @@ import java.util.Locale
 import androidx.lifecycle.ViewModel
 import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
 import com.vikaspokala.daybyday.ui.models.Recurrence
-import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-
-@OptIn(ExperimentalForInheritanceCoroutinesApi::class)
-private class DerivedLaterStateFlow(
-    private val database: InMemoryPlannerDatabase
-) : StateFlow<List<LaterTaskItem>> {
-    override val value: List<LaterTaskItem> get() = database.getLaterTasks()
-    override val replayCache: List<List<LaterTaskItem>> get() = listOf(value)
-    override suspend fun collect(collector: FlowCollector<List<LaterTaskItem>>): Nothing {
-        database.observeLaterTasks().collect(collector)
-        awaitCancellation()
-    }
-}
 
 class LaterViewModel(
     private val database: InMemoryPlannerDatabase = InMemoryPlannerDatabase.defaultDatabase,
-    private val plannerTodayProvider: () -> LocalDate = { LocalDate.now() }
+    private val plannerTodayProvider: () -> LocalDate = { LocalDate.now() },
+    scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
 ) : ViewModel() {
 
-    val tasks: StateFlow<List<LaterTaskItem>> = DerivedLaterStateFlow(database)
+    val tasks: StateFlow<List<LaterTaskItem>> = database.observeLaterTasks()
+        .stateIn(
+            scope = scope,
+            started = SharingStarted.Eagerly,
+            initialValue = database.getLaterTasks()
+        )
 
     private val _isCompletedExpanded = MutableStateFlow(false)
     val isCompletedExpanded: StateFlow<Boolean> = _isCompletedExpanded.asStateFlow()
