@@ -52,6 +52,7 @@ import com.vikaspokala.daybyday.ui.screens.task.TaskScreen
 import com.vikaspokala.daybyday.ui.screens.today.TodayScreen
 import com.vikaspokala.daybyday.ui.screens.today.TodayViewModel
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
+import com.vikaspokala.daybyday.data.remote.dto.AuthUserDto
 import com.vikaspokala.daybyday.ui.theme.DayByDayBackground
 import com.vikaspokala.daybyday.ui.theme.DayByDayNeutralBorder
 import com.vikaspokala.daybyday.ui.theme.DayByDaySecondaryText
@@ -59,6 +60,7 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 
 @Composable
 fun AppShell(
+    user: AuthUserDto? = null,
     todayViewModel: TodayViewModel = viewModel(),
     scheduleViewModel: ScheduleViewModel = viewModel(),
     laterViewModel: LaterViewModel = viewModel(),
@@ -68,9 +70,9 @@ fun AppShell(
 
     val currentScreen = backStack.lastOrNull() as? Screen ?: Screen.Today
 
-    var firstName by remember { mutableStateOf("Vikas") }
-    var lastName by remember { mutableStateOf("Varma") }
-    var nickname by remember { mutableStateOf("Vicky") }
+    var firstName by remember(user) { mutableStateOf(user?.firstName ?: "Vikas") }
+    var lastName by remember(user) { mutableStateOf(user?.lastName ?: "Varma") }
+    var nickname by remember(user) { mutableStateOf(user?.nickname ?: "Vicky") }
 
     Scaffold(
         containerColor = DayByDayBackground,

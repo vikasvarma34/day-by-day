@@ -50,7 +50,9 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 
 @Composable
 fun SignInScreen(
-    onSignInSuccess: () -> Unit,
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
+    onSignIn: (email: String, password: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var email by remember { mutableStateOf("") }
@@ -131,10 +133,31 @@ fun SignInScreen(
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(
-                    onDone = { onSignInSuccess() }
+                    onDone = {
+                        if (!isLoading) {
+                            onSignIn(email, password)
+                        }
+                    }
                 ),
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
+
+            // Inline Error Message
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = errorMessage,
+                    style = TextStyle(
+                        fontFamily = DayByDayFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
+                        color = Color(0xFFD95C5C),
+                        textAlign = TextAlign.Center
+                    ),
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                )
+            }
 
             // Sign In Button (top: 542dp -> delta from 442 + 72 = 514dp, spacer = 28.dp)
             Spacer(modifier = Modifier.height(28.dp))
@@ -143,16 +166,22 @@ fun SignInScreen(
                     .padding(horizontal = 32.dp)
                     .fillMaxWidth()
                     .height(54.dp)
-                    .clickable { onSignInSuccess() },
+                    .then(
+                        if (!isLoading) {
+                            Modifier.clickable { onSignIn(email, password) }
+                        } else {
+                            Modifier
+                        }
+                    ),
                 shape = RoundedCornerShape(18.dp),
-                color = DayByDayAccent
+                color = if (!isLoading) DayByDayAccent else DayByDayAccent.copy(alpha = 0.6f)
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Sign in",
+                        text = if (isLoading) "Signing in..." else "Sign in",
                         style = TextStyle(
                             fontFamily = DayByDayFontFamily,
                             fontWeight = FontWeight.SemiBold, // 600

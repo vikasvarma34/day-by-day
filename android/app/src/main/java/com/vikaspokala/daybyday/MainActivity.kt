@@ -5,17 +5,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vikaspokala.daybyday.ui.AppShell
 import com.vikaspokala.daybyday.ui.screens.SplashScreen
+import com.vikaspokala.daybyday.ui.screens.auth.AuthUiState
+import com.vikaspokala.daybyday.ui.screens.auth.AuthViewModel
+import com.vikaspokala.daybyday.ui.screens.auth.ConnectionErrorScreen
 import com.vikaspokala.daybyday.ui.screens.auth.SignInScreen
 import com.vikaspokala.daybyday.ui.theme.DayByDayTheme
-import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,18 +23,25 @@ class MainActivity : ComponentActivity() {
         setContent {
             DayByDayTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    var showSplash by remember { mutableStateOf(true) }
-                    var isSignedIn by remember { mutableStateOf(false) }
+                    val authViewModel: AuthViewModel = viewModel(
+                        factory = AuthViewModel.Factory(applicationContext)
+                    )
+                    val authState by authViewModel.uiState.collectAsState()
 
-                    LaunchedEffect(Unit) {
-                        delay(1200)
-                        showSplash = false
-                    }
-
-                    when {
-                        showSplash -> SplashScreen()
-                        !isSignedIn -> SignInScreen(onSignInSuccess = { isSignedIn = true })
-                        else -> AppShell()
+                    when (val state = authState) {
+                        is AuthUiState.Loading -> SplashScreen()
+                        is AuthUiState.SignedOut -> SignInScreen(
+                            isLoading = state.isSubmitting,
+                            errorMessage = state.error,
+                            onSignIn = { email, password ->
+                                authViewModel.signIn(email, password)
+                            }
+                        )
+                        is AuthUiState.ConnectionError -> ConnectionErrorScreen(
+                            isRetrying = state.isRetrying,
+                            onRetry = { authViewModel.retrySessionVerification() }
+                        )
+                        is AuthUiState.Authenticated -> AppShell(user = state.user)
                     }
                 }
             }

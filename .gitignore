@@ -44,3 +44,5 @@ yarn-error.log*
 *.keystore
 *.jks
 google-services.json
+
+*.hprof
