@@ -274,8 +274,50 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
   "schedule": { /* new schedule */ }
 }
 ```
-* **Notes**: For any schedule update (`ONCE`, `INTERVAL_DAYS`, `WEEKDAYS`), `plannerToday` and `effectiveDate` are required with `effectiveDate >= plannerToday` and `schedule.startDate >= plannerToday`. Rescheduling existing tasks into the past remains blocked. Content-only updates do not require `plannerToday`/`effectiveDate` and do not modify existing schedules. Changing `isImportant` on an already-completed eligible `ONCE` or direct-Later task atomically updates its History inclusion while keeping the original completion date and timestamp unchanged.
-* **Response**: `HTTP 200 OK` with updated task and schedules.
+* **Notes**: For any schedule update (`ONCE`, `INTERVAL_DAYS`, `WEEKDAYS`), `plannerToday` and `effectiveDate` are required with `effectiveDate >= plannerToday` and `schedule.startDate >= plannerToday`. Rescheduling existing tasks into the past remains blocked. Content-only updates (`title`, `note`, `isImportant`) do not require `plannerToday`/`effectiveDate` and do not modify existing schedules. Changing `isImportant` on an already-completed eligible `ONCE` or direct-Later task atomically synchronizes its `isImportantSnapshot` for History classification while keeping the original completion `titleSnapshot`, `completedDate`, and `completedAt` strictly frozen.
+* **Response**: `HTTP 200 OK`:
+```json
+{
+  "task": {
+    "id": "UUID",
+    "title": "String",
+    "note": "String | null",
+    "isImportant": false,
+    "createdAt": "ISO 8601 string",
+    "updatedAt": "ISO 8601 string",
+    "schedules": [
+      {
+        "id": "UUID",
+        "type": "ONCE | INTERVAL_DAYS | WEEKDAYS",
+        "startDate": "YYYY-MM-DD",
+        "endDate": "YYYY-MM-DD | null",
+        "scheduledTime": "HH:mm:ss | null",
+        "intervalDays": 1,
+        "intervalAnchorDate": "YYYY-MM-DD | null",
+        "weekdaysMask": 127,
+        "reminderMinutesBefore": 0,
+        "createdAt": "ISO 8601 string",
+        "updatedAt": "ISO 8601 string"
+      }
+    ]
+  },
+  "completions": [
+    {
+      "id": "UUID",
+      "taskId": "UUID",
+      "scheduleId": "UUID | null",
+      "scheduledDate": "YYYY-MM-DD | null",
+      "completedDate": "YYYY-MM-DD",
+      "completedAt": "ISO 8601 string",
+      "titleSnapshot": "String | null",
+      "isImportantSnapshot": true
+    }
+  ]
+}
+```
+* **Notes on `completions` array**:
+  - Contains canonical completion records whose History-classification (`isImportantSnapshot`) was updated as a result of an `isImportant` change on eligible completed `ONCE` or direct-Later tasks.
+  - Returns `[]` if no completion classification was affected (e.g. pure title/note edit, or recurring tasks whose completions remain excluded from History).
 
 #### Complete (`POST /tasks/:taskId/complete`)
 * **Request**:

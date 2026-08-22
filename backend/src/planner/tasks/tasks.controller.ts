@@ -38,13 +38,13 @@ export class TasksController {
       }
 
       const taskId = req.params.taskId as string;
-      const task = await this.tasksService.updateTask(
+      const result = await this.tasksService.updateTask(
         req.user.id,
         taskId,
         req.body
       );
 
-      res.status(200).json({ task });
+      res.status(200).json(result);
     } catch (err) {
       next(err);
     }

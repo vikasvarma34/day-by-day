@@ -1,7 +1,7 @@
 import { PoolClient } from 'pg';
 import { getPool } from '../../db/pool';
 import { ConflictError, NotFoundError } from '../../errors/http-errors';
-import { CreateTaskDto, PlannerTaskResponse, EditTaskDto, EditTaskScheduleDto, CompleteTaskDto, UndoTaskDto, StopRecurrenceDto, TaskCompletionResponse } from './tasks.types';
+import { CreateTaskDto, PlannerTaskResponse, EditTaskDto, EditTaskScheduleDto, CompleteTaskDto, UndoTaskDto, StopRecurrenceDto, TaskCompletionResponse, UpdateTaskResponse } from './tasks.types';
 import { PlannerSchedule, isScheduleOccurringOnDate } from '../domain/recurrence';
 
 type QueryExecutor = {
@@ -86,7 +86,7 @@ export class TasksRepository {
     }
   }
 
-  async updateTask(userId: string, taskId: string, dto: EditTaskDto): Promise<PlannerTaskResponse> {
+  async updateTask(userId: string, taskId: string, dto: EditTaskDto): Promise<UpdateTaskResponse> {
     const pool = getPool();
     const client = await pool.connect();
     try {
@@ -107,18 +107,16 @@ export class TasksRepository {
       if (dto.note !== undefined) {
         await client.query(`UPDATE tasks SET note = $1 WHERE id = $2`, [dto.note, taskId]);
       }
+
+      let affectedCompletions: TaskCompletionResponse[] = [];
+
       if (dto.isImportant !== undefined) {
         await client.query(`UPDATE tasks SET is_important = $1 WHERE id = $2`, [dto.isImportant, taskId]);
 
-        const preUpdateTitle = taskRes.rows[0].title;
-        await client.query(
+        const compUpdateRes = await client.query(
           `UPDATE task_completions
-           SET is_important_snapshot = $1,
-               title_snapshot = CASE
-                 WHEN title_snapshot IS NULL AND $1 = true THEN $2
-                 ELSE title_snapshot
-               END
-           WHERE task_id = $3
+           SET is_important_snapshot = $1
+           WHERE task_id = $2
              AND (
                (schedule_id IS NULL AND scheduled_date IS NULL)
                OR EXISTS (
@@ -127,9 +125,21 @@ export class TasksRepository {
                    AND s.task_id = task_completions.task_id
                    AND s.schedule_type = 'ONCE'
                )
-             )`,
-          [dto.isImportant, preUpdateTitle, taskId]
+             )
+           RETURNING id, task_id, schedule_id, scheduled_date::text, completed_date::text, completed_at, title_snapshot, is_important_snapshot`,
+          [dto.isImportant, taskId]
         );
+
+        affectedCompletions = compUpdateRes.rows.map((r: any) => ({
+          id: r.id,
+          taskId: r.task_id,
+          scheduleId: r.schedule_id ?? null,
+          scheduledDate: r.scheduled_date ?? null,
+          completedDate: r.completed_date,
+          completedAt: r.completed_at instanceof Date ? r.completed_at.toISOString() : new Date(r.completed_at).toISOString(),
+          titleSnapshot: r.title_snapshot ?? null,
+          isImportantSnapshot: r.is_important_snapshot,
+        }));
       }
 
       if (dto.schedule !== undefined && dto.schedule !== null) {
@@ -240,7 +250,7 @@ export class TasksRepository {
 
       const updatedTask = await this.findTaskWithSchedulesUsing(client, taskId, userId);
       await client.query('COMMIT');
-      return updatedTask!;
+      return { task: updatedTask!, completions: affectedCompletions };
     } catch (err) {
       try {
         await client.query('ROLLBACK');

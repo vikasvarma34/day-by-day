@@ -87,3 +87,8 @@ export interface TaskCompletionResponse {
   titleSnapshot: string | null;
   isImportantSnapshot: boolean;
 }
+
+export interface UpdateTaskResponse {
+  task: PlannerTaskResponse;
+  completions: TaskCompletionResponse[];
+}
