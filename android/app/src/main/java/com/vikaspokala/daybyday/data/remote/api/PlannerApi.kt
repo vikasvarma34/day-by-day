@@ -9,6 +9,7 @@ import com.vikaspokala.daybyday.data.remote.dto.PlannerRefreshResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.TaskActionResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.UndoTaskRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskContentRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskSchedulePayloadDto
 import retrofit2.http.Body
@@ -20,6 +21,13 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 
 interface PlannerApi {
+
+    @PATCH("tasks/{taskId}")
+    suspend fun updateTask(
+        @Header("Authorization") authorization: String,
+        @Path("taskId") taskId: String,
+        @Body request: UpdateTaskRequestDto
+    ): UpdateTaskResponseDto
 
     @PATCH("tasks/{taskId}")
     suspend fun updateTaskSchedule(

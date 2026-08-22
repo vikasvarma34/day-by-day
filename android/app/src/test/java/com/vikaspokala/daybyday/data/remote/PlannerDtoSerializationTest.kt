@@ -1,6 +1,7 @@
 package com.vikaspokala.daybyday.data.remote
 
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskContentRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskScheduleDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskSchedulePayloadDto
@@ -12,6 +13,62 @@ import org.junit.Test
 class PlannerDtoSerializationTest {
 
     private val json = NetworkClient.json
+
+    @Test
+    fun serializeUpdateTaskRequest_producesCombinedContentAndSchedule() {
+        val request = UpdateTaskRequestDto(
+            title = "Combined Task Title",
+            note = "Some notes",
+            isImportant = true,
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(
+                type = "ONCE",
+                startDate = "2026-08-22",
+                endDate = "2026-08-22",
+                scheduledTime = "10:30:00",
+                reminderMinutesBefore = 10,
+                intervalDays = null,
+                weekdaysMask = null
+            )
+        )
+        val serialized = json.encodeToString(UpdateTaskRequestDto.serializer(), request)
+
+        assertTrue(serialized.contains(""""title":"Combined Task Title""""))
+        assertTrue(serialized.contains(""""note":"Some notes""""))
+        assertTrue(serialized.contains(""""isImportant":true"""))
+        assertTrue(serialized.contains(""""plannerToday":"2026-08-22""""))
+        assertTrue(serialized.contains(""""effectiveDate":"2026-08-22""""))
+        assertTrue(serialized.contains(""""type":"ONCE""""))
+        assertTrue(serialized.contains(""""startDate":"2026-08-22""""))
+        assertTrue(serialized.contains(""""scheduledTime":"10:30:00""""))
+        assertTrue(serialized.contains(""""reminderMinutesBefore":10"""))
+        assertFalse(serialized.contains("intervalAnchorDate"))
+    }
+
+    @Test
+    fun serializeUpdateTaskRequest_withNullNote_producesExplicitNullNote() {
+        val request = UpdateTaskRequestDto(
+            title = "Cleared Note Task",
+            note = null,
+            isImportant = false,
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(
+                type = "ONCE",
+                startDate = "2026-08-22"
+            )
+        )
+        val serialized = json.encodeToString(UpdateTaskRequestDto.serializer(), request)
+
+        assertTrue(serialized.contains(""""title":"Cleared Note Task""""))
+        assertTrue(serialized.contains(""""note":null"""))
+        assertTrue(serialized.contains(""""isImportant":false"""))
+        assertTrue(serialized.contains(""""plannerToday":"2026-08-22""""))
+        assertTrue(serialized.contains(""""effectiveDate":"2026-08-22""""))
+        assertTrue(serialized.contains(""""type":"ONCE""""))
+        assertFalse(serialized.contains("intervalAnchorDate"))
+    }
 
     @Test
     fun serializeUpdateTaskSchedulePayload_producesExactContractShape() {

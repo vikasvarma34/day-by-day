@@ -166,3 +166,13 @@ data class UpdateTaskSchedulePayloadDto(
     val effectiveDate: String,
     val schedule: UpdateTaskScheduleDto
 )
+
+@Serializable
+data class UpdateTaskRequestDto(
+    val title: String,
+    val note: String? = null,
+    val isImportant: Boolean,
+    val plannerToday: String,
+    val effectiveDate: String,
+    val schedule: UpdateTaskScheduleDto
+)
