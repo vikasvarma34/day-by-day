@@ -1,9 +1,9 @@
 package com.vikaspokala.daybyday.data.remote
 
-import com.vikaspokala.daybyday.data.remote.dto.CompleteTaskResponseDto
-import com.vikaspokala.daybyday.data.remote.dto.TaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskContentRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskResponseDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskScheduleDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskSchedulePayloadDto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -12,6 +12,35 @@ import org.junit.Test
 class PlannerDtoSerializationTest {
 
     private val json = NetworkClient.json
+
+    @Test
+    fun serializeUpdateTaskSchedulePayload_producesExactContractShape() {
+        val request = UpdateTaskSchedulePayloadDto(
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-25",
+            schedule = UpdateTaskScheduleDto(
+                type = "WEEKDAYS",
+                startDate = "2026-08-25",
+                endDate = null,
+                scheduledTime = "09:00:00",
+                reminderMinutesBefore = 15,
+                intervalDays = null,
+                weekdaysMask = 65
+            )
+        )
+        val serialized = json.encodeToString(UpdateTaskSchedulePayloadDto.serializer(), request)
+
+        assertTrue(serialized.contains(""""plannerToday":"2026-08-22""""))
+        assertTrue(serialized.contains(""""effectiveDate":"2026-08-25""""))
+        assertTrue(serialized.contains(""""type":"WEEKDAYS""""))
+        assertTrue(serialized.contains(""""startDate":"2026-08-25""""))
+        assertTrue(serialized.contains(""""scheduledTime":"09:00:00""""))
+        assertTrue(serialized.contains(""""reminderMinutesBefore":15"""))
+        assertTrue(serialized.contains(""""weekdaysMask":65"""))
+        assertFalse(serialized.contains("intervalAnchorDate"))
+        assertFalse(serialized.contains("title"))
+        assertFalse(serialized.contains("isImportant"))
+    }
 
     @Test
     fun serializeUpdateTaskContentRequest_withNullNote_producesExplicitNullNote() {

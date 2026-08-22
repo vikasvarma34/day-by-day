@@ -28,6 +28,8 @@ import com.vikaspokala.daybyday.data.remote.dto.TaskScheduleResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.UndoTaskRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskContentRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskResponseDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskScheduleDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskSchedulePayloadDto
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -62,6 +64,7 @@ class PlannerRepositoryTest {
         var undoResult: Result<TaskActionResponseDto> = Result.success(TaskActionResponseDto(true)),
         var deleteResult: Result<DeleteTaskResponseDto> = Result.success(DeleteTaskResponseDto("default-task-id")),
         var updateContentResult: Result<UpdateTaskResponseDto>? = null,
+        var updateScheduleResult: Result<UpdateTaskResponseDto>? = null,
         var delayRefreshDeferred: CompletableDeferred<Unit>? = null
     ) : PlannerApi {
         var lastAuthorizationHeader: String? = null
@@ -73,12 +76,27 @@ class PlannerRepositoryTest {
         var lastDeleteTaskId: String? = null
         var lastUpdateContentTaskId: String? = null
         var lastUpdateContentRequest: UpdateTaskContentRequestDto? = null
+        var lastUpdateScheduleTaskId: String? = null
+        var lastUpdateScheduleRequest: UpdateTaskSchedulePayloadDto? = null
         var createCallCount = 0
         var getRefreshCallCount = 0
         var completeCallCount = 0
         var undoCallCount = 0
         var deleteCallCount = 0
         var updateContentCallCount = 0
+        var updateScheduleCallCount = 0
+
+        override suspend fun updateTaskSchedule(
+            authorization: String,
+            taskId: String,
+            request: UpdateTaskSchedulePayloadDto
+        ): UpdateTaskResponseDto {
+            updateScheduleCallCount++
+            lastAuthorizationHeader = authorization
+            lastUpdateScheduleTaskId = taskId
+            lastUpdateScheduleRequest = request
+            return updateScheduleResult?.getOrThrow() ?: error("updateScheduleResult not configured")
+        }
 
         override suspend fun updateTaskContent(
             authorization: String,
@@ -154,6 +172,7 @@ class PlannerRepositoryTest {
         var applyUndoCalled = false
         var applyDeleteTaskCalled = false
         var applyUpdateTaskContentCalled = false
+        var applyUpdateTaskScheduleCalled = false
 
         private val fakeTaskDao = object : TaskDao {
             override suspend fun insertAll(tasks: List<TaskEntity>) {
@@ -182,6 +201,12 @@ class PlannerRepositoryTest {
                 val toRemove = schedulesMap.values.filter { it.taskId == taskId }.map { it.id }
                 toRemove.forEach { schedulesMap.remove(it) }
             }
+            override suspend fun getByTaskId(taskId: String): List<ScheduleEntity> {
+                return schedulesMap.values.filter { it.taskId == taskId }
+            }
+            override suspend fun deleteByIds(ids: List<String>) {
+                ids.forEach { schedulesMap.remove(it) }
+            }
             override suspend fun getAll(): List<ScheduleEntity> = schedulesMap.values.toList()
             override suspend fun getById(id: String): ScheduleEntity? = schedulesMap[id]
         }
@@ -197,6 +222,9 @@ class PlannerRepositoryTest {
             override suspend fun deleteAll() { completionsList.clear() }
             override suspend fun deleteByTaskId(taskId: String) {
                 completionsList.removeAll { it.taskId == taskId }
+            }
+            override suspend fun deleteByScheduleIds(scheduleIds: List<String>) {
+                completionsList.removeAll { it.scheduleId in scheduleIds }
             }
             override suspend fun getAll(): List<CompletionEntity> = completionsList.toList()
             override suspend fun findLaterCompletion(taskId: String): CompletionEntity? {
@@ -265,6 +293,29 @@ class PlannerRepositoryTest {
         override suspend fun applyUpdateTaskContent(task: TaskEntity, completions: List<CompletionEntity>) {
             applyUpdateTaskContentCalled = true
             fakeTaskDao.insert(task)
+            if (completions.isNotEmpty()) {
+                fakeCompletionDao.insertAll(completions)
+            }
+        }
+
+        override suspend fun applyUpdateTaskSchedule(
+            task: TaskEntity,
+            schedules: List<ScheduleEntity>,
+            completions: List<CompletionEntity>
+        ) {
+            applyUpdateTaskScheduleCalled = true
+            fakeTaskDao.insert(task)
+            val currentSchedules = fakeScheduleDao.getByTaskId(task.id)
+            val responseScheduleIds = schedules.map { it.id }.toSet()
+            val staleScheduleIds = currentSchedules.map { it.id }.filter { it !in responseScheduleIds }
+            if (staleScheduleIds.isNotEmpty()) {
+                fakeCompletionDao.deleteByScheduleIds(staleScheduleIds)
+                fakeScheduleDao.deleteByIds(staleScheduleIds)
+            }
+            if (schedules.isNotEmpty()) {
+                fakeCompletionDao.deleteLaterCompletion(task.id)
+                fakeScheduleDao.insertAll(schedules)
+            }
             if (completions.isNotEmpty()) {
                 fakeCompletionDao.insertAll(completions)
             }
@@ -1558,5 +1609,622 @@ class PlannerRepositoryTest {
         assertEquals(1, fakeApi.updateContentCallCount)
         assertEquals("New Canonical Title", fakeDb.tasksMap["task-edit-lock"]?.title)
         assertEquals(true, fakeDb.tasksMap["task-edit-lock"]?.isImportant)
+    }
+
+    @Test
+    fun updateTaskSchedule_missingToken_returnsFailureWithoutCallingNetwork() = runTest {
+        val fakeApi = FakePlannerApi()
+        val fakeDb = InMemoryTestDatabase()
+        val repository = PlannerRepository(fakeDb, tokenProvider = { null }, fakeApi)
+
+        val result = repository.updateTaskSchedule(
+            taskId = "task-1",
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(type = "ONCE", startDate = "2026-08-22")
+        )
+
+        assertTrue(result.isFailure)
+        assertEquals("Missing authentication session token", result.exceptionOrNull()?.message)
+        assertEquals(0, fakeApi.updateScheduleCallCount)
+    }
+
+    @Test
+    fun updateTaskSchedule_laterToOnce_storesCanonicalTaskAndSchedule() = runTest {
+        val canonicalTaskDto = TaskResponseDto(
+            id = "task-later-1",
+            title = "Later Task",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:05:00.000Z",
+            schedules = listOf(
+                TaskScheduleResponseDto(
+                    id = "sched-new-1",
+                    type = "ONCE",
+                    startDate = "2026-08-22",
+                    endDate = "2026-08-22",
+                    scheduledTime = "14:30:00",
+                    intervalDays = null,
+                    intervalAnchorDate = null,
+                    weekdaysMask = null,
+                    reminderMinutesBefore = 15,
+                    createdAt = "2026-08-22T10:05:00.000Z",
+                    updatedAt = "2026-08-22T10:05:00.000Z"
+                )
+            )
+        )
+        val canonicalResponse = UpdateTaskResponseDto(
+            task = canonicalTaskDto,
+            completions = emptyList()
+        )
+        val fakeApi = FakePlannerApi(updateScheduleResult = Result.success(canonicalResponse))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-later-1"] = TaskEntity(
+            id = "task-later-1",
+            title = "Later Task",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z"
+        )
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskSchedule(
+            taskId = "task-later-1",
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(
+                type = "ONCE",
+                startDate = "2026-08-22",
+                scheduledTime = "14:30:00",
+                reminderMinutesBefore = 15
+            )
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals("Bearer token_123", fakeApi.lastAuthorizationHeader)
+        assertEquals("task-later-1", fakeApi.lastUpdateScheduleTaskId)
+        assertEquals("2026-08-22", fakeApi.lastUpdateScheduleRequest?.plannerToday)
+        assertEquals("2026-08-22", fakeApi.lastUpdateScheduleRequest?.effectiveDate)
+        assertEquals("ONCE", fakeApi.lastUpdateScheduleRequest?.schedule?.type)
+        assertEquals("2026-08-22", fakeApi.lastUpdateScheduleRequest?.schedule?.startDate)
+        assertEquals(1, fakeApi.updateScheduleCallCount)
+        assertEquals(0, fakeApi.getRefreshCallCount) // Zero follow-up GET
+
+        assertTrue(fakeDb.applyUpdateTaskScheduleCalled)
+        assertEquals(1, fakeDb.schedulesMap.size)
+        val savedSched = fakeDb.schedulesMap["sched-new-1"]
+        assertNotNull(savedSched)
+        assertEquals("task-later-1", savedSched?.taskId)
+        assertEquals("ONCE", savedSched?.scheduleType)
+        assertEquals("2026-08-22", savedSched?.startDate)
+        assertEquals("14:30:00", savedSched?.scheduledTime)
+        assertEquals(15, savedSched?.reminderMinutesBefore)
+    }
+
+    @Test
+    fun updateTaskSchedule_onceReschedule_preservesBackendScheduleIdAndCanonicalFields() = runTest {
+        val canonicalTaskDto = TaskResponseDto(
+            id = "task-once-1",
+            title = "Once Task",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:15:00.000Z",
+            schedules = listOf(
+                TaskScheduleResponseDto(
+                    id = "sched-orig-1", // In-place update preserves ID
+                    type = "ONCE",
+                    startDate = "2026-08-25",
+                    endDate = "2026-08-25",
+                    scheduledTime = "16:00:00",
+                    intervalDays = null,
+                    intervalAnchorDate = null,
+                    weekdaysMask = null,
+                    reminderMinutesBefore = 30,
+                    createdAt = "2026-08-22T10:00:00.000Z",
+                    updatedAt = "2026-08-22T10:15:00.000Z"
+                )
+            )
+        )
+        val canonicalResponse = UpdateTaskResponseDto(
+            task = canonicalTaskDto,
+            completions = emptyList()
+        )
+        val fakeApi = FakePlannerApi(updateScheduleResult = Result.success(canonicalResponse))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-once-1"] = TaskEntity("task-once-1", "Once Task", null, false, "", "")
+        fakeDb.schedulesMap["sched-orig-1"] = ScheduleEntity(
+            id = "sched-orig-1",
+            taskId = "task-once-1",
+            scheduleType = "ONCE",
+            startDate = "2026-08-22",
+            endDate = "2026-08-22",
+            scheduledTime = null,
+            intervalDays = null,
+            intervalAnchorDate = null,
+            weekdaysMask = null,
+            reminderMinutesBefore = null,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z"
+        )
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskSchedule(
+            taskId = "task-once-1",
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(
+                type = "ONCE",
+                startDate = "2026-08-25",
+                scheduledTime = "16:00:00",
+                reminderMinutesBefore = 30
+            )
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, fakeDb.schedulesMap.size)
+        val updatedSched = fakeDb.schedulesMap["sched-orig-1"]
+        assertNotNull(updatedSched)
+        assertEquals("2026-08-25", updatedSched?.startDate)
+        assertEquals("16:00:00", updatedSched?.scheduledTime)
+        assertEquals(30, updatedSched?.reminderMinutesBefore)
+    }
+
+    @Test
+    fun updateTaskSchedule_recurringFutureEdit_reconcilesMultipleSegmentsAndRemovesSupersededSchedule() = runTest {
+        // Backend returns:
+        // 1. Truncated historical segment (sched-hist-1 with end_date 2026-08-24)
+        // 2. New future segment (sched-fut-2 starting 2026-08-25)
+        // Stale future segment (sched-stale-3) is deleted by backend and absent from response
+        val canonicalTaskDto = TaskResponseDto(
+            id = "task-recur-1",
+            title = "Recurring Task",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-01T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z",
+            schedules = listOf(
+                TaskScheduleResponseDto(
+                    id = "sched-hist-1",
+                    type = "INTERVAL_DAYS",
+                    startDate = "2026-08-01",
+                    endDate = "2026-08-24", // Truncated by backend
+                    scheduledTime = null,
+                    intervalDays = 2,
+                    intervalAnchorDate = "2026-08-01",
+                    weekdaysMask = null,
+                    reminderMinutesBefore = null,
+                    createdAt = "2026-08-01T10:00:00.000Z",
+                    updatedAt = "2026-08-22T10:00:00.000Z"
+                ),
+                TaskScheduleResponseDto(
+                    id = "sched-fut-2",
+                    type = "WEEKDAYS",
+                    startDate = "2026-08-25",
+                    endDate = null,
+                    scheduledTime = "09:00:00",
+                    intervalDays = null,
+                    intervalAnchorDate = null,
+                    weekdaysMask = 65,
+                    reminderMinutesBefore = null,
+                    createdAt = "2026-08-22T10:00:00.000Z",
+                    updatedAt = "2026-08-22T10:00:00.000Z"
+                )
+            )
+        )
+        val canonicalResponse = UpdateTaskResponseDto(
+            task = canonicalTaskDto,
+            completions = emptyList()
+        )
+        val fakeApi = FakePlannerApi(updateScheduleResult = Result.success(canonicalResponse))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-recur-1"] = TaskEntity("task-recur-1", "Recurring Task", null, false, "", "")
+        // Pre-existing Room state has historical segment and stale future segment
+        fakeDb.schedulesMap["sched-hist-1"] = ScheduleEntity(
+            id = "sched-hist-1",
+            taskId = "task-recur-1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-01",
+            endDate = null,
+            scheduledTime = null,
+            intervalDays = 2,
+            intervalAnchorDate = "2026-08-01",
+            weekdaysMask = null,
+            reminderMinutesBefore = null,
+            createdAt = "2026-08-01T10:00:00.000Z",
+            updatedAt = "2026-08-01T10:00:00.000Z"
+        )
+        fakeDb.schedulesMap["sched-stale-3"] = ScheduleEntity(
+            id = "sched-stale-3",
+            taskId = "task-recur-1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-09-01",
+            endDate = null,
+            scheduledTime = null,
+            intervalDays = 3,
+            intervalAnchorDate = null,
+            weekdaysMask = null,
+            reminderMinutesBefore = null,
+            createdAt = "2026-08-10T10:00:00.000Z",
+            updatedAt = "2026-08-10T10:00:00.000Z"
+        )
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskSchedule(
+            taskId = "task-recur-1",
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-25",
+            schedule = UpdateTaskScheduleDto(
+                type = "WEEKDAYS",
+                startDate = "2026-08-25",
+                weekdaysMask = 65,
+                scheduledTime = "09:00:00"
+            )
+        )
+
+        assertTrue(result.isSuccess)
+        // Stale schedule removed
+        assertNull(fakeDb.schedulesMap["sched-stale-3"])
+
+        // Historical segment updated with truncated end_date
+        val histSched = fakeDb.schedulesMap["sched-hist-1"]
+        assertNotNull(histSched)
+        assertEquals("2026-08-24", histSched?.endDate)
+
+        // New future segment created
+        val futSched = fakeDb.schedulesMap["sched-fut-2"]
+        assertNotNull(futSched)
+        assertEquals("WEEKDAYS", futSched?.scheduleType)
+        assertEquals(65, futSched?.weekdaysMask)
+
+        assertEquals(2, fakeDb.schedulesMap.size)
+    }
+
+    @Test
+    fun updateTaskSchedule_removesLocalCompletionsReferencingDeletedSchedulesSafely() = runTest {
+        val canonicalTaskDto = TaskResponseDto(
+            id = "task-del-sched-comp",
+            title = "Task",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z",
+            schedules = listOf(
+                TaskScheduleResponseDto(
+                    id = "sched-surviving-1",
+                    type = "ONCE",
+                    startDate = "2026-08-22",
+                    endDate = "2026-08-22",
+                    scheduledTime = null,
+                    intervalDays = null,
+                    intervalAnchorDate = null,
+                    weekdaysMask = null,
+                    reminderMinutesBefore = null,
+                    createdAt = "2026-08-22T10:00:00.000Z",
+                    updatedAt = "2026-08-22T10:00:00.000Z"
+                )
+            )
+        )
+        val canonicalResponse = UpdateTaskResponseDto(
+            task = canonicalTaskDto,
+            completions = emptyList()
+        )
+        val fakeApi = FakePlannerApi(updateScheduleResult = Result.success(canonicalResponse))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-del-sched-comp"] = TaskEntity("task-del-sched-comp", "Task", null, false, "", "")
+        fakeDb.schedulesMap["sched-surviving-1"] = ScheduleEntity("sched-surviving-1", "task-del-sched-comp", "ONCE", "2026-08-22", null, null, null, null, null, null, "", "")
+        fakeDb.schedulesMap["sched-stale-2"] = ScheduleEntity("sched-stale-2", "task-del-sched-comp", "ONCE", "2026-08-24", null, null, null, null, null, null, "", "")
+
+        // Completion on surviving schedule
+        fakeDb.completionsList.add(CompletionEntity("comp-surviving", "task-del-sched-comp", "sched-surviving-1", "2026-08-22", "2026-08-22", "", null, false))
+        // Stale completion referencing stale schedule
+        fakeDb.completionsList.add(CompletionEntity("comp-stale", "task-del-sched-comp", "sched-stale-2", "2026-08-24", "2026-08-24", "", null, false))
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskSchedule(
+            taskId = "task-del-sched-comp",
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(type = "ONCE", startDate = "2026-08-22")
+        )
+
+        assertTrue(result.isSuccess)
+        // Stale schedule and its completion removed
+        assertNull(fakeDb.schedulesMap["sched-stale-2"])
+        assertTrue(fakeDb.completionsList.none { it.id == "comp-stale" })
+
+        // Surviving schedule and its completion preserved
+        assertNotNull(fakeDb.schedulesMap["sched-surviving-1"])
+        assertTrue(fakeDb.completionsList.any { it.id == "comp-surviving" })
+        assertEquals(1, fakeDb.completionsList.size)
+    }
+
+    @Test
+    fun updateTaskSchedule_preservesUnrelatedTasksSchedulesAndCompletions() = runTest {
+        val canonicalTaskDto = TaskResponseDto(
+            id = "task-target",
+            title = "Target Task",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z",
+            schedules = listOf(
+                TaskScheduleResponseDto("sched-target-new", "ONCE", "2026-08-22", "2026-08-22", null, null, null, null, null, "", "")
+            )
+        )
+        val canonicalResponse = UpdateTaskResponseDto(task = canonicalTaskDto, completions = emptyList())
+        val fakeApi = FakePlannerApi(updateScheduleResult = Result.success(canonicalResponse))
+        val fakeDb = InMemoryTestDatabase()
+
+        // Unrelated task, schedule, and completion
+        fakeDb.tasksMap["task-unrelated"] = TaskEntity("task-unrelated", "Unrelated", null, false, "", "")
+        fakeDb.schedulesMap["sched-unrelated"] = ScheduleEntity("sched-unrelated", "task-unrelated", "ONCE", "2026-08-22", null, null, null, null, null, null, "", "")
+        fakeDb.completionsList.add(CompletionEntity("comp-unrelated", "task-unrelated", "sched-unrelated", "2026-08-22", "2026-08-22", "", null, false))
+
+        fakeDb.tasksMap["task-target"] = TaskEntity("task-target", "Target Task", null, false, "", "")
+        fakeDb.schedulesMap["sched-target-old"] = ScheduleEntity("sched-target-old", "task-target", "ONCE", "2026-08-21", null, null, null, null, null, null, "", "")
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskSchedule(
+            taskId = "task-target",
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(type = "ONCE", startDate = "2026-08-22")
+        )
+
+        assertTrue(result.isSuccess)
+        // Unrelated data untouched
+        assertNotNull(fakeDb.tasksMap["task-unrelated"])
+        assertNotNull(fakeDb.schedulesMap["sched-unrelated"])
+        assertTrue(fakeDb.completionsList.any { it.id == "comp-unrelated" })
+        assertEquals(2, fakeDb.tasksMap.size)
+        assertEquals(2, fakeDb.schedulesMap.size)
+        assertEquals(1, fakeDb.completionsList.size)
+    }
+
+    @Test
+    fun updateTaskSchedule_networkFailure_leavesRoomUntouched() = runTest {
+        val fakeApi = FakePlannerApi(updateScheduleResult = Result.failure(IOException("No network connection")))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-fail"] = TaskEntity("task-fail", "Task", null, false, "", "")
+        fakeDb.schedulesMap["sched-fail"] = ScheduleEntity("sched-fail", "task-fail", "ONCE", "2026-08-22", null, null, null, null, null, null, "", "")
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskSchedule(
+            taskId = "task-fail",
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(type = "ONCE", startDate = "2026-08-23")
+        )
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is IOException)
+        assertEquals("2026-08-22", fakeDb.schedulesMap["sched-fail"]?.startDate)
+    }
+
+    @Test
+    fun updateTaskSchedule_401Unauthorized_propagatesHttpException() = runTest {
+        val http401 = HttpException(
+            Response.error<UpdateTaskResponseDto>(
+                401,
+                "{}".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeApi = FakePlannerApi(updateScheduleResult = Result.failure(http401))
+        val fakeDb = InMemoryTestDatabase()
+        fakeDb.tasksMap["task-401"] = TaskEntity("task-401", "Task", null, false, "", "")
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskSchedule(
+            taskId = "task-401",
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(type = "ONCE", startDate = "2026-08-22")
+        )
+
+        assertTrue(result.isFailure)
+        val err = result.exceptionOrNull()
+        assertTrue(err is HttpException)
+        assertEquals(401, (err as HttpException).code())
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun sharedMutex_serializesRefreshAndUpdateTaskSchedule_staleRefreshCannotOverwriteNewerSchedule() = runTest {
+        val sharedMutex = Mutex()
+        val refreshDeferred = CompletableDeferred<Unit>()
+
+        val staleSnapshot = PlannerRefreshResponseDto(
+            tasks = listOf(
+                RefreshTaskDto(
+                    id = "task-sched-lock",
+                    title = "Task Sched Lock",
+                    note = null,
+                    isImportant = false,
+                    createdAt = "2026-08-18T10:00:00.000Z",
+                    updatedAt = "2026-08-18T10:00:00.000Z"
+                )
+            ),
+            schedules = listOf(
+                RefreshScheduleDto(
+                    id = "sched-stale-lock",
+                    taskId = "task-sched-lock",
+                    scheduleType = "ONCE",
+                    startDate = "2026-08-18",
+                    endDate = "2026-08-18",
+                    scheduledTime = null,
+                    intervalDays = null,
+                    intervalAnchorDate = null,
+                    weekdaysMask = null,
+                    reminderMinutesBefore = null,
+                    createdAt = "2026-08-18T10:00:00.000Z",
+                    updatedAt = "2026-08-18T10:00:00.000Z"
+                )
+            ),
+            completions = emptyList()
+        )
+
+        val canonicalUpdate = UpdateTaskResponseDto(
+            task = TaskResponseDto(
+                id = "task-sched-lock",
+                title = "Task Sched Lock",
+                note = null,
+                isImportant = false,
+                createdAt = "2026-08-18T10:00:00.000Z",
+                updatedAt = "2026-08-22T10:00:00.000Z",
+                schedules = listOf(
+                    TaskScheduleResponseDto(
+                        id = "sched-new-lock",
+                        type = "ONCE",
+                        startDate = "2026-08-25",
+                        endDate = "2026-08-25",
+                        scheduledTime = null,
+                        intervalDays = null,
+                        intervalAnchorDate = null,
+                        weekdaysMask = null,
+                        reminderMinutesBefore = null,
+                        createdAt = "2026-08-22T10:00:00.000Z",
+                        updatedAt = "2026-08-22T10:00:00.000Z"
+                    )
+                )
+            ),
+            completions = emptyList()
+        )
+
+        val fakeApi = FakePlannerApi(
+            refreshResult = Result.success(staleSnapshot),
+            updateScheduleResult = Result.success(canonicalUpdate),
+            delayRefreshDeferred = refreshDeferred
+        )
+        val fakeDb = InMemoryTestDatabase()
+
+        val repo1 = PlannerRepository(fakeDb, { "token" }, fakeApi, sharedMutex)
+        val repo2 = PlannerRepository(fakeDb, { "token" }, fakeApi, sharedMutex)
+
+        // 1. Start Refresh first
+        val refreshJob = async { repo1.refresh() }
+        testScheduler.runCurrent()
+
+        assertEquals(1, fakeApi.getRefreshCallCount)
+        assertTrue(sharedMutex.isLocked)
+
+        // 2. Trigger Schedule Update while Refresh is in-flight
+        val updateJob = async {
+            repo2.updateTaskSchedule(
+                taskId = "task-sched-lock",
+                plannerToday = "2026-08-22",
+                effectiveDate = "2026-08-25",
+                schedule = UpdateTaskScheduleDto(type = "ONCE", startDate = "2026-08-25")
+            )
+        }
+        testScheduler.runCurrent()
+
+        assertEquals(0, fakeApi.updateScheduleCallCount)
+
+        // 3. Complete Refresh response -> Refresh finishes and applies stale snapshot
+        refreshDeferred.complete(Unit)
+        testScheduler.runCurrent()
+        refreshJob.await()
+        updateJob.await()
+
+        assertEquals(1, fakeApi.updateScheduleCallCount)
+        // Stale schedule removed, new schedule present
+        assertNull(fakeDb.schedulesMap["sched-stale-lock"])
+        assertNotNull(fakeDb.schedulesMap["sched-new-lock"])
+        assertEquals("2026-08-25", fakeDb.schedulesMap["sched-new-lock"]?.startDate)
+    }
+
+    @Test
+    fun updateTaskSchedule_laterToScheduled_removesStaleDirectLaterCompletionAndPreservesUnrelated() = runTest {
+        val canonicalTaskDto = TaskResponseDto(
+            id = "task-later-stale",
+            title = "Task",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:05:00.000Z",
+            schedules = listOf(
+                TaskScheduleResponseDto(
+                    id = "sched-once-new",
+                    type = "ONCE",
+                    startDate = "2026-08-22",
+                    endDate = "2026-08-22",
+                    scheduledTime = null,
+                    intervalDays = null,
+                    intervalAnchorDate = null,
+                    weekdaysMask = null,
+                    reminderMinutesBefore = null,
+                    createdAt = "2026-08-22T10:05:00.000Z",
+                    updatedAt = "2026-08-22T10:05:00.000Z"
+                )
+            )
+        )
+        val canonicalResponse = UpdateTaskResponseDto(task = canonicalTaskDto, completions = emptyList())
+        val fakeApi = FakePlannerApi(updateScheduleResult = Result.success(canonicalResponse))
+        val fakeDb = InMemoryTestDatabase()
+
+        // 1. Target task had direct-Later completion
+        fakeDb.tasksMap["task-later-stale"] = TaskEntity("task-later-stale", "Task", null, false, "", "")
+        fakeDb.completionsList.add(
+            CompletionEntity(
+                id = "comp-direct-later-stale",
+                taskId = "task-later-stale",
+                scheduleId = null,
+                scheduledDate = null,
+                completedDate = "2026-08-22",
+                completedAt = "2026-08-22T10:00:00.000Z",
+                titleSnapshot = "Task",
+                isImportantSnapshot = false
+            )
+        )
+
+        // 2. Unrelated task has direct-Later completion
+        fakeDb.tasksMap["task-unrelated-later"] = TaskEntity("task-unrelated-later", "Unrelated", null, false, "", "")
+        fakeDb.completionsList.add(
+            CompletionEntity(
+                id = "comp-unrelated-later",
+                taskId = "task-unrelated-later",
+                scheduleId = null,
+                scheduledDate = null,
+                completedDate = "2026-08-22",
+                completedAt = "2026-08-22T10:00:00.000Z",
+                titleSnapshot = "Unrelated",
+                isImportantSnapshot = false
+            )
+        )
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskSchedule(
+            taskId = "task-later-stale",
+            plannerToday = "2026-08-22",
+            effectiveDate = "2026-08-22",
+            schedule = UpdateTaskScheduleDto(type = "ONCE", startDate = "2026-08-22")
+        )
+
+        assertTrue(result.isSuccess)
+        // Stale direct-Later completion for target task is gone
+        assertTrue(fakeDb.completionsList.none { it.id == "comp-direct-later-stale" })
+
+        // Canonical schedule exists
+        assertNotNull(fakeDb.schedulesMap["sched-once-new"])
+        assertEquals("task-later-stale", fakeDb.schedulesMap["sched-once-new"]?.taskId)
+
+        // Unrelated direct-Later completion remains
+        assertTrue(fakeDb.completionsList.any { it.id == "comp-unrelated-later" })
+        assertEquals(1, fakeDb.completionsList.size)
     }
 }

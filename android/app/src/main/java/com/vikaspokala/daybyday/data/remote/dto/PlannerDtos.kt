@@ -148,3 +148,21 @@ data class UpdateTaskResponseDto(
     val task: TaskResponseDto,
     val completions: List<CompleteTaskResponseDto> = emptyList()
 )
+
+@Serializable
+data class UpdateTaskScheduleDto(
+    val type: String,
+    val startDate: String,
+    val endDate: String? = null,
+    val scheduledTime: String? = null,
+    val reminderMinutesBefore: Int? = null,
+    val intervalDays: Int? = null,
+    val weekdaysMask: Int? = null
+)
+
+@Serializable
+data class UpdateTaskSchedulePayloadDto(
+    val plannerToday: String,
+    val effectiveDate: String,
+    val schedule: UpdateTaskScheduleDto
+)

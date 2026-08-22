@@ -88,6 +88,30 @@ abstract class PlannerDatabase : RoomDatabase() {
         }
     }
 
+    open suspend fun applyUpdateTaskSchedule(
+        task: TaskEntity,
+        schedules: List<ScheduleEntity>,
+        completions: List<CompletionEntity>
+    ) {
+        withTransaction {
+            taskDao().insert(task)
+            val currentSchedules = scheduleDao().getByTaskId(task.id)
+            val responseScheduleIds = schedules.map { it.id }.toSet()
+            val staleScheduleIds = currentSchedules.map { it.id }.filter { it !in responseScheduleIds }
+            if (staleScheduleIds.isNotEmpty()) {
+                completionDao().deleteByScheduleIds(staleScheduleIds)
+                scheduleDao().deleteByIds(staleScheduleIds)
+            }
+            if (schedules.isNotEmpty()) {
+                completionDao().deleteLaterCompletion(task.id)
+                scheduleDao().insertAll(schedules)
+            }
+            if (completions.isNotEmpty()) {
+                completionDao().insertAll(completions)
+            }
+        }
+    }
+
     companion object {
         private const val DATABASE_NAME = "planner.db"
 
