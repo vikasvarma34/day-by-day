@@ -43,6 +43,22 @@ abstract class PlannerDatabase : RoomDatabase() {
         }
     }
 
+    open suspend fun applyComplete(completion: CompletionEntity) {
+        completionDao().insert(completion)
+    }
+
+    open suspend fun applyUndo(
+        taskId: String,
+        scheduleId: String?,
+        scheduledDate: String?
+    ) {
+        if (scheduleId == null) {
+            completionDao().deleteLaterCompletion(taskId)
+        } else if (scheduledDate != null) {
+            completionDao().deleteScheduledCompletion(taskId, scheduleId, scheduledDate)
+        }
+    }
+
     companion object {
         private const val DATABASE_NAME = "planner.db"
 

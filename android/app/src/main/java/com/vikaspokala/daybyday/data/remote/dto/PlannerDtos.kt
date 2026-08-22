@@ -46,3 +46,34 @@ data class PlannerRefreshResponseDto(
     val schedules: List<RefreshScheduleDto> = emptyList(),
     val completions: List<RefreshCompletionDto> = emptyList()
 )
+
+@Serializable
+data class CompleteTaskRequestDto(
+    val plannerToday: String,
+    val completedDate: String,
+    val scheduleId: String? = null,
+    val scheduledDate: String? = null
+)
+
+@Serializable
+data class UndoTaskRequestDto(
+    val scheduleId: String? = null,
+    val scheduledDate: String? = null
+)
+
+@Serializable
+data class CompleteTaskResponseDto(
+    val id: String,
+    val taskId: String,
+    val scheduleId: String? = null,
+    val scheduledDate: String? = null,
+    val completedDate: String,
+    val completedAt: String,
+    val titleSnapshot: String? = null,
+    val isImportantSnapshot: Boolean
+)
+
+@Serializable
+data class TaskActionResponseDto(
+    val success: Boolean = true
+)

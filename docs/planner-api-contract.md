@@ -266,7 +266,19 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
   - For scheduled tasks: `completedDate` must satisfy `min(scheduledDate, plannerToday) <= completedDate <= plannerToday`. Historical backfill may use `completedDate = scheduledDate` in the past. Early completion of future scheduled tasks on `plannerToday` is supported.
   - For direct Later tasks: `completedDate` must equal `plannerToday`.
   - When `completedDate <= plannerToday`, an important eligible completion immediately becomes visible in History under that completion date.
-* **Response**: `HTTP 200 OK` (idempotent).
+* **Response**: `HTTP 200 OK` (idempotent):
+```json
+{
+  "id": "UUID",
+  "taskId": "UUID",
+  "scheduleId": "UUID | null",
+  "scheduledDate": "YYYY-MM-DD | null",
+  "completedDate": "YYYY-MM-DD",
+  "completedAt": "ISO 8601 string",
+  "titleSnapshot": "string | null",
+  "isImportantSnapshot": true
+}
+```
 
 #### Undo (`POST /tasks/:taskId/undo`)
 * **Request**:
@@ -276,7 +288,7 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
   "scheduledDate": "YYYY-MM-DD (optional)"
 }
 ```
-* **Response**: `HTTP 200 OK` (idempotent).
+* **Response**: `HTTP 200 OK` (idempotent) `{ "success": true }`.
 
 #### Delete (`DELETE /tasks/:taskId`)
 * **Response**: `HTTP 200 OK` `{ "deletedTaskId": "UUID" }` (idempotent, does not leak cross-owner task existence).

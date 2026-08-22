@@ -31,6 +31,9 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks")
     suspend fun getAll(): List<TaskEntity>
+
+    @Query("SELECT * FROM tasks WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): TaskEntity?
 }
 
 @Dao
@@ -44,6 +47,9 @@ interface ScheduleDao {
 
     @Query("SELECT * FROM schedules")
     suspend fun getAll(): List<ScheduleEntity>
+
+    @Query("SELECT * FROM schedules WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): ScheduleEntity?
 }
 
 @Dao
@@ -52,11 +58,26 @@ interface CompletionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(completions: List<CompletionEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(completion: CompletionEntity)
+
     @Query("DELETE FROM completions")
     suspend fun deleteAll()
 
     @Query("SELECT * FROM completions")
     suspend fun getAll(): List<CompletionEntity>
+
+    @Query("SELECT * FROM completions WHERE taskId = :taskId AND scheduleId IS NULL AND scheduledDate IS NULL LIMIT 1")
+    suspend fun findLaterCompletion(taskId: String): CompletionEntity?
+
+    @Query("SELECT * FROM completions WHERE taskId = :taskId AND scheduleId = :scheduleId AND scheduledDate = :scheduledDate LIMIT 1")
+    suspend fun findScheduledCompletion(taskId: String, scheduleId: String, scheduledDate: String): CompletionEntity?
+
+    @Query("DELETE FROM completions WHERE taskId = :taskId AND scheduleId IS NULL AND scheduledDate IS NULL")
+    suspend fun deleteLaterCompletion(taskId: String)
+
+    @Query("DELETE FROM completions WHERE taskId = :taskId AND scheduleId = :scheduleId AND scheduledDate = :scheduledDate")
+    suspend fun deleteScheduledCompletion(taskId: String, scheduleId: String, scheduledDate: String)
 
     @Query("""
         SELECT 

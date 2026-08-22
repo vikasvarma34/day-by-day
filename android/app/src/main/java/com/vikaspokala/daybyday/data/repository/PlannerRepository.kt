@@ -5,28 +5,35 @@ import com.vikaspokala.daybyday.data.local.planner.PlannerDatabase
 import com.vikaspokala.daybyday.data.local.planner.entity.toEntity
 import com.vikaspokala.daybyday.data.remote.NetworkClient
 import com.vikaspokala.daybyday.data.remote.api.PlannerApi
+import com.vikaspokala.daybyday.data.remote.dto.CompleteTaskRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.UndoTaskRequestDto
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 open class PlannerRepository(
     private val plannerDatabase: PlannerDatabase,
     private val tokenProvider: suspend () -> String?,
-    private val plannerApi: PlannerApi = NetworkClient.plannerApi
+    private val plannerApi: PlannerApi = NetworkClient.plannerApi,
+    private val mutex: Mutex = defaultMutex
 ) {
 
     constructor(
         plannerDatabase: PlannerDatabase,
         sessionTokenStore: SessionTokenStore,
-        plannerApi: PlannerApi = NetworkClient.plannerApi
+        plannerApi: PlannerApi = NetworkClient.plannerApi,
+        mutex: Mutex = defaultMutex
     ) : this(
         plannerDatabase = plannerDatabase,
         tokenProvider = { sessionTokenStore.readToken() },
-        plannerApi = plannerApi
+        plannerApi = plannerApi,
+        mutex = mutex
     )
 
-    open suspend fun refresh(): Result<Unit> {
+    open suspend fun refresh(): Result<Unit> = mutex.withLock {
         val token = tokenProvider()
             ?: return Result.failure(IllegalStateException("Missing authentication session token"))
 
-        return try {
+        try {
             val response = plannerApi.getRefresh("Bearer $token")
             val taskEntities = response.tasks.map { it.toEntity() }
             val scheduleEntities = response.schedules.map { it.toEntity() }
@@ -41,5 +48,59 @@ open class PlannerRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    open suspend fun completeTask(
+        taskId: String,
+        plannerToday: String,
+        completedDate: String,
+        scheduleId: String? = null,
+        scheduledDate: String? = null
+    ): Result<Unit> = mutex.withLock {
+        val token = tokenProvider()
+            ?: return Result.failure(IllegalStateException("Missing authentication session token"))
+
+        try {
+            val request = CompleteTaskRequestDto(
+                plannerToday = plannerToday,
+                completedDate = completedDate,
+                scheduleId = scheduleId,
+                scheduledDate = scheduledDate
+            )
+            val response = plannerApi.completeTask("Bearer $token", taskId, request)
+            plannerDatabase.applyComplete(response.toEntity())
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    open suspend fun undoTask(
+        taskId: String,
+        scheduleId: String? = null,
+        scheduledDate: String? = null
+    ): Result<Unit> = mutex.withLock {
+        val token = tokenProvider()
+            ?: return Result.failure(IllegalStateException("Missing authentication session token"))
+
+        try {
+            val request = UndoTaskRequestDto(
+                scheduleId = scheduleId,
+                scheduledDate = scheduledDate
+            )
+            plannerApi.undoTask("Bearer $token", taskId, request)
+            plannerDatabase.applyUndo(
+                taskId = taskId,
+                scheduleId = scheduleId,
+                scheduledDate = scheduledDate
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    companion object {
+        val defaultMutex = Mutex()
     }
 }

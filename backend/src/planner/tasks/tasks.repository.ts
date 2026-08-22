@@ -1,7 +1,7 @@
 import { PoolClient } from 'pg';
 import { getPool } from '../../db/pool';
 import { ConflictError, NotFoundError } from '../../errors/http-errors';
-import { CreateTaskDto, PlannerTaskResponse, EditTaskDto, EditTaskScheduleDto, CompleteTaskDto, UndoTaskDto, StopRecurrenceDto } from './tasks.types';
+import { CreateTaskDto, PlannerTaskResponse, EditTaskDto, EditTaskScheduleDto, CompleteTaskDto, UndoTaskDto, StopRecurrenceDto, TaskCompletionResponse } from './tasks.types';
 import { PlannerSchedule, isScheduleOccurringOnDate } from '../domain/recurrence';
 
 type QueryExecutor = {
@@ -324,7 +324,7 @@ export class TasksRepository {
     return this.findTaskWithSchedulesUsing(pool, taskId, userId);
   }
 
-  async completeTask(userId: string, taskId: string, dto: CompleteTaskDto): Promise<void> {
+  async completeTask(userId: string, taskId: string, dto: CompleteTaskDto): Promise<TaskCompletionResponse> {
     const pool = getPool();
     const client = await pool.connect();
     try {
@@ -339,6 +339,8 @@ export class TasksRepository {
       }
       const taskRow = taskRes.rows[0];
 
+      let completionRow: any;
+
       if (!dto.scheduleId) {
         const schedRes = await client.query(`SELECT 1 FROM task_schedules WHERE task_id = $1 LIMIT 1`, [taskId]);
         if (schedRes.rows.length > 0) {
@@ -346,17 +348,22 @@ export class TasksRepository {
         }
 
         const compRes = await client.query(
-          `SELECT 1 FROM task_completions WHERE task_id = $1 AND schedule_id IS NULL AND scheduled_date IS NULL LIMIT 1`,
+          `SELECT id, task_id, schedule_id, scheduled_date::text, completed_date::text, completed_at, title_snapshot, is_important_snapshot
+           FROM task_completions WHERE task_id = $1 AND schedule_id IS NULL AND scheduled_date IS NULL LIMIT 1`,
           [taskId]
         );
         if (compRes.rows.length === 0) {
           const titleSnapshot = taskRow.title;
-          await client.query(
+          const insertRes = await client.query(
             `INSERT INTO task_completions (
               task_id, schedule_id, scheduled_date, completed_date, completed_at, title_snapshot, is_important_snapshot
-            ) VALUES ($1, NULL, NULL, $2, NOW(), $3, $4)`,
+            ) VALUES ($1, NULL, NULL, $2, NOW(), $3, $4)
+            RETURNING id, task_id, schedule_id, scheduled_date::text, completed_date::text, completed_at, title_snapshot, is_important_snapshot`,
             [taskId, dto.completedDate, titleSnapshot, taskRow.is_important]
           );
+          completionRow = insertRes.rows[0];
+        } else {
+          completionRow = compRes.rows[0];
         }
       } else {
         const schedRes = await client.query(
@@ -383,22 +390,38 @@ export class TasksRepository {
         }
 
         const compRes = await client.query(
-          `SELECT 1 FROM task_completions WHERE task_id = $1 AND schedule_id = $2 AND scheduled_date = $3 LIMIT 1`,
+          `SELECT id, task_id, schedule_id, scheduled_date::text, completed_date::text, completed_at, title_snapshot, is_important_snapshot
+           FROM task_completions WHERE task_id = $1 AND schedule_id = $2 AND scheduled_date = $3 LIMIT 1`,
           [taskId, dto.scheduleId, dto.scheduledDate]
         );
         if (compRes.rows.length === 0) {
           const titleSnapshot = schedule.schedule_type === 'ONCE' ? taskRow.title : null;
 
-          await client.query(
+          const insertRes = await client.query(
             `INSERT INTO task_completions (
               task_id, schedule_id, scheduled_date, completed_date, completed_at, title_snapshot, is_important_snapshot
-            ) VALUES ($1, $2, $3, $4, NOW(), $5, $6)`,
+            ) VALUES ($1, $2, $3, $4, NOW(), $5, $6)
+            RETURNING id, task_id, schedule_id, scheduled_date::text, completed_date::text, completed_at, title_snapshot, is_important_snapshot`,
             [taskId, dto.scheduleId, dto.scheduledDate, dto.completedDate, titleSnapshot, taskRow.is_important]
           );
+          completionRow = insertRes.rows[0];
+        } else {
+          completionRow = compRes.rows[0];
         }
       }
 
       await client.query('COMMIT');
+
+      return {
+        id: completionRow.id,
+        taskId: completionRow.task_id,
+        scheduleId: completionRow.schedule_id ?? null,
+        scheduledDate: completionRow.scheduled_date ?? null,
+        completedDate: completionRow.completed_date,
+        completedAt: completionRow.completed_at instanceof Date ? completionRow.completed_at.toISOString() : new Date(completionRow.completed_at).toISOString(),
+        titleSnapshot: completionRow.title_snapshot ?? null,
+        isImportantSnapshot: completionRow.is_important_snapshot,
+      };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;

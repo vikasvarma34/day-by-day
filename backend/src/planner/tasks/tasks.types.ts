@@ -72,3 +72,14 @@ export interface UndoTaskDto {
 export interface StopRecurrenceDto {
   plannerToday: string;
 }
+
+export interface TaskCompletionResponse {
+  id: string;
+  taskId: string;
+  scheduleId: string | null;
+  scheduledDate: string | null;
+  completedDate: string;
+  completedAt: string;
+  titleSnapshot: string | null;
+  isImportantSnapshot: boolean;
+}

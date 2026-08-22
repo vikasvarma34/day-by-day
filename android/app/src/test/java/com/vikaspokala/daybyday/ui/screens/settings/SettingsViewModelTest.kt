@@ -49,6 +49,16 @@ class SettingsViewModelTest {
 
     private class DummyPlannerApi : PlannerApi {
         override suspend fun getRefresh(authorization: String): PlannerRefreshResponseDto = error("Not needed")
+        override suspend fun completeTask(
+            authorization: String,
+            taskId: String,
+            request: com.vikaspokala.daybyday.data.remote.dto.CompleteTaskRequestDto
+        ): com.vikaspokala.daybyday.data.remote.dto.CompleteTaskResponseDto = error("Not needed")
+        override suspend fun undoTask(
+            authorization: String,
+            taskId: String,
+            request: com.vikaspokala.daybyday.data.remote.dto.UndoTaskRequestDto
+        ): com.vikaspokala.daybyday.data.remote.dto.TaskActionResponseDto = error("Not needed")
     }
 
     private class FakePlannerRepository(

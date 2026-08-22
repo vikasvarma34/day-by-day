@@ -58,8 +58,8 @@ export class TasksController {
     try {
       if (!req.user) throw new UnauthorizedError();
       const taskId = req.params.taskId as string;
-      await this.tasksService.completeTask(req.user.id, taskId, req.body);
-      res.status(200).json({ success: true });
+      const completion = await this.tasksService.completeTask(req.user.id, taskId, req.body);
+      res.status(200).json(completion);
     } catch (err) {
       next(err);
     }

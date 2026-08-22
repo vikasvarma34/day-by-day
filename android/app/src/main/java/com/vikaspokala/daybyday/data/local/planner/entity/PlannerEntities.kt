@@ -3,6 +3,7 @@ package com.vikaspokala.daybyday.data.local.planner.entity
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.vikaspokala.daybyday.data.remote.dto.CompleteTaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.RefreshCompletionDto
 import com.vikaspokala.daybyday.data.remote.dto.RefreshScheduleDto
 import com.vikaspokala.daybyday.data.remote.dto.RefreshTaskDto
@@ -76,6 +77,17 @@ fun RefreshScheduleDto.toEntity(): ScheduleEntity = ScheduleEntity(
 )
 
 fun RefreshCompletionDto.toEntity(): CompletionEntity = CompletionEntity(
+    id = id,
+    taskId = taskId,
+    scheduleId = scheduleId,
+    scheduledDate = scheduledDate,
+    completedDate = completedDate,
+    completedAt = completedAt,
+    titleSnapshot = titleSnapshot,
+    isImportantSnapshot = isImportantSnapshot
+)
+
+fun CompleteTaskResponseDto.toEntity(): CompletionEntity = CompletionEntity(
     id = id,
     taskId = taskId,
     scheduleId = scheduleId,

@@ -1,5 +1,5 @@
 import { TasksRepository } from './tasks.repository';
-import { CreateTaskDto, PlannerTaskResponse, EditTaskDto } from './tasks.types';
+import { CreateTaskDto, PlannerTaskResponse, EditTaskDto, TaskCompletionResponse } from './tasks.types';
 import { validatePlannerDate, validatePlausiblePlannerToday } from '../domain/date-validation';
 import { isScheduleOccurringOnDate, PlannerSchedule } from '../domain/recurrence';
 import { BadRequestError } from '../../errors/http-errors';
@@ -355,7 +355,7 @@ export class TasksService {
     return await this.tasksRepository.updateTask(userId, taskId, dto);
   }
 
-  async completeTask(userId: string, taskId: string, payload: any): Promise<void> {
+  async completeTask(userId: string, taskId: string, payload: any): Promise<TaskCompletionResponse> {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new BadRequestError('Invalid request body');
     }
@@ -403,7 +403,7 @@ export class TasksService {
       }
     }
 
-    await this.tasksRepository.completeTask(userId, taskId, {
+    return await this.tasksRepository.completeTask(userId, taskId, {
       plannerToday,
       completedDate,
       scheduleId,
