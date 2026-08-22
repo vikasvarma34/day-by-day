@@ -8,6 +8,7 @@ import com.vikaspokala.daybyday.data.local.planner.dao.CompletionDao
 import com.vikaspokala.daybyday.data.local.planner.dao.HistoryCompletionRow
 import com.vikaspokala.daybyday.data.local.planner.dao.ScheduleDao
 import com.vikaspokala.daybyday.data.local.planner.dao.TaskDao
+import com.vikaspokala.daybyday.data.local.planner.dao.TaskWithScheduleRow
 import com.vikaspokala.daybyday.data.local.planner.entity.CompletionEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.ScheduleEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.TaskEntity
@@ -226,6 +227,7 @@ class PlannerRepositoryTest {
             }
             override suspend fun getAll(): List<ScheduleEntity> = schedulesMap.values.toList()
             override suspend fun getById(id: String): ScheduleEntity? = schedulesMap[id]
+            override fun observeCandidateSchedules(dateString: String): Flow<List<TaskWithScheduleRow>> = emptyFlow()
         }
 
         private val fakeCompletionDao = object : CompletionDao {
@@ -257,6 +259,7 @@ class PlannerRepositoryTest {
                 completionsList.removeAll { it.taskId == taskId && it.scheduleId == scheduleId && it.scheduledDate == scheduledDate }
             }
             override fun observeHistory(plannerToday: String): Flow<List<HistoryCompletionRow>> = emptyFlow()
+            override fun observeCompletedScheduleIdsForDate(dateString: String): Flow<List<String>> = emptyFlow()
         }
 
         override fun taskDao(): TaskDao = fakeTaskDao

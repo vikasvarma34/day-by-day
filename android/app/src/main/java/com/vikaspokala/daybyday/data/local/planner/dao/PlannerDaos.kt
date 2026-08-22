@@ -19,6 +19,22 @@ data class HistoryCompletionRow(
     val isImportantSnapshot: Boolean
 )
 
+data class TaskWithScheduleRow(
+    val taskId: String,
+    val title: String,
+    val note: String?,
+    val isImportant: Boolean,
+    val scheduleId: String,
+    val scheduleType: String,
+    val startDate: String,
+    val endDate: String?,
+    val scheduledTime: String?,
+    val intervalDays: Int?,
+    val intervalAnchorDate: String?,
+    val weekdaysMask: Int?,
+    val reminderMinutesBefore: Int?
+)
+
 @Dao
 interface TaskDao {
 
@@ -67,6 +83,19 @@ interface ScheduleDao {
 
     @Query("SELECT * FROM schedules WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ScheduleEntity?
+
+    @Query("""
+        SELECT
+            t.id AS taskId, t.title AS title, t.note AS note, t.isImportant AS isImportant,
+            s.id AS scheduleId, s.scheduleType AS scheduleType, s.startDate AS startDate, s.endDate AS endDate,
+            s.scheduledTime AS scheduledTime, s.intervalDays AS intervalDays,
+            s.intervalAnchorDate AS intervalAnchorDate, s.weekdaysMask AS weekdaysMask,
+            s.reminderMinutesBefore AS reminderMinutesBefore
+        FROM schedules s
+        INNER JOIN tasks t ON s.taskId = t.id
+        WHERE s.startDate <= :dateString AND (s.endDate IS NULL OR s.endDate >= :dateString)
+    """)
+    fun observeCandidateSchedules(dateString: String): Flow<List<TaskWithScheduleRow>>
 }
 
 @Dao
@@ -120,4 +149,7 @@ interface CompletionDao {
         ORDER BY c.completedDate DESC, c.completedAt DESC, c.id DESC
     """)
     fun observeHistory(plannerToday: String): Flow<List<HistoryCompletionRow>>
+
+    @Query("SELECT scheduleId FROM completions WHERE scheduledDate = :dateString AND scheduleId IS NOT NULL")
+    fun observeCompletedScheduleIdsForDate(dateString: String): Flow<List<String>>
 }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -45,6 +46,8 @@ class HistoryViewModelTest {
             lastPlannerTodayArg = plannerToday
             return historyFlow
         }
+
+        override fun observeCompletedScheduleIdsForDate(dateString: String): Flow<List<String>> = emptyFlow()
     }
 
     @Before

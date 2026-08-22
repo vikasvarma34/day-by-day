@@ -232,6 +232,10 @@ open class PlannerRepository(
         }
     }
 
+    open fun observeScheduledOccurrences(date: java.time.LocalDate): kotlinx.coroutines.flow.Flow<List<com.vikaspokala.daybyday.data.local.planner.ScheduledOccurrence>> {
+        return plannerDatabase.observeScheduledOccurrences(date)
+    }
+
     companion object {
         val defaultMutex = Mutex()
     }

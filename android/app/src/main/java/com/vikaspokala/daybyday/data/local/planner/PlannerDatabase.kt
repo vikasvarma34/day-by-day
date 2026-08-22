@@ -11,6 +11,9 @@ import com.vikaspokala.daybyday.data.local.planner.dao.TaskDao
 import com.vikaspokala.daybyday.data.local.planner.entity.CompletionEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.ScheduleEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.TaskEntity
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import java.time.LocalDate
 
 @Database(
     entities = [
@@ -109,6 +112,37 @@ abstract class PlannerDatabase : RoomDatabase() {
             if (completions.isNotEmpty()) {
                 completionDao().insertAll(completions)
             }
+        }
+    }
+
+    open fun observeScheduledOccurrences(date: LocalDate): Flow<List<ScheduledOccurrence>> {
+        val dateString = date.toString()
+        val candidateSchedulesFlow = scheduleDao().observeCandidateSchedules(dateString)
+        val completedScheduleIdsFlow = completionDao().observeCompletedScheduleIdsForDate(dateString)
+
+        return combine(candidateSchedulesFlow, completedScheduleIdsFlow) { candidates, completedIds ->
+            val completedSet = completedIds.toSet()
+            candidates
+                .filter { isScheduleOccurringOnDate(it, date) }
+                .map { row ->
+                    ScheduledOccurrence(
+                        taskId = row.taskId,
+                        scheduleId = row.scheduleId,
+                        title = row.title,
+                        note = row.note,
+                        isImportant = row.isImportant,
+                        scheduleType = row.scheduleType,
+                        startDate = row.startDate,
+                        endDate = row.endDate,
+                        scheduledTime = row.scheduledTime,
+                        intervalDays = row.intervalDays,
+                        intervalAnchorDate = row.intervalAnchorDate,
+                        weekdaysMask = row.weekdaysMask,
+                        reminderMinutesBefore = row.reminderMinutesBefore,
+                        scheduledDate = dateString,
+                        isCompleted = completedSet.contains(row.scheduleId)
+                    )
+                }
         }
     }
 
