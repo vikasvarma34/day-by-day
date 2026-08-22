@@ -51,8 +51,14 @@ class HistoryViewModel(
     ) : this(
         completionDao = object : CompletionDao {
             override suspend fun insertAll(completions: List<CompletionEntity>) = Unit
+            override suspend fun insert(completion: CompletionEntity) = Unit
             override suspend fun deleteAll() = Unit
+            override suspend fun deleteByTaskId(taskId: String) = Unit
             override suspend fun getAll(): List<CompletionEntity> = emptyList()
+            override suspend fun findLaterCompletion(taskId: String): CompletionEntity? = null
+            override suspend fun findScheduledCompletion(taskId: String, scheduleId: String, scheduledDate: String): CompletionEntity? = null
+            override suspend fun deleteLaterCompletion(taskId: String) = Unit
+            override suspend fun deleteScheduledCompletion(taskId: String, scheduleId: String, scheduledDate: String) = Unit
             override fun observeHistory(plannerToday: String): Flow<List<HistoryCompletionRow>> {
                 return database.observeHistoryTasks(referenceDate).map { items ->
                     items.map { item ->

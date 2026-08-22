@@ -63,6 +63,11 @@ class SettingsViewModelTest {
             taskId: String,
             request: com.vikaspokala.daybyday.data.remote.dto.UndoTaskRequestDto
         ): com.vikaspokala.daybyday.data.remote.dto.TaskActionResponseDto = error("Not needed")
+        override suspend fun updateTaskContent(
+            authorization: String,
+            taskId: String,
+            request: com.vikaspokala.daybyday.data.remote.dto.UpdateTaskContentRequestDto
+        ): com.vikaspokala.daybyday.data.remote.dto.UpdateTaskResponseDto = error("Not needed")
         override suspend fun deleteTask(
             authorization: String,
             taskId: String

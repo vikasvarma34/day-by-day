@@ -135,3 +135,16 @@ data class CreateTaskResponseDto(
 data class DeleteTaskResponseDto(
     val deletedTaskId: String
 )
+
+@Serializable
+data class UpdateTaskContentRequestDto(
+    val title: String,
+    val note: String? = null,
+    val isImportant: Boolean
+)
+
+@Serializable
+data class UpdateTaskResponseDto(
+    val task: TaskResponseDto,
+    val completions: List<CompleteTaskResponseDto> = emptyList()
+)

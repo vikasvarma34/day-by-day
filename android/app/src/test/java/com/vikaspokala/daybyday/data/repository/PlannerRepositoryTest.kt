@@ -26,6 +26,8 @@ import com.vikaspokala.daybyday.data.remote.dto.TaskActionResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.TaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.TaskScheduleResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.UndoTaskRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskContentRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskResponseDto
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -59,6 +61,7 @@ class PlannerRepositoryTest {
         ),
         var undoResult: Result<TaskActionResponseDto> = Result.success(TaskActionResponseDto(true)),
         var deleteResult: Result<DeleteTaskResponseDto> = Result.success(DeleteTaskResponseDto("default-task-id")),
+        var updateContentResult: Result<UpdateTaskResponseDto>? = null,
         var delayRefreshDeferred: CompletableDeferred<Unit>? = null
     ) : PlannerApi {
         var lastAuthorizationHeader: String? = null
@@ -68,11 +71,26 @@ class PlannerRepositoryTest {
         var lastUndoTaskId: String? = null
         var lastUndoRequest: UndoTaskRequestDto? = null
         var lastDeleteTaskId: String? = null
+        var lastUpdateContentTaskId: String? = null
+        var lastUpdateContentRequest: UpdateTaskContentRequestDto? = null
         var createCallCount = 0
         var getRefreshCallCount = 0
         var completeCallCount = 0
         var undoCallCount = 0
         var deleteCallCount = 0
+        var updateContentCallCount = 0
+
+        override suspend fun updateTaskContent(
+            authorization: String,
+            taskId: String,
+            request: UpdateTaskContentRequestDto
+        ): UpdateTaskResponseDto {
+            updateContentCallCount++
+            lastAuthorizationHeader = authorization
+            lastUpdateContentTaskId = taskId
+            lastUpdateContentRequest = request
+            return updateContentResult?.getOrThrow() ?: error("updateContentResult not configured")
+        }
 
         override suspend fun deleteTask(
             authorization: String,
@@ -135,6 +153,7 @@ class PlannerRepositoryTest {
         var applyCompleteCalled = false
         var applyUndoCalled = false
         var applyDeleteTaskCalled = false
+        var applyUpdateTaskContentCalled = false
 
         private val fakeTaskDao = object : TaskDao {
             override suspend fun insertAll(tasks: List<TaskEntity>) {
@@ -169,7 +188,7 @@ class PlannerRepositoryTest {
 
         private val fakeCompletionDao = object : CompletionDao {
             override suspend fun insertAll(completions: List<CompletionEntity>) {
-                completionsList.addAll(completions)
+                completions.forEach { insert(it) }
             }
             override suspend fun insert(completion: CompletionEntity) {
                 completionsList.removeAll { it.id == completion.id }
@@ -241,6 +260,14 @@ class PlannerRepositoryTest {
             fakeCompletionDao.deleteByTaskId(taskId)
             fakeScheduleDao.deleteByTaskId(taskId)
             fakeTaskDao.deleteById(taskId)
+        }
+
+        override suspend fun applyUpdateTaskContent(task: TaskEntity, completions: List<CompletionEntity>) {
+            applyUpdateTaskContentCalled = true
+            fakeTaskDao.insert(task)
+            if (completions.isNotEmpty()) {
+                fakeCompletionDao.insertAll(completions)
+            }
         }
     }
 
@@ -1217,5 +1244,319 @@ class PlannerRepositoryTest {
         assertEquals(1, fakeApi.deleteCallCount)
         assertEquals(0, fakeDb.tasksMap.size)
         assertNull(fakeDb.tasksMap["task-to-delete"])
+    }
+
+    @Test
+    fun updateTaskContent_missingToken_returnsFailureWithoutCallingNetwork() = runTest {
+        val fakeApi = FakePlannerApi()
+        val fakeDb = InMemoryTestDatabase()
+        val repository = PlannerRepository(fakeDb, tokenProvider = { null }, fakeApi)
+
+        val result = repository.updateTaskContent("task-1", "New Title", "New Note", true)
+
+        assertTrue(result.isFailure)
+        assertEquals("Missing authentication session token", result.exceptionOrNull()?.message)
+        assertEquals(0, fakeApi.updateContentCallCount)
+    }
+
+    @Test
+    fun updateTaskContent_authenticated_sendsExactContentFieldsAndUpdatesRoom() = runTest {
+        val canonicalTaskDto = TaskResponseDto(
+            id = "task-edit-1",
+            title = "Updated Title",
+            note = "Updated Note",
+            isImportant = true,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:05:00.000Z"
+        )
+        val canonicalResponse = UpdateTaskResponseDto(
+            task = canonicalTaskDto,
+            completions = emptyList()
+        )
+        val fakeApi = FakePlannerApi(updateContentResult = Result.success(canonicalResponse))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-edit-1"] = TaskEntity(
+            id = "task-edit-1",
+            title = "Old Title",
+            note = "Old Note",
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z"
+        )
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskContent(
+            taskId = "task-edit-1",
+            title = "Updated Title",
+            note = "Updated Note",
+            isImportant = true
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals("Bearer token_123", fakeApi.lastAuthorizationHeader)
+        assertEquals("task-edit-1", fakeApi.lastUpdateContentTaskId)
+        assertEquals("Updated Title", fakeApi.lastUpdateContentRequest?.title)
+        assertEquals("Updated Note", fakeApi.lastUpdateContentRequest?.note)
+        assertEquals(true, fakeApi.lastUpdateContentRequest?.isImportant)
+        assertEquals(1, fakeApi.updateContentCallCount)
+        assertEquals(0, fakeApi.getRefreshCallCount) // Zero follow-up GET
+
+        assertTrue(fakeDb.applyUpdateTaskContentCalled)
+        val storedTask = fakeDb.tasksMap["task-edit-1"]
+        assertNotNull(storedTask)
+        assertEquals("Updated Title", storedTask?.title)
+        assertEquals("Updated Note", storedTask?.note)
+        assertEquals(true, storedTask?.isImportant)
+        assertEquals("2026-08-22T10:05:00.000Z", storedTask?.updatedAt)
+    }
+
+    @Test
+    fun updateTaskContent_withNullNote_sendsExplicitNullNote() = runTest {
+        val canonicalTaskDto = TaskResponseDto(
+            id = "task-clear-note",
+            title = "Same Title",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:06:00.000Z"
+        )
+        val canonicalResponse = UpdateTaskResponseDto(
+            task = canonicalTaskDto,
+            completions = emptyList()
+        )
+        val fakeApi = FakePlannerApi(updateContentResult = Result.success(canonicalResponse))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-clear-note"] = TaskEntity(
+            id = "task-clear-note",
+            title = "Same Title",
+            note = "Existing Note",
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z"
+        )
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskContent(
+            taskId = "task-clear-note",
+            title = "Same Title",
+            note = null,
+            isImportant = false
+        )
+
+        assertTrue(result.isSuccess)
+        assertNull(fakeApi.lastUpdateContentRequest?.note)
+        assertNull(fakeDb.tasksMap["task-clear-note"]?.note)
+    }
+
+    @Test
+    fun updateTaskContent_withAffectedCompletions_updatesRoomCompletionsAndPreservesSchedules() = runTest {
+        val canonicalTaskDto = TaskResponseDto(
+            id = "task-star-completed",
+            title = "Renamed Task",
+            note = null,
+            isImportant = true,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:10:00.000Z"
+        )
+        val canonicalCompDto = CompleteTaskResponseDto(
+            id = "comp-1",
+            taskId = "task-star-completed",
+            scheduleId = "sched-1",
+            scheduledDate = "2026-08-22",
+            completedDate = "2026-08-22",
+            completedAt = "2026-08-22T10:00:00.000Z",
+            titleSnapshot = "Original Title", // Frozen completion title snapshot
+            isImportantSnapshot = true // Updated from backend response
+        )
+        val canonicalResponse = UpdateTaskResponseDto(
+            task = canonicalTaskDto,
+            completions = listOf(canonicalCompDto)
+        )
+        val fakeApi = FakePlannerApi(updateContentResult = Result.success(canonicalResponse))
+        val fakeDb = InMemoryTestDatabase()
+
+        // Existing Room task
+        fakeDb.tasksMap["task-star-completed"] = TaskEntity(
+            id = "task-star-completed",
+            title = "Original Title",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z"
+        )
+        // Existing Room schedule (must remain untouched)
+        val existingSchedule = ScheduleEntity(
+            id = "sched-1",
+            taskId = "task-star-completed",
+            scheduleType = "ONCE",
+            startDate = "2026-08-22",
+            endDate = null,
+            scheduledTime = "09:00:00",
+            intervalDays = null,
+            intervalAnchorDate = null,
+            weekdaysMask = null,
+            reminderMinutesBefore = null,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z"
+        )
+        fakeDb.schedulesMap["sched-1"] = existingSchedule
+
+        // Existing Room completion
+        fakeDb.completionsList.add(
+            CompletionEntity(
+                id = "comp-1",
+                taskId = "task-star-completed",
+                scheduleId = "sched-1",
+                scheduledDate = "2026-08-22",
+                completedDate = "2026-08-22",
+                completedAt = "2026-08-22T10:00:00.000Z",
+                titleSnapshot = "Original Title",
+                isImportantSnapshot = false
+            )
+        )
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskContent(
+            taskId = "task-star-completed",
+            title = "Renamed Task",
+            note = null,
+            isImportant = true
+        )
+
+        assertTrue(result.isSuccess)
+        // Task updated
+        assertEquals("Renamed Task", fakeDb.tasksMap["task-star-completed"]?.title)
+        assertEquals(true, fakeDb.tasksMap["task-star-completed"]?.isImportant)
+
+        // Schedule untouched
+        assertEquals(1, fakeDb.schedulesMap.size)
+        assertEquals(existingSchedule, fakeDb.schedulesMap["sched-1"])
+
+        // Completion updated from canonical response
+        assertEquals(1, fakeDb.completionsList.size)
+        val updatedComp = fakeDb.completionsList.first()
+        assertEquals(true, updatedComp.isImportantSnapshot)
+        assertEquals("Original Title", updatedComp.titleSnapshot) // Frozen titleSnapshot preserved
+        assertEquals("2026-08-22", updatedComp.completedDate)
+        assertEquals("2026-08-22T10:00:00.000Z", updatedComp.completedAt)
+    }
+
+    @Test
+    fun updateTaskContent_networkFailure_leavesRoomUntouched() = runTest {
+        val fakeApi = FakePlannerApi(updateContentResult = Result.failure(IOException("Network error")))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-fail"] = TaskEntity(
+            id = "task-fail",
+            title = "Original Title",
+            note = "Original Note",
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z"
+        )
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskContent("task-fail", "New Title", "New Note", true)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is IOException)
+        assertEquals("Original Title", fakeDb.tasksMap["task-fail"]?.title)
+        assertEquals(false, fakeDb.tasksMap["task-fail"]?.isImportant)
+    }
+
+    @Test
+    fun updateTaskContent_401Unauthorized_propagatesHttpException() = runTest {
+        val http401 = HttpException(
+            Response.error<UpdateTaskResponseDto>(
+                401,
+                "{}".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeApi = FakePlannerApi(updateContentResult = Result.failure(http401))
+        val fakeDb = InMemoryTestDatabase()
+        fakeDb.tasksMap["task-401"] = TaskEntity("task-401", "Title", null, false, "", "")
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.updateTaskContent("task-401", "New Title", null, true)
+
+        assertTrue(result.isFailure)
+        val err = result.exceptionOrNull()
+        assertTrue(err is HttpException)
+        assertEquals(401, (err as HttpException).code())
+        assertEquals("Title", fakeDb.tasksMap["task-401"]?.title)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun sharedMutex_serializesRefreshAndUpdateTaskContent_staleRefreshCannotOverwriteNewerUpdate() = runTest {
+        val sharedMutex = Mutex()
+        val refreshDeferred = CompletableDeferred<Unit>()
+
+        val staleSnapshot = PlannerRefreshResponseDto(
+            tasks = listOf(
+                RefreshTaskDto(
+                    id = "task-edit-lock",
+                    title = "Stale Old Title",
+                    note = null,
+                    isImportant = false,
+                    createdAt = "2026-08-18T10:00:00.000Z",
+                    updatedAt = "2026-08-18T10:00:00.000Z"
+                )
+            ),
+            schedules = emptyList(),
+            completions = emptyList()
+        )
+
+        val canonicalUpdate = UpdateTaskResponseDto(
+            task = TaskResponseDto(
+                id = "task-edit-lock",
+                title = "New Canonical Title",
+                note = "New Note",
+                isImportant = true,
+                createdAt = "2026-08-18T10:00:00.000Z",
+                updatedAt = "2026-08-22T10:00:00.000Z"
+            ),
+            completions = emptyList()
+        )
+
+        val fakeApi = FakePlannerApi(
+            refreshResult = Result.success(staleSnapshot),
+            updateContentResult = Result.success(canonicalUpdate),
+            delayRefreshDeferred = refreshDeferred
+        )
+        val fakeDb = InMemoryTestDatabase()
+
+        val repo1 = PlannerRepository(fakeDb, { "token" }, fakeApi, sharedMutex)
+        val repo2 = PlannerRepository(fakeDb, { "token" }, fakeApi, sharedMutex)
+
+        // 1. Start Refresh first (acquires lock, pauses on refreshDeferred)
+        val refreshJob = async { repo1.refresh() }
+        testScheduler.runCurrent()
+
+        assertEquals(1, fakeApi.getRefreshCallCount)
+        assertTrue(sharedMutex.isLocked)
+
+        // 2. Trigger Update while Refresh is in-flight
+        val updateJob = async { repo2.updateTaskContent("task-edit-lock", "New Canonical Title", "New Note", true) }
+        testScheduler.runCurrent()
+
+        // Update is queued behind Mutex and has NOT executed network call
+        assertEquals(0, fakeApi.updateContentCallCount)
+
+        // 3. Complete Refresh response -> Refresh finishes, then Update executes and updates Room
+        refreshDeferred.complete(Unit)
+        testScheduler.runCurrent()
+        refreshJob.await()
+        updateJob.await()
+
+        assertEquals(1, fakeApi.updateContentCallCount)
+        assertEquals("New Canonical Title", fakeDb.tasksMap["task-edit-lock"]?.title)
+        assertEquals(true, fakeDb.tasksMap["task-edit-lock"]?.isImportant)
     }
 }

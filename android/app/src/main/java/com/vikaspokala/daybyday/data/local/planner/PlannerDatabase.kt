@@ -76,6 +76,18 @@ abstract class PlannerDatabase : RoomDatabase() {
         }
     }
 
+    open suspend fun applyUpdateTaskContent(
+        task: TaskEntity,
+        completions: List<CompletionEntity>
+    ) {
+        withTransaction {
+            taskDao().insert(task)
+            if (completions.isNotEmpty()) {
+                completionDao().insertAll(completions)
+            }
+        }
+    }
+
     companion object {
         private const val DATABASE_NAME = "planner.db"
 
