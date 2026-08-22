@@ -9,6 +9,8 @@ import com.vikaspokala.daybyday.data.local.planner.dao.HistoryCompletionRow
 import com.vikaspokala.daybyday.data.local.planner.dao.ScheduleDao
 import com.vikaspokala.daybyday.data.local.planner.dao.TaskDao
 import com.vikaspokala.daybyday.data.local.planner.dao.TaskWithScheduleRow
+import com.vikaspokala.daybyday.data.local.planner.dao.LaterTaskRow
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.vikaspokala.daybyday.data.local.planner.entity.CompletionEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.ScheduleEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.TaskEntity
@@ -193,6 +195,7 @@ class PlannerRepositoryTest {
         var applyUpdateTaskScheduleCalled = false
 
         private val fakeTaskDao = object : TaskDao {
+            override fun observeLaterTasks() = MutableStateFlow(emptyList<LaterTaskRow>())
             override suspend fun insertAll(tasks: List<TaskEntity>) {
                 tasks.forEach { tasksMap[it.id] = it }
             }
@@ -208,6 +211,8 @@ class PlannerRepositoryTest {
         }
 
         private val fakeScheduleDao = object : ScheduleDao {
+            override fun observeCandidateSchedules(dateString: String) = MutableStateFlow(emptyList<TaskWithScheduleRow>())
+            override fun observeImportantCandidateSchedules(startDate: String, endDate: String) = MutableStateFlow(emptyList<TaskWithScheduleRow>())
             override suspend fun insertAll(schedules: List<ScheduleEntity>) {
                 schedules.forEach { schedulesMap[it.id] = it }
             }
@@ -227,7 +232,6 @@ class PlannerRepositoryTest {
             }
             override suspend fun getAll(): List<ScheduleEntity> = schedulesMap.values.toList()
             override suspend fun getById(id: String): ScheduleEntity? = schedulesMap[id]
-            override fun observeCandidateSchedules(dateString: String): Flow<List<TaskWithScheduleRow>> = emptyFlow()
         }
 
         private val fakeCompletionDao = object : CompletionDao {

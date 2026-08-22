@@ -13,6 +13,7 @@ import com.vikaspokala.daybyday.data.local.planner.entity.ScheduleEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.TaskEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 
 @Database(
@@ -162,4 +163,20 @@ abstract class PlannerDatabase : RoomDatabase() {
             }
         }
     }
+
+    open fun observeImportantDates(startDate: LocalDate, endDate: LocalDate): Flow<Set<LocalDate>> {
+        if (endDate.isBefore(startDate)) return kotlinx.coroutines.flow.flowOf(emptySet())
+        return scheduleDao().observeImportantCandidateSchedules(startDate.toString(), endDate.toString()).map { rows ->
+            val dates = linkedSetOf<LocalDate>()
+            var date = startDate
+            while (!date.isAfter(endDate)) {
+                if (rows.any { isScheduleOccurringOnDate(it, date) }) dates += date
+                date = date.plusDays(1)
+            }
+            dates
+        }
+    }
+
+    open fun observeLaterTasks(): Flow<List<LaterTaskProjection>> =
+        taskDao().observeLaterTasks().map { rows -> rows.map { it.toProjection() } }
 }

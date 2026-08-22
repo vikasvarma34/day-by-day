@@ -1,6 +1,7 @@
 package com.vikaspokala.daybyday.data.local.planner
 
 import com.vikaspokala.daybyday.data.local.planner.dao.TaskWithScheduleRow
+import com.vikaspokala.daybyday.data.local.planner.dao.LaterTaskRow
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
@@ -23,6 +24,15 @@ data class ScheduledOccurrence(
     
     val scheduledDate: String,
     val isCompleted: Boolean
+)
+
+data class LaterTaskProjection(
+    val taskId: String, val title: String, val note: String?, val isImportant: Boolean,
+    val createdAt: String, val directCompletionId: String?, val completedDate: String?, val completedAt: String?
+)
+
+fun LaterTaskRow.toProjection() = LaterTaskProjection(
+    taskId, title, note, isImportant, createdAt, completionId, completedDate, completedAt
 )
 
 fun isScheduleOccurringOnDate(row: TaskWithScheduleRow, date: LocalDate): Boolean {

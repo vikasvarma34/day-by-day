@@ -6,6 +6,7 @@ import com.vikaspokala.daybyday.data.local.planner.dao.HistoryCompletionRow
 import com.vikaspokala.daybyday.data.local.planner.dao.ScheduleDao
 import com.vikaspokala.daybyday.data.local.planner.dao.TaskDao
 import com.vikaspokala.daybyday.data.local.planner.dao.TaskWithScheduleRow
+import com.vikaspokala.daybyday.data.local.planner.dao.LaterTaskRow
 import com.vikaspokala.daybyday.data.local.planner.entity.CompletionEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.ScheduleEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.TaskEntity
@@ -32,6 +33,7 @@ class PlannerRepositoryOccurrenceTest {
         override suspend fun deleteByIds(ids: List<String>) = Unit
         override suspend fun getAll(): List<ScheduleEntity> = emptyList()
         override suspend fun getById(id: String): ScheduleEntity? = null
+        override fun observeImportantCandidateSchedules(startDate: String, endDate: String): Flow<List<TaskWithScheduleRow>> = candidates
     }
 
     private class FakeCompletionDao : CompletionDao {
