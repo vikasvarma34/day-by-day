@@ -45,6 +45,8 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onChangePasswordClick: () -> Unit = {},
     onEditFieldClick: (ProfileFieldType) -> Unit = {},
+    refreshState: RefreshUiState = RefreshUiState.Idle,
+    onRefreshClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val initialLetter = if (firstName.isNotEmpty()) firstName.take(1).uppercase() else "V"
@@ -198,6 +200,21 @@ fun SettingsScreen(
 
             // Account Section
             SectionLabel(text = "Account")
+            Spacer(modifier = Modifier.height(8.dp))
+            StandardSettingsRow(
+                title = "Refresh planner data",
+                subtitle = when (refreshState) {
+                    is RefreshUiState.Error -> "Couldn’t refresh right now."
+                    is RefreshUiState.Refreshing -> "Refreshing..."
+                    is RefreshUiState.Idle -> null
+                },
+                statusText = when (refreshState) {
+                    is RefreshUiState.Refreshing -> "Refreshing..."
+                    is RefreshUiState.Error -> "Retry"
+                    is RefreshUiState.Idle -> null
+                },
+                onClick = if (refreshState !is RefreshUiState.Refreshing) onRefreshClick else null
+            )
             Spacer(modifier = Modifier.height(8.dp))
             StandardSettingsRow(
                 title = "Change password",

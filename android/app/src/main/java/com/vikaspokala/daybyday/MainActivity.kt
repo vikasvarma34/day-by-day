@@ -41,7 +41,10 @@ class MainActivity : ComponentActivity() {
                             isRetrying = state.isRetrying,
                             onRetry = { authViewModel.retrySessionVerification() }
                         )
-                        is AuthUiState.Authenticated -> AppShell(user = state.user)
+                        is AuthUiState.Authenticated -> AppShell(
+                            user = state.user,
+                            onSessionExpired = { authViewModel.handleSessionExpired() }
+                        )
                     }
                 }
             }

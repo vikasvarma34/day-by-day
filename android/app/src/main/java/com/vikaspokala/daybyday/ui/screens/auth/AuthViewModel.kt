@@ -158,6 +158,13 @@ class AuthViewModel(
         }
     }
 
+    fun handleSessionExpired() {
+        viewModelScope.launch {
+            authRepository.clearSession()
+            _uiState.value = AuthUiState.SignedOut()
+        }
+    }
+
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

@@ -24,10 +24,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -48,6 +50,7 @@ import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 import com.vikaspokala.daybyday.ui.screens.settings.ChangePasswordScreen
 import com.vikaspokala.daybyday.ui.screens.settings.EditProfileFieldScreen
 import com.vikaspokala.daybyday.ui.screens.settings.SettingsScreen
+import com.vikaspokala.daybyday.ui.screens.settings.SettingsViewModel
 import com.vikaspokala.daybyday.ui.screens.task.TaskScreen
 import com.vikaspokala.daybyday.ui.screens.today.TodayScreen
 import com.vikaspokala.daybyday.ui.screens.today.TodayViewModel
@@ -61,10 +64,16 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 @Composable
 fun AppShell(
     user: AuthUserDto? = null,
+    onSessionExpired: () -> Unit = {},
     todayViewModel: TodayViewModel = viewModel(),
     scheduleViewModel: ScheduleViewModel = viewModel(),
     laterViewModel: LaterViewModel = viewModel(),
-    historyViewModel: HistoryViewModel = viewModel()
+    historyViewModel: HistoryViewModel = viewModel(
+        factory = HistoryViewModel.Factory(LocalContext.current)
+    ),
+    settingsViewModel: SettingsViewModel = viewModel(
+        factory = SettingsViewModel.Factory(LocalContext.current, onSessionExpired)
+    )
 ) {
     val backStack = rememberNavBackStack(Screen.Today as NavKey)
 
@@ -205,6 +214,7 @@ fun AppShell(
                     }
                     is Screen.History -> NavEntry(key) { HistoryScreen(viewModel = historyViewModel) }
                     is Screen.Settings -> NavEntry(key) {
+                        val refreshState by settingsViewModel.refreshState.collectAsState()
                         SettingsScreen(
                             firstName = firstName,
                             lastName = lastName,
@@ -219,7 +229,9 @@ fun AppShell(
                             },
                             onEditFieldClick = { fieldType ->
                                 backStack.add(Screen.EditProfileField(fieldType))
-                            }
+                            },
+                            refreshState = refreshState,
+                            onRefreshClick = { settingsViewModel.refreshPlannerData() }
                         )
                     }
                     is Screen.ChangePassword -> NavEntry(key) {
