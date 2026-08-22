@@ -5,6 +5,7 @@ import com.vikaspokala.daybyday.ui.models.Recurrence
 
 data class ScheduleTaskItem(
     val id: String,
+    val scheduleId: String? = null,
     val title: String,
     val note: String? = null,
     val date: LocalDate,

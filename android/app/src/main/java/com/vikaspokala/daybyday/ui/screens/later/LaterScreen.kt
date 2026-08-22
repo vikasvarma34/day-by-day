@@ -26,11 +26,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vikaspokala.daybyday.ui.components.TaskCard
 import com.vikaspokala.daybyday.ui.navigation.Screen
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
@@ -43,10 +45,15 @@ fun LaterScreen(
     onAddTask: (Screen.Task) -> Unit = {},
     onTaskClick: (Screen.Task) -> Unit = {},
     modifier: Modifier = Modifier,
-    viewModel: LaterViewModel = viewModel()
+    viewModel: LaterViewModel
 ) {
     val tasks by viewModel.tasks.collectAsState()
     val isCompletedExpanded by viewModel.isCompletedExpanded.collectAsState()
+    val actionError by viewModel.actionError.collectAsState()
+    val context = LocalContext.current
+    LaunchedEffect(actionError) {
+        actionError?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
 
     val activeTasks = remember(tasks) { viewModel.getActiveTasks(tasks) }
     val completedTasks = remember(tasks) { viewModel.getCompletedTasks(tasks) }

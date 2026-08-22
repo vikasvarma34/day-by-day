@@ -6,8 +6,6 @@ import androidx.lifecycle.ViewModelProvider
 import com.vikaspokala.daybyday.data.local.planner.PlannerDatabase
 import com.vikaspokala.daybyday.data.local.planner.dao.CompletionDao
 import com.vikaspokala.daybyday.data.local.planner.dao.HistoryCompletionRow
-import com.vikaspokala.daybyday.data.local.planner.entity.CompletionEntity
-import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -16,7 +14,6 @@ import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -38,48 +35,6 @@ class HistoryViewModel(
         scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
     ) : this(
         completionDao = completionDao,
-        plannerTodayProvider = { referenceDate },
-        zoneId = zoneId,
-        scope = scope
-    )
-
-    constructor(
-        database: InMemoryPlannerDatabase,
-        referenceDate: LocalDate = LocalDate.now(),
-        zoneId: ZoneId = ZoneId.systemDefault(),
-        scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
-    ) : this(
-        completionDao = object : CompletionDao {
-            override suspend fun insertAll(completions: List<CompletionEntity>) = Unit
-            override suspend fun insert(completion: CompletionEntity) = Unit
-            override suspend fun deleteAll() = Unit
-            override suspend fun deleteByTaskId(taskId: String) = Unit
-            override suspend fun getAll(): List<CompletionEntity> = emptyList()
-            override suspend fun findLaterCompletion(taskId: String): CompletionEntity? = null
-            override suspend fun findScheduledCompletion(taskId: String, scheduleId: String, scheduledDate: String): CompletionEntity? = null
-            override suspend fun deleteLaterCompletion(taskId: String) = Unit
-            override suspend fun deleteScheduledCompletion(taskId: String, scheduleId: String, scheduledDate: String) = Unit
-            override suspend fun deleteByScheduleIds(scheduleIds: List<String>) = Unit
-            override fun observeHistory(plannerToday: String): Flow<List<HistoryCompletionRow>> {
-                return database.observeHistoryTasks(referenceDate).map { items ->
-                    items.map { item ->
-                        val hours = item.completedAtMinutes / 60
-                        val mins = item.completedAtMinutes % 60
-                        val timeIso = String.format(Locale.US, "%02d:%02d:00.000Z", hours, mins)
-                        HistoryCompletionRow(
-                            completionId = item.id,
-                            taskId = item.id,
-                            scheduleId = null,
-                            scheduleType = "ONCE",
-                            completedDate = item.completedDate.toString(),
-                            completedAt = "${item.completedDate}T$timeIso",
-                            titleSnapshot = item.title,
-                            isImportantSnapshot = item.isImportant
-                        )
-                    }
-                }
-            }
-        },
         plannerTodayProvider = { referenceDate },
         zoneId = zoneId,
         scope = scope

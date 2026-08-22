@@ -32,11 +32,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vikaspokala.daybyday.ui.components.MonthCalendar
 import com.vikaspokala.daybyday.ui.components.TaskCard
 import com.vikaspokala.daybyday.ui.navigation.Screen
@@ -52,18 +54,20 @@ fun ScheduleScreen(
     onAddTask: (Screen.Task) -> Unit = {},
     onTaskClick: (Screen.Task) -> Unit = {},
     modifier: Modifier = Modifier,
-    viewModel: ScheduleViewModel = viewModel()
+    viewModel: ScheduleViewModel
 ) {
     val currentMonth by viewModel.currentMonth.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
     val tasks by viewModel.tasks.collectAsState()
+    val importantDates by viewModel.importantDates.collectAsState()
+    val actionError by viewModel.actionError.collectAsState()
+    val context = LocalContext.current
+    LaunchedEffect(actionError) {
+        actionError?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
 
     val selectedDateTasks = remember(tasks, selectedDate) {
         viewModel.getTasksForDate(selectedDate, tasks)
-    }
-
-    val importantDates = remember(tasks) {
-        tasks.filter { it.isImportant }.map { it.date }.toSet()
     }
 
     val todayDate = remember { java.time.LocalDate.now() }

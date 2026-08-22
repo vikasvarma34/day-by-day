@@ -1,366 +1,134 @@
 package com.vikaspokala.daybyday.ui.screens.schedule
 
+import com.vikaspokala.daybyday.ui.FakePlannerDatabase
+import com.vikaspokala.daybyday.ui.RecordingPlannerRepository
+import com.vikaspokala.daybyday.ui.scheduledOccurrence
 import java.time.LocalDate
 import java.time.YearMonth
-import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
-import com.vikaspokala.daybyday.ui.models.Recurrence
-import com.vikaspokala.daybyday.ui.screens.today.TodayViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
 class ScheduleViewModelTest {
+    private val today = LocalDate.of(2026, 8, 20)
 
-    private lateinit var database: InMemoryPlannerDatabase
-    private lateinit var viewModel: ScheduleViewModel
-    private val testToday: LocalDate = LocalDate.of(2026, 8, 19)
+    @Test
+    fun initialStateUsesPlannerTodayAndItsMonth() {
+        val database = FakePlannerDatabase()
+        val viewModel = ScheduleViewModel(database, RecordingPlannerRepository(database), { today })
 
-    @Before
-    fun setUp() {
-        database = InMemoryPlannerDatabase(referenceDate = testToday)
-        viewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
+        assertEquals(today, viewModel.selectedDate.value)
+        assertEquals(YearMonth.of(2026, 8), viewModel.currentMonth.value)
     }
 
     @Test
-    fun `1 initial state defaults to testToday parameter and its YearMonth`() {
-        assertEquals(YearMonth.from(testToday), viewModel.currentMonth.value)
-        assertEquals(testToday, viewModel.selectedDate.value)
+    fun selectedDaySwitchesRoomOccurrenceProjection_andMapsFields() {
+        val future = today.plusDays(5)
+        val database = FakePlannerDatabase().apply {
+            occurrences.value = mapOf(
+                today to listOf(scheduledOccurrence("today", today)),
+                future to listOf(
+                    scheduledOccurrence(
+                        "future",
+                        future,
+                        title = "Future",
+                        note = "note",
+                        time = "14:05",
+                        reminderMinutes = 30,
+                        isImportant = true
+                    )
+                )
+            )
+        }
+        val viewModel = ScheduleViewModel(database, RecordingPlannerRepository(database), { today })
+
+        viewModel.selectDate(future)
+
+        val task = viewModel.tasks.value.single()
+        assertEquals("future", task.id)
+        assertEquals("schedule-future", task.scheduleId)
+        assertEquals("Future", task.title)
+        assertEquals("note", task.note)
+        assertEquals("2:05 PM", task.time)
+        assertEquals("30 minutes before", task.reminder)
+        assertTrue(task.isImportant)
+        assertEquals(YearMonth.from(future), viewModel.currentMonth.value)
     }
 
     @Test
-    fun `2 resetToToday resets selectedDate and currentMonth to target date`() {
-        val alternateDate = testToday.plusDays(10)
-        viewModel.selectDate(alternateDate)
-        assertEquals(alternateDate, viewModel.selectedDate.value)
+    fun importantDotsComeFromBoundedRoomProjection() {
+        val important = today.plusDays(2)
+        val database = FakePlannerDatabase().apply { importantDates.value = setOf(important) }
+        val viewModel = ScheduleViewModel(database, RecordingPlannerRepository(database), { today })
 
-        viewModel.resetToToday(testToday)
-        assertEquals(testToday, viewModel.selectedDate.value)
-        assertEquals(YearMonth.from(testToday), viewModel.currentMonth.value)
-    }
-
-    @Test
-    fun `3 Schedule observes canonical selectedDate tasks and ordering`() {
-        val tasks = viewModel.getTasksForDate(testToday)
-        assertEquals(6, tasks.size)
-
-        assertEquals("Morning walk", tasks[0].title)
-        assertEquals("7:30 AM", tasks[0].time)
-        assertFalse(tasks[0].isCompleted)
-
-        assertEquals("Plan weekly meals", tasks[1].title)
-        assertEquals("9:00 AM", tasks[1].time)
-        assertFalse(tasks[1].isCompleted)
-
-        assertEquals("Pick up parcel", tasks[2].title)
-        assertEquals("3:00 PM", tasks[2].time)
-        assertFalse(tasks[2].isCompleted)
-
-        assertEquals("Call parents", tasks[3].title)
-        assertEquals("6:30 PM", tasks[3].time)
-        assertFalse(tasks[3].isCompleted)
-
-        assertEquals("Review insurance", tasks[4].title)
-        assertEquals(null, tasks[4].time)
-        assertFalse(tasks[4].isCompleted)
-
-        assertEquals("Prepare documents", tasks[5].title)
-        assertEquals(null, tasks[5].time)
-        assertFalse(tasks[5].isCompleted)
-    }
-
-    @Test
-    fun `4 changing selectedDate switches Schedule projection correctly`() {
-        assertEquals(6, viewModel.tasks.value.size)
-
-        viewModel.selectDate(testToday.plusDays(1))
-        val tomorrowTasks = viewModel.tasks.value
-        assertEquals(3, tomorrowTasks.size)
-        assertTrue(tomorrowTasks.all { it.date == testToday.plusDays(1) })
-    }
-
-    @Test
-    fun `5 completing a task moves it to bottom and undoing restores position`() {
-        var tasks = viewModel.getTasksForDate(testToday)
-        assertEquals("Plan weekly meals", tasks[1].title)
-        assertFalse(tasks[1].isCompleted)
-
-        viewModel.toggleCompletion("s2")
-        tasks = viewModel.getTasksForDate(testToday)
-
-        val completedTask = tasks.first { it.id == "s2" }
-        assertTrue(completedTask.isCompleted)
-
-        val completedList = tasks.filter { it.isCompleted }
-        assertEquals("s2", completedList.first().id)
-        assertEquals("Plan weekly meals", completedList.first().title)
-
-        viewModel.toggleCompletion("s2")
-        tasks = viewModel.getTasksForDate(testToday)
-
-        val restoredTask = tasks[1]
-        assertEquals("s2", restoredTask.id)
-        assertFalse(restoredTask.isCompleted)
-    }
-
-    @Test
-    fun `6 completion in Schedule updates Today when same date`() {
-        val todayViewModel = TodayViewModel(database = database, plannerTodayProvider = { testToday })
-
-        assertFalse(todayViewModel.tasks.value.first { it.id == "s1" }.isCompleted)
-
-        viewModel.toggleCompletion("s1")
-
-        assertTrue(todayViewModel.tasks.value.first { it.id == "s1" }.isCompleted)
-    }
-
-    @Test
-    fun `7 create from Schedule automatically appears in Today when date is testToday`() {
-        val todayViewModel = TodayViewModel(database = database, plannerTodayProvider = { testToday })
-
-        val newId = viewModel.addTask(
-            title = "Created in Schedule",
-            date = testToday,
-            time = "04:00 PM"
+        assertTrue(viewModel.hasImportantTask(important))
+        assertFalse(viewModel.hasImportantTask(today))
+        assertEquals(
+            YearMonth.from(today).atDay(1).minusDays(7) to YearMonth.from(today).atEndOfMonth().plusDays(7),
+            database.importantRanges.last()
         )
-
-        assertTrue(todayViewModel.tasks.value.any { it.id == newId && it.title == "Created in Schedule" })
     }
 
     @Test
-    fun `8 recurring completion affects only selected occurrence`() {
-        val newId = viewModel.addTask(
-            title = "Daily Walk",
-            date = testToday,
-            recurrence = Recurrence.IntervalDays(1)
-        )
+    fun previousAndNextMonthHandleYearBoundaries() {
+        val january = LocalDate.of(2027, 1, 15)
+        val database = FakePlannerDatabase()
+        val viewModel = ScheduleViewModel(database, RecordingPlannerRepository(database), { january })
 
-        viewModel.selectDate(testToday)
-        viewModel.toggleCompletion(newId, scheduledDate = testToday)
-
-        // Today's occurrence is completed
-        val todayOcc = viewModel.getTasksForDate(testToday).first { it.id == newId }
-        assertTrue(todayOcc.isCompleted)
-
-        // Tomorrow's occurrence remains incomplete
-        val tomorrowOcc = viewModel.getTasksForDate(testToday.plusDays(1)).first { it.id == newId }
-        assertFalse(tomorrowOcc.isCompleted)
-    }
-
-    @Test
-    fun `9 historical backfill completion uses historical completedDate`() {
-        val pastDate = testToday.minusDays(12)
-        viewModel.selectDate(pastDate)
-
-        // Task s7 on pastDate
-        val task = viewModel.tasks.value.first { it.id == "s7" }
-        assertFalse(task.isCompleted)
-
-        viewModel.toggleCompletion("s7", scheduledDate = pastDate)
-
-        val comp = database.completions.value.first { it.taskId == "s7" }
-        assertEquals(pastDate, comp.completedDate)
-        assertEquals(pastDate, comp.scheduledDate)
-    }
-
-    @Test
-    fun `10 calendar Important dots derive from canonical state`() {
-        assertTrue(viewModel.hasImportantTask(testToday.minusDays(12)))
-        assertTrue(viewModel.hasImportantTask(testToday))
-        assertTrue(viewModel.hasImportantTask(testToday.plusDays(5)))
-        assertTrue(viewModel.hasImportantTask(testToday.plusDays(12)))
-
-        assertFalse(viewModel.hasImportantTask(testToday.minusDays(6)))
-        assertFalse(viewModel.hasImportantTask(testToday.minusDays(10)))
-
-        // Toggle important updates dot dynamically
-        val datePast = testToday.minusDays(12)
-        viewModel.toggleImportant("s7")
-        assertFalse(viewModel.hasImportantTask(datePast))
-    }
-
-    @Test
-    fun `11 month navigation handles month and year boundaries correctly`() {
-        val startMonth = YearMonth.from(testToday)
         viewModel.previousMonth()
-        assertEquals(startMonth.minusMonths(1), viewModel.currentMonth.value)
-
-        repeat(7) { viewModel.previousMonth() }
-        assertEquals(startMonth.minusMonths(8), viewModel.currentMonth.value)
-
+        assertEquals(YearMonth.of(2026, 12), viewModel.currentMonth.value)
         viewModel.nextMonth()
-        assertEquals(startMonth.minusMonths(7), viewModel.currentMonth.value)
+        viewModel.nextMonth()
+        assertEquals(YearMonth.of(2027, 2), viewModel.currentMonth.value)
     }
 
     @Test
-    fun `12 selectToday updates selectedDate and currentMonth`() {
-        val targetDate = LocalDate.of(2027, 3, 15)
-        viewModel.selectToday(targetDate)
+    fun resetAndSelectTodayUpdateSelectedDateAndMonth() {
+        val targetToday = LocalDate.of(2027, 1, 3)
+        val database = FakePlannerDatabase()
+        val viewModel = ScheduleViewModel(database, RecordingPlannerRepository(database), { today })
+        viewModel.selectDate(today.plusMonths(3))
 
-        assertEquals(targetDate, viewModel.selectedDate.value)
-        assertEquals(YearMonth.of(2027, 3), viewModel.currentMonth.value)
+        viewModel.resetToToday(targetToday)
+
+        assertEquals(targetToday, viewModel.selectedDate.value)
+        assertEquals(YearMonth.from(targetToday), viewModel.currentMonth.value)
     }
 
     @Test
-    fun `13 addTask and updateTask persist note correctly`() {
-        val newId = viewModel.addTask(
-            title = "Test Schedule Note",
-            note = "Schedule note test string",
-            date = testToday,
-            time = "02:00 PM",
-            isImportant = true
+    fun incompleteGroupsPrecedeCompleted_andTimedGroupsRemainSorted() {
+        val database = FakePlannerDatabase().apply {
+            occurrences.value = mapOf(
+                today to listOf(
+                    scheduledOccurrence("done-anytime", today, isCompleted = true),
+                    scheduledOccurrence("active-11", today, time = "11:00"),
+                    scheduledOccurrence("done-10", today, time = "10:00", isCompleted = true),
+                    scheduledOccurrence("active-anytime", today),
+                    scheduledOccurrence("active-08", today, time = "08:00")
+                )
+            )
+        }
+        val viewModel = ScheduleViewModel(database, RecordingPlannerRepository(database), { today })
+
+        assertEquals(
+            listOf("active-08", "active-11", "active-anytime", "done-10", "done-anytime"),
+            viewModel.getTasksForDate(today).map { it.id }
         )
-
-        val addedTask = viewModel.tasks.value.first { it.id == newId }
-        assertEquals("Test Schedule Note", addedTask.title)
-        assertEquals("Schedule note test string", addedTask.note)
-
-        viewModel.updateTask(
-            id = newId,
-            title = "Updated Schedule Note",
-            note = "Modified note string",
-            date = testToday,
-            time = "03:00 PM",
-            isImportant = false
-        )
-
-        val updatedTask = viewModel.tasks.value.first { it.id == newId }
-        assertEquals("Updated Schedule Note", updatedTask.title)
-        assertEquals("Modified note string", updatedTask.note)
     }
 
     @Test
-    fun `14 timed Today task - star - time unchanged`() {
-        val taskId = viewModel.addTask(
-            title = "Morning Coffee",
-            date = testToday,
-            time = "8:30 AM",
-            isImportant = false
-        )
-        viewModel.selectDate(testToday)
-        val initial = viewModel.tasks.value.first { it.id == taskId }
-        assertEquals("8:30 AM", initial.time)
-        assertFalse(initial.isImportant)
+    fun completedFutureOnceRemainsDisplayedOnItsScheduledDate() {
+        val future = today.plusDays(3)
+        val database = FakePlannerDatabase().apply {
+            occurrences.value = mapOf(future to listOf(scheduledOccurrence("future", future, isCompleted = true)))
+        }
+        val viewModel = ScheduleViewModel(database, RecordingPlannerRepository(database), { today })
 
-        viewModel.toggleImportant(taskId)
+        viewModel.selectDate(future)
 
-        val afterStar = viewModel.tasks.value.first { it.id == taskId }
-        assertTrue(afterStar.isImportant)
-        assertEquals("8:30 AM", afterStar.time)
-    }
-
-    @Test
-    fun `15 timed Today task - unstar - time unchanged`() {
-        val taskId = viewModel.addTask(
-            title = "Important Review",
-            date = testToday,
-            time = "10:00 AM",
-            isImportant = true
-        )
-        viewModel.selectDate(testToday)
-        val initial = viewModel.tasks.value.first { it.id == taskId }
-        assertEquals("10:00 AM", initial.time)
-        assertTrue(initial.isImportant)
-
-        viewModel.toggleImportant(taskId)
-
-        val afterUnstar = viewModel.tasks.value.first { it.id == taskId }
-        assertFalse(afterUnstar.isImportant)
-        assertEquals("10:00 AM", afterUnstar.time)
-    }
-
-    @Test
-    fun `16 timed future task - star - time unchanged`() {
-        val futureDate = testToday.plusDays(3)
-        val taskId = viewModel.addTask(
-            title = "Future Dentist",
-            date = futureDate,
-            time = "2:30 PM",
-            isImportant = false
-        )
-        viewModel.selectDate(futureDate)
-        val initial = viewModel.tasks.value.first { it.id == taskId }
-        assertEquals("2:30 PM", initial.time)
-        assertFalse(initial.isImportant)
-
-        viewModel.toggleImportant(taskId)
-
-        val afterStar = viewModel.tasks.value.first { it.id == taskId }
-        assertTrue(afterStar.isImportant)
-        assertEquals("2:30 PM", afterStar.time)
-    }
-
-    @Test
-    fun `17 reminder remains unchanged after star`() {
-        val taskId = viewModel.addTask(
-            title = "Flight Checkin",
-            date = testToday,
-            time = "11:00 AM",
-            reminder = "30 minutes before",
-            isImportant = false
-        )
-        viewModel.selectDate(testToday)
-        val initial = viewModel.tasks.value.first { it.id == taskId }
-        assertEquals("30 minutes before", initial.reminder)
-
-        viewModel.toggleImportant(taskId)
-
-        val afterStar = viewModel.tasks.value.first { it.id == taskId }
-        assertTrue(afterStar.isImportant)
-        assertEquals("30 minutes before", afterStar.reminder)
-        assertEquals("11:00 AM", afterStar.time)
-    }
-
-    @Test
-    fun `18 recurrence remains unchanged after star`() {
-        val recurrence = Recurrence.IntervalDays(2)
-        val taskId = viewModel.addTask(
-            title = "Water Lawn",
-            date = testToday,
-            time = "7:00 AM",
-            recurrence = recurrence,
-            isImportant = false
-        )
-        viewModel.selectDate(testToday)
-        val initial = viewModel.tasks.value.first { it.id == taskId }
-        assertEquals(recurrence, initial.recurrence)
-
-        viewModel.toggleImportant(taskId)
-
-        val afterStar = viewModel.tasks.value.first { it.id == taskId }
-        assertTrue(afterStar.isImportant)
-        assertEquals(recurrence, afterStar.recurrence)
-        assertEquals("7:00 AM", afterStar.time)
-    }
-
-    @Test
-    fun `19 only isImportant changes for an incomplete task`() {
-        val futureDate = testToday.plusDays(4)
-        val recurrence = Recurrence.Weekdays(setOf(1, 3, 5))
-        val taskId = viewModel.addTask(
-            title = "Gym Session",
-            note = "Leg day",
-            date = futureDate,
-            time = "6:00 PM",
-            reminder = "15 minutes before",
-            recurrence = recurrence,
-            isImportant = false
-        )
-        val scheduleBefore = database.schedules.value.first { it.taskId == taskId }
-        val taskBefore = database.tasks.value.first { it.id == taskId }
-
-        viewModel.toggleImportant(taskId)
-
-        val scheduleAfter = database.schedules.value.first { it.taskId == taskId }
-        val taskAfter = database.tasks.value.first { it.id == taskId }
-
-        // ScheduleEntity is completely unchanged
-        assertEquals(scheduleBefore, scheduleAfter)
-
-        // Only isImportant on TaskEntity is modified
-        assertEquals(taskBefore.copy(isImportant = true), taskAfter)
+        assertEquals(future, viewModel.tasks.value.single().date)
+        assertTrue(viewModel.tasks.value.single().isCompleted)
+        assertTrue(database.occurrences.value[today].isNullOrEmpty())
     }
 }

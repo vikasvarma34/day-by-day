@@ -1,12 +1,13 @@
 package com.vikaspokala.daybyday.ui.screens.later
 
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import android.content.Context
 import androidx.lifecycle.ViewModel
-import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
-import com.vikaspokala.daybyday.ui.models.Recurrence
+import androidx.lifecycle.ViewModelProvider
+import com.vikaspokala.daybyday.data.local.auth.SessionTokenStore
+import com.vikaspokala.daybyday.data.local.planner.PlannerDatabase
+import com.vikaspokala.daybyday.data.repository.PlannerRepository
+import com.vikaspokala.daybyday.ui.planner.toLaterTaskItem
+import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,173 +15,66 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 class LaterViewModel(
-    private val database: InMemoryPlannerDatabase = InMemoryPlannerDatabase.defaultDatabase,
+    private val database: PlannerDatabase,
+    private val repository: PlannerRepository,
     private val plannerTodayProvider: () -> LocalDate = { LocalDate.now() },
+    private val onSessionExpired: () -> Unit = {},
     scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
 ) : ViewModel() {
-
+    private val coroutineScope = scope
     val tasks: StateFlow<List<LaterTaskItem>> = database.observeLaterTasks()
-        .stateIn(
-            scope = scope,
-            started = SharingStarted.Eagerly,
-            initialValue = database.getLaterTasks()
-        )
+        .map { rows -> rows.map { it.toLaterTaskItem() } }
+        .stateIn(coroutineScope, SharingStarted.Eagerly, emptyList())
 
     private val _isCompletedExpanded = MutableStateFlow(false)
     val isCompletedExpanded: StateFlow<Boolean> = _isCompletedExpanded.asStateFlow()
+    private val _actionError = MutableStateFlow<String?>(null)
+    val actionError: StateFlow<String?> = _actionError.asStateFlow()
 
     fun toggleCompletion(taskId: String, completionDate: LocalDate = plannerTodayProvider()) {
-        val currentTask = tasks.value.find { it.id == taskId } ?: return
-        val nextCompleted = !currentTask.isCompleted
-        if (nextCompleted) {
-            database.completeTask(
-                taskId = taskId,
-                scheduleId = null,
-                scheduledDate = null,
-                completedDate = completionDate,
-                plannerToday = plannerTodayProvider()
-            )
-        } else {
-            database.undoTask(
-                taskId = taskId,
-                scheduleId = null,
-                scheduledDate = null
-            )
+        val task = tasks.value.firstOrNull { it.id == taskId } ?: return
+        val plannerToday = plannerTodayProvider()
+        launchAction {
+            if (task.isCompleted) repository.undoTask(taskId)
+            else repository.completeTask(taskId, plannerToday.toString(), completionDate.toString())
         }
     }
 
     fun toggleImportant(taskId: String) {
-        val currentTask = tasks.value.find { it.id == taskId } ?: return
-        val nextImportant = !currentTask.isImportant
-        database.updateTask(
-            taskId = taskId,
-            title = currentTask.title,
-            note = currentTask.note,
-            isImportant = nextImportant,
-            plannerToday = plannerTodayProvider()
-        )
+        val task = tasks.value.firstOrNull { it.id == taskId } ?: return
+        launchAction { repository.updateTaskContent(taskId, task.title, task.note, !task.isImportant) }
     }
 
-    fun deleteTask(taskId: String) {
-        database.deleteTask(taskId)
-    }
+    fun deleteTask(taskId: String, onSuccess: () -> Unit = {}) = launchAction(onSuccess) { repository.deleteTask(taskId) }
+    fun toggleCompletedExpanded() = _isCompletedExpanded.update { !it }
+    fun collapseCompleted() { _isCompletedExpanded.value = false }
+    fun getActiveTasks(taskList: List<LaterTaskItem> = tasks.value) = taskList.filter { !it.isCompleted }
+    fun getCompletedTasks(taskList: List<LaterTaskItem> = tasks.value) = taskList.filter { it.isCompleted }
 
-    fun addTask(title: String, note: String?, isImportant: Boolean): String {
-        return database.createLaterTask(
-            title = title,
-            note = note,
-            isImportant = isImportant
-        )
-    }
-
-    fun updateTask(id: String, title: String, note: String?, isImportant: Boolean) {
-        database.updateTask(
-            taskId = id,
-            title = title,
-            note = note,
-            isImportant = isImportant,
-            plannerToday = plannerTodayProvider()
-        )
-    }
-
-    fun scheduleTask(
-        taskId: String,
-        title: String? = null,
-        note: String? = null,
-        isImportant: Boolean? = null,
-        date: LocalDate,
-        time: String? = null,
-        reminder: String? = null,
-        recurrence: Recurrence? = null,
-        plannerToday: LocalDate = plannerTodayProvider()
-    ) {
-        val parsedTime = parseDisplayStringToLocalTime(time)
-        val parsedReminder = parseDisplayStringToReminderMinutes(reminder)
-        database.scheduleLaterTask(
-            taskId = taskId,
-            title = title,
-            note = note,
-            isImportant = isImportant,
-            date = date,
-            time = parsedTime,
-            reminderMinutesBefore = parsedReminder,
-            recurrence = recurrence,
-            plannerToday = plannerToday
-        )
-    }
-
-    fun scheduleTaskWithLocalTime(
-        taskId: String,
-        title: String? = null,
-        note: String? = null,
-        isImportant: Boolean? = null,
-        date: LocalDate,
-        time: LocalTime? = null,
-        reminderMinutesBefore: Int? = null,
-        recurrence: Recurrence? = null,
-        plannerToday: LocalDate = plannerTodayProvider()
-    ) {
-        database.scheduleLaterTask(
-            taskId = taskId,
-            title = title,
-            note = note,
-            isImportant = isImportant,
-            date = date,
-            time = time,
-            reminderMinutesBefore = reminderMinutesBefore,
-            recurrence = recurrence,
-            plannerToday = plannerToday
-        )
-    }
-
-    fun toggleCompletedExpanded() {
-        _isCompletedExpanded.update { !it }
-    }
-
-    fun collapseCompleted() {
-        _isCompletedExpanded.value = false
-    }
-
-    fun getActiveTasks(taskList: List<LaterTaskItem> = tasks.value): List<LaterTaskItem> {
-        return taskList.filter { !it.isCompleted }
-    }
-
-    fun getCompletedTasks(taskList: List<LaterTaskItem> = tasks.value): List<LaterTaskItem> {
-        return taskList.filter { it.isCompleted }
-    }
-
-    companion object {
-        fun parseDisplayStringToLocalTime(timeStr: String?): LocalTime? {
-            if (timeStr.isNullOrBlank()) return null
-            return try {
-                val upper = timeStr.trim().uppercase(Locale.US)
-                val formatter = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
-                LocalTime.parse(upper, formatter)
-            } catch (e: Exception) {
-                try {
-                    LocalTime.parse(timeStr.trim())
-                } catch (e2: Exception) {
-                    null
-                }
-            }
+    private fun launchAction(onSuccess: () -> Unit = {}, action: suspend () -> Result<Unit>) {
+        coroutineScope.launch {
+            _actionError.value = null
+            action().fold(onSuccess = { onSuccess() }, onFailure = ::handleFailure)
         }
+    }
 
-        fun parseDisplayStringToReminderMinutes(display: String?): Int? {
-            return when (display?.trim()) {
-                "At task time" -> 0
-                "5 minutes before" -> 5
-                "10 minutes before" -> 10
-                "15 minutes before" -> 15
-                "30 minutes before" -> 30
-                "1 hour before" -> 60
-                "1 day before" -> 1440
-                "2 days before" -> 2880
-                else -> null
-            }
+    private fun handleFailure(error: Throwable) {
+        if (error is HttpException && error.code() == 401) onSessionExpired()
+        else _actionError.value = "Unable to save planner change. Please try again."
+    }
+
+    class Factory(private val context: Context, private val onSessionExpired: () -> Unit = {}) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            val db = PlannerDatabase.getInstance(context.applicationContext)
+            return LaterViewModel(db, PlannerRepository(db, SessionTokenStore(context.applicationContext)), onSessionExpired = onSessionExpired) as T
         }
     }
 }

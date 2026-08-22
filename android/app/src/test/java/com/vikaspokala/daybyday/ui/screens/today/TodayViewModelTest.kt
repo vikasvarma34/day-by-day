@@ -1,312 +1,144 @@
 package com.vikaspokala.daybyday.ui.screens.today
 
+import com.vikaspokala.daybyday.ui.FakePlannerDatabase
+import com.vikaspokala.daybyday.ui.RecordingPlannerRepository
+import com.vikaspokala.daybyday.ui.scheduledOccurrence
 import java.time.LocalDate
 import java.time.LocalTime
-import com.vikaspokala.daybyday.ui.fake.InMemoryPlannerDatabase
-import com.vikaspokala.daybyday.ui.models.Recurrence
-import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
 class TodayViewModelTest {
+    private val today = LocalDate.of(2026, 8, 20)
 
-    private lateinit var database: InMemoryPlannerDatabase
-    private lateinit var viewModel: TodayViewModel
-    private val testToday: LocalDate = LocalDate.of(2026, 8, 19)
+    @Test
+    fun selectedDateSwitchesRoomProjection() {
+        val tomorrow = today.plusDays(1)
+        val database = FakePlannerDatabase().apply {
+            occurrences.value = mapOf(
+                today to listOf(scheduledOccurrence("today", today)),
+                tomorrow to listOf(scheduledOccurrence("tomorrow", tomorrow))
+            )
+        }
+        val viewModel = TodayViewModel(database, RecordingPlannerRepository(database), { today })
 
-    @Before
-    fun setUp() {
-        database = InMemoryPlannerDatabase(referenceDate = testToday)
-        viewModel = TodayViewModel(database = database, plannerTodayProvider = { testToday })
+        assertEquals(listOf("today"), viewModel.tasks.value.map { it.id })
+        viewModel.selectDate(tomorrow)
+        assertEquals(listOf("tomorrow"), viewModel.tasks.value.map { it.id })
     }
 
     @Test
-    fun `1 Today observes canonical plannerToday tasks with expected dataset`() {
-        val tasksForToday = viewModel.getTasksForDate(testToday)
-        assertEquals(6, tasksForToday.size)
+    fun groupsTimedThenAnytimeThenCompleted_withExistingSortWithinTimedGroups() {
+        val database = FakePlannerDatabase().apply {
+            occurrences.value = mapOf(
+                today to listOf(
+                    scheduledOccurrence("completed-anytime", today, isCompleted = true),
+                    scheduledOccurrence("active-late", today, time = "18:00"),
+                    scheduledOccurrence("active-anytime-a", today),
+                    scheduledOccurrence("completed-late", today, time = "20:00", isCompleted = true),
+                    scheduledOccurrence("active-early", today, time = "07:30"),
+                    scheduledOccurrence("completed-early", today, time = "09:00", isCompleted = true),
+                    scheduledOccurrence("active-anytime-b", today)
+                )
+            )
+        }
+        val viewModel = TodayViewModel(database, RecordingPlannerRepository(database), { today })
 
-        val timedActive = tasksForToday.filter { !it.isCompleted && it.time != null }
-        assertEquals(4, timedActive.size)
-
-        val anytimeActive = tasksForToday.filter { !it.isCompleted && it.time == null }
-        assertEquals(2, anytimeActive.size)
-
-        val completed = tasksForToday.filter { it.isCompleted }
-        assertEquals(0, completed.size)
-    }
-
-    @Test
-    fun `2 toggleCompletion updates task completion state`() {
-        val initialTask = viewModel.tasks.value.first { it.id == "s1" }
-        assertFalse(initialTask.isCompleted)
-
-        viewModel.toggleCompletion("s1")
-        val updatedTask = viewModel.tasks.value.first { it.id == "s1" }
-        assertTrue(updatedTask.isCompleted)
-
-        viewModel.toggleCompletion("s1")
-        val restoredTask = viewModel.tasks.value.first { it.id == "s1" }
-        assertFalse(restoredTask.isCompleted)
-    }
-
-    @Test
-    fun `3 toggleImportant updates task importance state`() {
-        val initialTask = viewModel.tasks.value.first { it.id == "s1" }
-        assertFalse(initialTask.isImportant)
-
-        viewModel.toggleImportant("s1")
-        val updatedTask = viewModel.tasks.value.first { it.id == "s1" }
-        assertTrue(updatedTask.isImportant)
-
-        viewModel.toggleImportant("s1")
-        val restoredTask = viewModel.tasks.value.first { it.id == "s1" }
-        assertFalse(restoredTask.isImportant)
-    }
-
-    @Test
-    fun `4 create from Today creates exactly one canonical task and schedule`() {
-        val initialTaskCount = database.tasks.value.size
-        val initialSchedCount = database.schedules.value.size
-
-        val newId = viewModel.addTask(
-            title = "Test Note Task",
-            note = "This is a test note for today task",
-            date = testToday,
-            time = "10:00 AM",
-            isImportant = true
+        assertEquals(
+            listOf(
+                "active-early", "active-late",
+                "active-anytime-a", "active-anytime-b",
+                "completed-early", "completed-late",
+                "completed-anytime"
+            ),
+            viewModel.getTasksForDate(today).map { it.id }
         )
-
-        assertEquals(initialTaskCount + 1, database.tasks.value.size)
-        assertEquals(initialSchedCount + 1, database.schedules.value.size)
-
-        val addedTask = viewModel.tasks.value.first { it.id == newId }
-        assertEquals("Test Note Task", addedTask.title)
-        assertEquals("This is a test note for today task", addedTask.note)
-        assertEquals("10:00 AM", addedTask.time)
-        assertTrue(addedTask.isImportant)
     }
 
     @Test
-    fun `5 created Today task automatically appears in Schedule for same date`() {
-        val scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
-        scheduleViewModel.selectDate(testToday)
+    fun nextAndPreviousDayNavigateExactlyOneDay() {
+        val database = FakePlannerDatabase()
+        val viewModel = TodayViewModel(database, RecordingPlannerRepository(database), { today })
 
-        val newId = viewModel.addTask(
-            title = "Sync Task",
-            date = testToday,
-            time = "11:30 AM"
-        )
-
-        val scheduleTasks = scheduleViewModel.tasks.value
-        assertTrue(scheduleTasks.any { it.id == newId && it.title == "Sync Task" })
-    }
-
-    @Test
-    fun `6 edit from one view is visible in the other`() {
-        val scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
-        scheduleViewModel.selectDate(testToday)
-
-        val newId = viewModel.addTask(
-            title = "Before Edit",
-            note = "Initial Note",
-            date = testToday
-        )
-
-        viewModel.updateTask(
-            id = newId,
-            title = "After Edit",
-            note = "Updated Note",
-            date = testToday,
-            time = "02:00 PM",
-            isImportant = true
-        )
-
-        val taskInSchedule = scheduleViewModel.tasks.value.first { it.id == newId }
-        assertEquals("After Edit", taskInSchedule.title)
-        assertEquals("Updated Note", taskInSchedule.note)
-        assertEquals("2:00 PM", taskInSchedule.time)
-        assertTrue(taskInSchedule.isImportant)
-    }
-
-    @Test
-    fun `7 delete from one view removes it from both`() {
-        val scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
-        scheduleViewModel.selectDate(testToday)
-
-        val newId = viewModel.addTask(title = "To Delete", date = testToday)
-        assertTrue(viewModel.tasks.value.any { it.id == newId })
-        assertTrue(scheduleViewModel.tasks.value.any { it.id == newId })
-
-        viewModel.deleteTask(newId)
-
-        assertFalse(viewModel.tasks.value.any { it.id == newId })
-        assertFalse(scheduleViewModel.tasks.value.any { it.id == newId })
-    }
-
-    @Test
-    fun `8 completion in Today updates Schedule same occurrence`() {
-        val scheduleViewModel = ScheduleViewModel(database = database, plannerTodayProvider = { testToday })
-        scheduleViewModel.selectDate(testToday)
-
-        assertFalse(scheduleViewModel.tasks.value.first { it.id == "s1" }.isCompleted)
-
-        viewModel.toggleCompletion("s1")
-
-        assertTrue(scheduleViewModel.tasks.value.first { it.id == "s1" }.isCompleted)
-    }
-
-    @Test
-    fun `next day updates selectedDate by +1 day`() {
-        assertEquals(testToday, viewModel.selectedDate.value)
         viewModel.selectNextDay()
-        assertEquals(LocalDate.of(2026, 8, 20), viewModel.selectedDate.value)
-        viewModel.selectNextDay()
-        assertEquals(LocalDate.of(2026, 8, 21), viewModel.selectedDate.value)
+        assertEquals(today.plusDays(1), viewModel.selectedDate.value)
+        viewModel.selectPreviousDay()
+        viewModel.selectPreviousDay()
+        assertEquals(today.minusDays(1), viewModel.selectedDate.value)
     }
 
     @Test
-    fun `previous day updates selectedDate by -1 day`() {
-        assertEquals(testToday, viewModel.selectedDate.value)
-        viewModel.selectPreviousDay()
-        assertEquals(LocalDate.of(2026, 8, 18), viewModel.selectedDate.value)
-        viewModel.selectPreviousDay()
-        assertEquals(LocalDate.of(2026, 8, 17), viewModel.selectedDate.value)
-    }
+    fun dayNavigationCrossesMonthBoundary() {
+        val initial = LocalDate.of(2026, 8, 31)
+        val database = FakePlannerDatabase()
+        val viewModel = TodayViewModel(database, RecordingPlannerRepository(database), { initial })
 
-    @Test
-    fun `crossing month boundary correctly navigates dates`() {
-        viewModel.selectDate(LocalDate.of(2026, 8, 31))
         viewModel.selectNextDay()
         assertEquals(LocalDate.of(2026, 9, 1), viewModel.selectedDate.value)
-
-        viewModel.selectDate(LocalDate.of(2026, 9, 1))
         viewModel.selectPreviousDay()
-        assertEquals(LocalDate.of(2026, 8, 31), viewModel.selectedDate.value)
+        assertEquals(initial, viewModel.selectedDate.value)
     }
 
     @Test
-    fun `crossing year boundary correctly navigates dates`() {
-        viewModel.selectDate(LocalDate.of(2026, 12, 31))
+    fun dayNavigationCrossesYearBoundary() {
+        val initial = LocalDate.of(2026, 12, 31)
+        val database = FakePlannerDatabase()
+        val viewModel = TodayViewModel(database, RecordingPlannerRepository(database), { initial })
+
         viewModel.selectNextDay()
         assertEquals(LocalDate.of(2027, 1, 1), viewModel.selectedDate.value)
-
-        viewModel.selectDate(LocalDate.of(2027, 1, 1))
         viewModel.selectPreviousDay()
-        assertEquals(LocalDate.of(2026, 12, 31), viewModel.selectedDate.value)
+        assertEquals(initial, viewModel.selectedDate.value)
     }
 
     @Test
-    fun `selected-date task filtering returns only tasks for selected date with proper ordering`() {
-        val tasksForToday = viewModel.getTasksForDate(testToday)
-        assertEquals(6, tasksForToday.size)
-
-        // Verify task ordering: timed active ascending -> anytime active
-        assertEquals("Morning walk", tasksForToday[0].title)      // 7:30 AM
-        assertEquals("Plan weekly meals", tasksForToday[1].title) // 9:00 AM
-        assertEquals("Pick up parcel", tasksForToday[2].title)    // 3:00 PM
-        assertEquals("Call parents", tasksForToday[3].title)      // 6:30 PM
-        assertEquals("Review insurance", tasksForToday[4].title)  // Anytime
-        assertEquals("Prepare documents", tasksForToday[5].title) // Anytime
-
-        // Completing a task moves it to the bottom
-        viewModel.toggleCompletion("s1")
-        val reorderedTasks = viewModel.getTasksForDate(testToday)
-        assertEquals("Plan weekly meals", reorderedTasks[0].title)
-        assertEquals("Morning walk", reorderedTasks.last().title)
-        assertTrue(reorderedTasks.last().isCompleted)
-
-        // Yesterday tasks (minus 1 day) has 3 tasks
-        val yesterdayTasks = viewModel.getTasksForDate(testToday.minusDays(1))
-        assertEquals(3, yesterdayTasks.size)
-
-        // Tomorrow tasks (plus 1 day) has 3 tasks
-        val tomorrowTasks = viewModel.getTasksForDate(testToday.plusDays(1))
-        assertEquals(3, tomorrowTasks.size)
-    }
-
-    @Test
-    fun `greeting logic follows defined current-time ranges`() {
-        // 05:00 to 11:59 -> Good morning
+    fun greetingRangesKeepAcceptedBoundaries() {
         assertEquals("Good morning, Vicky", TodayViewModel.getGreeting(LocalTime.of(5, 0)))
-        assertEquals("Good morning, Vicky", TodayViewModel.getGreeting(LocalTime.of(8, 30)))
         assertEquals("Good morning, Vicky", TodayViewModel.getGreeting(LocalTime.of(11, 59)))
-
-        // 12:00 to 16:59 -> Good afternoon
         assertEquals("Good afternoon, Vicky", TodayViewModel.getGreeting(LocalTime.of(12, 0)))
-        assertEquals("Good afternoon, Vicky", TodayViewModel.getGreeting(LocalTime.of(14, 15)))
         assertEquals("Good afternoon, Vicky", TodayViewModel.getGreeting(LocalTime.of(16, 59)))
-
-        // 17:00 to 20:59 -> Good evening
         assertEquals("Good evening, Vicky", TodayViewModel.getGreeting(LocalTime.of(17, 0)))
-        assertEquals("Good evening, Vicky", TodayViewModel.getGreeting(LocalTime.of(19, 0)))
         assertEquals("Good evening, Vicky", TodayViewModel.getGreeting(LocalTime.of(20, 59)))
-
-        // 21:00 to 21:59 -> Good night
         assertEquals("Good night, Vicky", TodayViewModel.getGreeting(LocalTime.of(21, 0)))
         assertEquals("Good night, Vicky", TodayViewModel.getGreeting(LocalTime.of(21, 59)))
-
-        // 22:00 to 04:59 -> Time to rest
         assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(22, 0)))
-        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(23, 30)))
-        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(23, 59)))
-        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(0, 0)))
         assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(4, 59)))
     }
 
     @Test
-    fun `1 21-59 does not show Time to rest`() {
-        val greeting = TodayViewModel.getGreeting(LocalTime.of(21, 59), name = "Alex")
+    fun twentyOneFiftyNineDoesNotShowTimeToRest() {
+        val greeting = TodayViewModel.getGreeting(LocalTime.of(21, 59), "Alex")
         assertEquals("Good night, Alex", greeting)
         assertFalse(greeting.contains("Time to rest"))
     }
 
-    @Test
-    fun `2 22-00 shows Time to rest, name`() {
-        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(22, 0), name = "Alex"))
-    }
+    @Test fun twentyTwoHundredShowsTimeToRest() =
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(22, 0), "Alex"))
+
+    @Test fun twentyThreeFiftyNineShowsTimeToRest() =
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(23, 59), "Alex"))
 
     @Test
-    fun `3 23-59 shows Time to rest, name`() {
-        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(23, 59), name = "Alex"))
+    fun overnightPeriodUsesTimeToRest() {
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.MIDNIGHT, "Alex"))
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(2, 30), "Alex"))
+        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(4, 59), "Alex"))
     }
 
-    @Test
-    fun `4 existing overnight Good-night period uses Time to rest`() {
-        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(0, 0), name = "Alex"))
-        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(2, 30), name = "Alex"))
-        assertEquals("Time to rest, Alex", TodayViewModel.getGreeting(LocalTime.of(4, 59), name = "Alex"))
-    }
+    @Test fun morningGreetingRemainsUnchanged() =
+        assertEquals("Good morning, Alex", TodayViewModel.getGreeting(LocalTime.of(8, 30), "Alex"))
+
+    @Test fun afternoonGreetingRemainsUnchanged() =
+        assertEquals("Good afternoon, Alex", TodayViewModel.getGreeting(LocalTime.of(14, 15), "Alex"))
+
+    @Test fun eveningGreetingRemainsUnchanged() =
+        assertEquals("Good evening, Alex", TodayViewModel.getGreeting(LocalTime.of(19, 0), "Alex"))
 
     @Test
-    fun `5 morning greeting remains unchanged`() {
-        assertEquals("Good morning, Alex", TodayViewModel.getGreeting(LocalTime.of(5, 0), name = "Alex"))
-        assertEquals("Good morning, Alex", TodayViewModel.getGreeting(LocalTime.of(8, 30), name = "Alex"))
-        assertEquals("Good morning, Alex", TodayViewModel.getGreeting(LocalTime.of(11, 59), name = "Alex"))
-    }
-
-    @Test
-    fun `6 afternoon greeting remains unchanged`() {
-        assertEquals("Good afternoon, Alex", TodayViewModel.getGreeting(LocalTime.of(12, 0), name = "Alex"))
-        assertEquals("Good afternoon, Alex", TodayViewModel.getGreeting(LocalTime.of(14, 15), name = "Alex"))
-        assertEquals("Good afternoon, Alex", TodayViewModel.getGreeting(LocalTime.of(16, 59), name = "Alex"))
-    }
-
-    @Test
-    fun `7 evening greeting remains unchanged`() {
-        assertEquals("Good evening, Alex", TodayViewModel.getGreeting(LocalTime.of(17, 0), name = "Alex"))
-        assertEquals("Good evening, Alex", TodayViewModel.getGreeting(LocalTime.of(19, 0), name = "Alex"))
-        assertEquals("Good evening, Alex", TodayViewModel.getGreeting(LocalTime.of(20, 59), name = "Alex"))
-    }
-
-    @Test
-    fun `8 nickname and name selection remains unchanged`() {
-        assertEquals("Time to rest, CustomNickname", TodayViewModel.getGreeting(LocalTime.of(22, 30), name = "CustomNickname"))
-        assertEquals("Time to rest", TodayViewModel.getGreeting(LocalTime.of(22, 30), name = "  "))
-        assertEquals("Good morning", TodayViewModel.getGreeting(LocalTime.of(9, 0), name = ""))
+    fun customAndBlankNamesRemainSupported() {
+        assertEquals("Time to rest, CustomNickname", TodayViewModel.getGreeting(LocalTime.of(22, 30), "CustomNickname"))
+        assertEquals("Time to rest", TodayViewModel.getGreeting(LocalTime.of(22, 30), "  "))
+        assertEquals("Good morning", TodayViewModel.getGreeting(LocalTime.of(9, 0), ""))
     }
 }

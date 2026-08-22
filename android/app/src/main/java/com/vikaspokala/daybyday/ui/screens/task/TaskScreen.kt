@@ -51,7 +51,50 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySecondaryText
 import com.vikaspokala.daybyday.ui.theme.DayByDayStrongAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 import com.vikaspokala.daybyday.ui.components.ChooseRepeatModal
+import com.vikaspokala.daybyday.ui.models.Recurrence
 import com.vikaspokala.daybyday.ui.models.toDisplayString
+
+internal data class TaskScheduleFormState(
+    val reminder: String?,
+    val recurrence: Recurrence?
+)
+
+internal fun initialTaskScheduleFormState(
+    isCreateMode: Boolean,
+    targetDate: java.time.LocalDate?,
+    plannerToday: java.time.LocalDate,
+    time: String?,
+    reminder: String?,
+    recurrence: Recurrence?
+): TaskScheduleFormState {
+    val isHistoricalCreate = isCreateMode && targetDate?.isBefore(plannerToday) == true
+    return TaskScheduleFormState(
+        reminder = if (time == null || isHistoricalCreate) null else reminder,
+        recurrence = if (isHistoricalCreate) null else recurrence
+    )
+}
+
+internal fun shouldShowTaskReminderAndRepeat(
+    isCreateMode: Boolean,
+    targetDate: java.time.LocalDate?,
+    plannerToday: java.time.LocalDate
+): Boolean = !(isCreateMode && targetDate?.isBefore(plannerToday) == true)
+
+internal fun isTaskSaveBlockedByDate(
+    isCreateMode: Boolean,
+    targetDate: java.time.LocalDate?,
+    initialDate: java.time.LocalDate?,
+    plannerToday: java.time.LocalDate,
+    scheduleChanged: Boolean,
+    reminder: String?,
+    recurrence: Recurrence?
+): Boolean {
+    if (targetDate == null) return false
+    if (recurrence?.endDate?.isBefore(targetDate) == true) return true
+    if (!targetDate.isBefore(plannerToday)) return false
+    if (isCreateMode) return reminder != null || (recurrence != null && recurrence !is Recurrence.Once)
+    return if (initialDate?.isBefore(plannerToday) == true) scheduleChanged else true
+}
 
 fun parseTaskDate(dateStr: String?, referenceDate: java.time.LocalDate): java.time.LocalDate? {
     if (dateStr.isNullOrEmpty()) return null
@@ -100,21 +143,19 @@ fun TaskScreen(
     var isImportant by remember(initialIsImportant) { mutableStateOf(initialIsImportant) }
     var currentDateString by remember(dateString) { mutableStateOf(dateString) }
     var currentTimeString by remember(timeString) { mutableStateOf(timeString) }
-    var currentReminderString by remember(reminderString, timeString, dateString, plannerToday) {
-        val pd = parseTaskDate(dateString, plannerToday)
-        if (pd != null && pd.isBefore(plannerToday)) {
-            mutableStateOf<String?>(null)
-        } else {
-            mutableStateOf(if (timeString != null) reminderString else null)
-        }
+    val initialScheduleState = initialTaskScheduleFormState(
+        isCreateMode = isCreateMode,
+        targetDate = parseTaskDate(dateString, plannerToday),
+        plannerToday = plannerToday,
+        time = timeString,
+        reminder = reminderString,
+        recurrence = if (dateString != null) recurrence else null
+    )
+    var currentReminderString by remember(reminderString, timeString, dateString, plannerToday, isCreateMode) {
+        mutableStateOf(initialScheduleState.reminder)
     }
-    var currentRecurrence by remember(recurrence, dateString, plannerToday) {
-        val pd = parseTaskDate(dateString, plannerToday)
-        if (pd != null && pd.isBefore(plannerToday)) {
-            mutableStateOf<com.vikaspokala.daybyday.ui.models.Recurrence?>(null)
-        } else {
-            mutableStateOf(if (dateString != null) recurrence else null)
-        }
+    var currentRecurrence by remember(recurrence, dateString, plannerToday, isCreateMode) {
+        mutableStateOf(initialScheduleState.recurrence)
     }
 
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -132,7 +173,7 @@ fun TaskScreen(
     // Auto-clear reminder & reset recurrence if currentDateString becomes historical
     LaunchedEffect(currentDateString, plannerToday) {
         val pd = parseTaskDate(currentDateString, plannerToday)
-        if (pd != null && pd.isBefore(plannerToday)) {
+        if (pd != null && pd.isBefore(plannerToday) && (isCreateMode || currentDateString != dateString)) {
             if (currentReminderString != null) {
                 currentReminderString = null
             }
@@ -254,28 +295,24 @@ fun TaskScreen(
                                         val pd = parseTaskDate(currentDateString, plannerToday)
                                         val initialPd = parseTaskDate(dateString, plannerToday)
                                         val isHistoricalDate = pd != null && pd.isBefore(plannerToday)
-                                        val isInitialHistorical = initialPd != null && initialPd.isBefore(plannerToday)
-
-                                        val recEndDate = currentRecurrence?.endDate
-                                        val isEndDateInvalid = pd != null && recEndDate != null && recEndDate.isBefore(pd)
-
-                                        val isBlocked = if (isCreateMode) {
-                                            isHistoricalDate && ((currentRecurrence != null && currentRecurrence !is com.vikaspokala.daybyday.ui.models.Recurrence.Once) || currentReminderString != null)
-                                        } else {
-                                            if (isInitialHistorical) {
-                                                isHistoricalDate && isScheduleChanged
-                                            } else {
-                                                isHistoricalDate
-                                            }
-                                        }
+                                        val isEndDateInvalid = pd != null && currentRecurrence?.endDate?.isBefore(pd) == true
+                                        val isBlocked = isTaskSaveBlockedByDate(
+                                            isCreateMode = isCreateMode,
+                                            targetDate = pd,
+                                            initialDate = initialPd,
+                                            plannerToday = plannerToday,
+                                            scheduleChanged = isScheduleChanged,
+                                            reminder = currentReminderString,
+                                            recurrence = currentRecurrence
+                                        )
 
                                         if (isEndDateInvalid) {
                                             showEndDateWarning = true
                                         } else if (isBlocked) {
                                             showPastDateWarning = true
                                         } else {
-                                            val finalReminder = if (isHistoricalDate) null else currentReminderString
-                                            val finalRecurrence = if (isHistoricalDate) null else currentRecurrence
+                                            val finalReminder = if (isCreateMode && isHistoricalDate) null else currentReminderString
+                                            val finalRecurrence = if (isCreateMode && isHistoricalDate) null else currentRecurrence
                                             onSaveTask(
                                                 titleText,
                                                 noteText,
@@ -434,7 +471,7 @@ fun TaskScreen(
 
                     val parsedDate = parseTaskDate(currentDateString, plannerToday)
                     val isCurrentDateHistorical = parsedDate != null && parsedDate.isBefore(plannerToday)
-                    val isHistoricalCreate = isCreateMode && isCurrentDateHistorical
+                    val isHistoricalCreate = !shouldShowTaskReminderAndRepeat(isCreateMode, parsedDate, plannerToday)
 
                     // TIME Field (72dp height)
                     StandardFieldRow(

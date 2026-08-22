@@ -29,7 +29,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -52,8 +54,11 @@ import com.vikaspokala.daybyday.ui.screens.settings.EditProfileFieldScreen
 import com.vikaspokala.daybyday.ui.screens.settings.SettingsScreen
 import com.vikaspokala.daybyday.ui.screens.settings.SettingsViewModel
 import com.vikaspokala.daybyday.ui.screens.task.TaskScreen
+import com.vikaspokala.daybyday.ui.screens.task.PlannerTaskViewModel
 import com.vikaspokala.daybyday.ui.screens.today.TodayScreen
 import com.vikaspokala.daybyday.ui.screens.today.TodayViewModel
+import com.vikaspokala.daybyday.ui.planner.buildCreateSchedule
+import com.vikaspokala.daybyday.ui.planner.buildUpdateSchedule
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
 import com.vikaspokala.daybyday.data.remote.dto.AuthUserDto
 import com.vikaspokala.daybyday.ui.theme.DayByDayBackground
@@ -65,9 +70,18 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 fun AppShell(
     user: AuthUserDto? = null,
     onSessionExpired: () -> Unit = {},
-    todayViewModel: TodayViewModel = viewModel(),
-    scheduleViewModel: ScheduleViewModel = viewModel(),
-    laterViewModel: LaterViewModel = viewModel(),
+    todayViewModel: TodayViewModel = viewModel(
+        factory = TodayViewModel.Factory(LocalContext.current, onSessionExpired)
+    ),
+    scheduleViewModel: ScheduleViewModel = viewModel(
+        factory = ScheduleViewModel.Factory(LocalContext.current, onSessionExpired)
+    ),
+    laterViewModel: LaterViewModel = viewModel(
+        factory = LaterViewModel.Factory(LocalContext.current, onSessionExpired)
+    ),
+    plannerTaskViewModel: PlannerTaskViewModel = viewModel(
+        factory = PlannerTaskViewModel.Factory(LocalContext.current, onSessionExpired)
+    ),
     historyViewModel: HistoryViewModel = viewModel(
         factory = HistoryViewModel.Factory(LocalContext.current)
     ),
@@ -75,6 +89,11 @@ fun AppShell(
         factory = SettingsViewModel.Factory(LocalContext.current, onSessionExpired)
     )
 ) {
+    val context = LocalContext.current
+    val taskActionError by plannerTaskViewModel.actionError.collectAsState()
+    LaunchedEffect(taskActionError) {
+        taskActionError?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
     val backStack = rememberNavBackStack(Screen.Today as NavKey)
 
     val currentScreen = backStack.lastOrNull() as? Screen ?: Screen.Today
@@ -302,47 +321,43 @@ fun AppShell(
                                 }
                             },
                             onSaveTask = { title, note, newDateStr, newTimeStr, newReminderStr, newRecurrenceStr, isImp ->
+                                val onSuccess = {
+                                    if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                }
                                 if (key.isCreateMode) {
-                                    when {
-                                        key.isLaterTask || key.sourceScreen == "LATER" -> {
-                                            laterViewModel.addTask(title = title, note = note, isImportant = isImp)
-                                        }
-                                        key.sourceScreen == "SCHEDULE" -> {
-                                            val parsedDate = parseDateString(newDateStr, scheduleViewModel.getPlannerToday()) ?: scheduleViewModel.selectedDate.value
-                                            scheduleViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
-                                        }
-                                        else -> {
-                                            val parsedDate = parseDateString(newDateStr, todayViewModel.getPlannerToday()) ?: todayViewModel.selectedDate.value
-                                            todayViewModel.addTask(title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
-                                        }
+                                    if (key.isLaterTask || key.sourceScreen == "LATER") {
+                                        plannerTaskViewModel.createLater(title, note, isImp, onSuccess)
+                                    } else {
+                                        val fallback = if (key.sourceScreen == "SCHEDULE") scheduleViewModel.selectedDate.value else todayViewModel.selectedDate.value
+                                        val date = parseDateString(newDateStr, todayViewModel.getPlannerToday()) ?: fallback
+                                        plannerTaskViewModel.createScheduled(
+                                            title, note, isImp,
+                                            buildCreateSchedule(date, newTimeStr, newReminderStr, newRecurrenceStr),
+                                            onSuccess
+                                        )
                                     }
                                 } else {
                                     key.taskId?.let { id ->
-                                        when {
-                                            key.isLaterTask || key.sourceScreen == "LATER" -> {
-                                                laterViewModel.updateTask(id = id, title = title, note = note, isImportant = isImp)
-                                            }
-                                            key.sourceScreen == "SCHEDULE" -> {
-                                                val parsedDate = parseDateString(newDateStr, scheduleViewModel.getPlannerToday()) ?: scheduleViewModel.selectedDate.value
-                                                scheduleViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
-                                            }
-                                            else -> {
-                                                val parsedDate = parseDateString(newDateStr, todayViewModel.getPlannerToday()) ?: todayViewModel.selectedDate.value
-                                                todayViewModel.updateTask(id = id, title = title, note = note, date = parsedDate, time = newTimeStr, reminder = newReminderStr, recurrence = newRecurrenceStr, isImportant = isImp)
-                                            }
-                                        }
+                                        val contentChanged = title != key.initialTitle || note.orEmpty() != key.initialNote.orEmpty() || isImp != key.initialIsImportant
+                                        val scheduleChanged = newDateStr != key.dateString || newTimeStr != key.timeString ||
+                                            newReminderStr != key.reminderString || newRecurrenceStr != key.recurrence
+                                        val date = parseDateString(newDateStr, todayViewModel.getPlannerToday())
+                                            ?: parseDateString(key.dateString, todayViewModel.getPlannerToday())
+                                            ?: todayViewModel.getPlannerToday()
+                                        val effectiveDate = parseDateString(key.dateString, todayViewModel.getPlannerToday())
+                                            ?: todayViewModel.getPlannerToday()
+                                        plannerTaskViewModel.saveExisting(
+                                            id, title, note, isImp, contentChanged, scheduleChanged,
+                                            effectiveDate, buildUpdateSchedule(date, newTimeStr, newReminderStr, newRecurrenceStr), onSuccess
+                                        )
                                     }
-                                }
-                                if (backStack.size > 1) {
-                                    backStack.removeAt(backStack.lastIndex)
                                 }
                             },
                             onConfirmDelete = {
                                 key.taskId?.let { id ->
-                                    todayViewModel.deleteTask(id)
-                                }
-                                if (backStack.size > 1) {
-                                    backStack.removeAt(backStack.lastIndex)
+                                    plannerTaskViewModel.deleteTask(id) {
+                                        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                                    }
                                 }
                             }
                         )
@@ -359,19 +374,14 @@ fun AppShell(
                                 }
                             },
                             onSchedule = { title, note, date, time, reminder, recurrence, isImportant ->
-                                laterViewModel.scheduleTask(
-                                    taskId = key.taskId,
-                                    title = title,
-                                    note = note,
-                                    isImportant = isImportant,
-                                    date = date,
-                                    time = time,
-                                    reminder = reminder,
-                                    recurrence = recurrence
-                                )
-                                // Pop both ScheduleItem and TaskScreen to land directly on LaterScreen
-                                while (backStack.isNotEmpty() && (backStack.last() is Screen.ScheduleItem || backStack.last() is Screen.Task)) {
-                                    backStack.removeAt(backStack.lastIndex)
+                                val contentChanged = title != key.initialTitle || note.orEmpty() != key.initialNote.orEmpty() || isImportant != key.initialIsImportant
+                                plannerTaskViewModel.scheduleLater(
+                                    key.taskId, title, note, isImportant, contentChanged,
+                                    buildUpdateSchedule(date, time, reminder, recurrence)
+                                ) {
+                                    while (backStack.isNotEmpty() && (backStack.last() is Screen.ScheduleItem || backStack.last() is Screen.Task)) {
+                                        backStack.removeAt(backStack.lastIndex)
+                                    }
                                 }
                             }
                         )
