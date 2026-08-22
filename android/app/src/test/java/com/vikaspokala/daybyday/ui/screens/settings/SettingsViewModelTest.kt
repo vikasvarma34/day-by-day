@@ -63,6 +63,10 @@ class SettingsViewModelTest {
             taskId: String,
             request: com.vikaspokala.daybyday.data.remote.dto.UndoTaskRequestDto
         ): com.vikaspokala.daybyday.data.remote.dto.TaskActionResponseDto = error("Not needed")
+        override suspend fun deleteTask(
+            authorization: String,
+            taskId: String
+        ): com.vikaspokala.daybyday.data.remote.dto.DeleteTaskResponseDto = error("Not needed")
     }
 
     private class FakePlannerRepository(

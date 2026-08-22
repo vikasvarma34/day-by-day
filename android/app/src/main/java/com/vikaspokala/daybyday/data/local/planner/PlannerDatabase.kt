@@ -68,6 +68,14 @@ abstract class PlannerDatabase : RoomDatabase() {
         }
     }
 
+    open suspend fun applyDeleteTask(taskId: String) {
+        withTransaction {
+            completionDao().deleteByTaskId(taskId)
+            scheduleDao().deleteByTaskId(taskId)
+            taskDao().deleteById(taskId)
+        }
+    }
+
     companion object {
         private const val DATABASE_NAME = "planner.db"
 

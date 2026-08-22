@@ -31,6 +31,9 @@ interface TaskDao {
     @Query("DELETE FROM tasks")
     suspend fun deleteAll()
 
+    @Query("DELETE FROM tasks WHERE id = :taskId")
+    suspend fun deleteById(taskId: String)
+
     @Query("SELECT * FROM tasks")
     suspend fun getAll(): List<TaskEntity>
 
@@ -50,6 +53,9 @@ interface ScheduleDao {
     @Query("DELETE FROM schedules")
     suspend fun deleteAll()
 
+    @Query("DELETE FROM schedules WHERE taskId = :taskId")
+    suspend fun deleteByTaskId(taskId: String)
+
     @Query("SELECT * FROM schedules")
     suspend fun getAll(): List<ScheduleEntity>
 
@@ -68,6 +74,9 @@ interface CompletionDao {
 
     @Query("DELETE FROM completions")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM completions WHERE taskId = :taskId")
+    suspend fun deleteByTaskId(taskId: String)
 
     @Query("SELECT * FROM completions")
     suspend fun getAll(): List<CompletionEntity>

@@ -130,3 +130,8 @@ data class TaskResponseDto(
 data class CreateTaskResponseDto(
     val task: TaskResponseDto
 )
+
+@Serializable
+data class DeleteTaskResponseDto(
+    val deletedTaskId: String
+)

@@ -61,6 +61,19 @@ open class PlannerRepository(
         }
     }
 
+    open suspend fun deleteTask(taskId: String): Result<Unit> = mutex.withLock {
+        val token = tokenProvider()
+            ?: return Result.failure(IllegalStateException("Missing authentication session token"))
+
+        try {
+            val response = plannerApi.deleteTask("Bearer $token", taskId)
+            plannerDatabase.applyDeleteTask(response.deletedTaskId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     open suspend fun refresh(): Result<Unit> = mutex.withLock {
         val token = tokenProvider()
             ?: return Result.failure(IllegalStateException("Missing authentication session token"))

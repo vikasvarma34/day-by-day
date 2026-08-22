@@ -17,6 +17,7 @@ import com.vikaspokala.daybyday.data.remote.dto.CompleteTaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.CreateTaskRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.CreateTaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.CreateTaskScheduleRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.DeleteTaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.PlannerRefreshResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.RefreshCompletionDto
 import com.vikaspokala.daybyday.data.remote.dto.RefreshScheduleDto
@@ -57,6 +58,7 @@ class PlannerRepositoryTest {
             )
         ),
         var undoResult: Result<TaskActionResponseDto> = Result.success(TaskActionResponseDto(true)),
+        var deleteResult: Result<DeleteTaskResponseDto> = Result.success(DeleteTaskResponseDto("default-task-id")),
         var delayRefreshDeferred: CompletableDeferred<Unit>? = null
     ) : PlannerApi {
         var lastAuthorizationHeader: String? = null
@@ -65,10 +67,22 @@ class PlannerRepositoryTest {
         var lastCompleteRequest: CompleteTaskRequestDto? = null
         var lastUndoTaskId: String? = null
         var lastUndoRequest: UndoTaskRequestDto? = null
+        var lastDeleteTaskId: String? = null
         var createCallCount = 0
         var getRefreshCallCount = 0
         var completeCallCount = 0
         var undoCallCount = 0
+        var deleteCallCount = 0
+
+        override suspend fun deleteTask(
+            authorization: String,
+            taskId: String
+        ): DeleteTaskResponseDto {
+            deleteCallCount++
+            lastAuthorizationHeader = authorization
+            lastDeleteTaskId = taskId
+            return deleteResult.getOrThrow()
+        }
 
         override suspend fun createTask(
             authorization: String,
@@ -120,6 +134,7 @@ class PlannerRepositoryTest {
         var applyCreateTaskCalled = false
         var applyCompleteCalled = false
         var applyUndoCalled = false
+        var applyDeleteTaskCalled = false
 
         private val fakeTaskDao = object : TaskDao {
             override suspend fun insertAll(tasks: List<TaskEntity>) {
@@ -129,6 +144,9 @@ class PlannerRepositoryTest {
                 tasksMap[task.id] = task
             }
             override suspend fun deleteAll() { tasksMap.clear() }
+            override suspend fun deleteById(taskId: String) {
+                tasksMap.remove(taskId)
+            }
             override suspend fun getAll(): List<TaskEntity> = tasksMap.values.toList()
             override suspend fun getById(id: String): TaskEntity? = tasksMap[id]
         }
@@ -141,6 +159,10 @@ class PlannerRepositoryTest {
                 schedulesMap[schedule.id] = schedule
             }
             override suspend fun deleteAll() { schedulesMap.clear() }
+            override suspend fun deleteByTaskId(taskId: String) {
+                val toRemove = schedulesMap.values.filter { it.taskId == taskId }.map { it.id }
+                toRemove.forEach { schedulesMap.remove(it) }
+            }
             override suspend fun getAll(): List<ScheduleEntity> = schedulesMap.values.toList()
             override suspend fun getById(id: String): ScheduleEntity? = schedulesMap[id]
         }
@@ -154,6 +176,9 @@ class PlannerRepositoryTest {
                 completionsList.add(completion)
             }
             override suspend fun deleteAll() { completionsList.clear() }
+            override suspend fun deleteByTaskId(taskId: String) {
+                completionsList.removeAll { it.taskId == taskId }
+            }
             override suspend fun getAll(): List<CompletionEntity> = completionsList.toList()
             override suspend fun findLaterCompletion(taskId: String): CompletionEntity? {
                 return completionsList.find { it.taskId == taskId && it.scheduleId == null && it.scheduledDate == null }
@@ -209,6 +234,13 @@ class PlannerRepositoryTest {
         override suspend fun applyUndo(taskId: String, scheduleId: String?, scheduledDate: String?) {
             applyUndoCalled = true
             super.applyUndo(taskId, scheduleId, scheduledDate)
+        }
+
+        override suspend fun applyDeleteTask(taskId: String) {
+            applyDeleteTaskCalled = true
+            fakeCompletionDao.deleteByTaskId(taskId)
+            fakeScheduleDao.deleteByTaskId(taskId)
+            fakeTaskDao.deleteById(taskId)
         }
     }
 
@@ -968,5 +1000,222 @@ class PlannerRepositoryTest {
         assertEquals(1, fakeDb.completionsList.size)
         assertEquals("task-1", fakeDb.completionsList.first().taskId)
         assertEquals("canonical-comp-id", fakeDb.completionsList.first().id)
+    }
+
+    @Test
+    fun deleteTask_missingToken_returnsFailureWithoutCallingNetwork() = runTest {
+        val fakeApi = FakePlannerApi()
+        val fakeDb = InMemoryTestDatabase()
+        val repository = PlannerRepository(fakeDb, tokenProvider = { null }, fakeApi)
+
+        val result = repository.deleteTask("task-1")
+
+        assertTrue(result.isFailure)
+        assertEquals("Missing authentication session token", result.exceptionOrNull()?.message)
+        assertEquals(0, fakeApi.deleteCallCount)
+    }
+
+    @Test
+    fun deleteTask_authenticated_sendsExactContractAndAtomicallyDeletesFromRoom() = runTest {
+        val fakeApi = FakePlannerApi(deleteResult = Result.success(DeleteTaskResponseDto("task-delete-1")))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-delete-1"] = TaskEntity(
+            id = "task-delete-1",
+            title = "To Delete",
+            note = null,
+            isImportant = false,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z"
+        )
+        fakeDb.schedulesMap["sched-del-1"] = ScheduleEntity(
+            id = "sched-del-1",
+            taskId = "task-delete-1",
+            scheduleType = "ONCE",
+            startDate = "2026-08-22",
+            endDate = null,
+            scheduledTime = null,
+            intervalDays = null,
+            intervalAnchorDate = null,
+            weekdaysMask = null,
+            reminderMinutesBefore = null,
+            createdAt = "2026-08-22T10:00:00.000Z",
+            updatedAt = "2026-08-22T10:00:00.000Z"
+        )
+        fakeDb.completionsList.add(
+            CompletionEntity(
+                id = "comp-del-1",
+                taskId = "task-delete-1",
+                scheduleId = "sched-del-1",
+                scheduledDate = "2026-08-22",
+                completedDate = "2026-08-22",
+                completedAt = "2026-08-22T10:00:00.000Z",
+                titleSnapshot = "To Delete",
+                isImportantSnapshot = false
+            )
+        )
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.deleteTask("task-delete-1")
+
+        assertTrue(result.isSuccess)
+        assertEquals("Bearer token_123", fakeApi.lastAuthorizationHeader)
+        assertEquals("task-delete-1", fakeApi.lastDeleteTaskId)
+        assertEquals(1, fakeApi.deleteCallCount)
+        assertEquals(0, fakeApi.getRefreshCallCount) // No follow-up GET
+
+        assertTrue(fakeDb.applyDeleteTaskCalled)
+        assertEquals(0, fakeDb.tasksMap.size)
+        assertEquals(0, fakeDb.schedulesMap.size)
+        assertEquals(0, fakeDb.completionsList.size)
+    }
+
+    @Test
+    fun deleteTask_removesTaskSchedulesAndCompletionsLeavingUnrelatedDataIntact() = runTest {
+        val fakeApi = FakePlannerApi(deleteResult = Result.success(DeleteTaskResponseDto("target-task")))
+        val fakeDb = InMemoryTestDatabase()
+
+        // Target task data
+        fakeDb.tasksMap["target-task"] = TaskEntity("target-task", "Target", null, false, "", "")
+        fakeDb.schedulesMap["target-sched"] = ScheduleEntity("target-sched", "target-task", "ONCE", "2026-08-22", null, null, null, null, null, null, "", "")
+        fakeDb.completionsList.add(CompletionEntity("target-comp", "target-task", "target-sched", "2026-08-22", "2026-08-22", "", null, false))
+
+        // Unrelated task data
+        fakeDb.tasksMap["unrelated-task"] = TaskEntity("unrelated-task", "Unrelated", null, true, "", "")
+        fakeDb.schedulesMap["unrelated-sched"] = ScheduleEntity("unrelated-sched", "unrelated-task", "ONCE", "2026-08-22", null, null, null, null, null, null, "", "")
+        fakeDb.completionsList.add(CompletionEntity("unrelated-comp", "unrelated-task", "unrelated-sched", "2026-08-22", "2026-08-22", "", null, true))
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.deleteTask("target-task")
+
+        assertTrue(result.isSuccess)
+        // Target removed
+        assertNull(fakeDb.tasksMap["target-task"])
+        assertNull(fakeDb.schedulesMap["target-sched"])
+        assertTrue(fakeDb.completionsList.none { it.taskId == "target-task" })
+
+        // Unrelated preserved
+        assertNotNull(fakeDb.tasksMap["unrelated-task"])
+        assertNotNull(fakeDb.schedulesMap["unrelated-sched"])
+        assertTrue(fakeDb.completionsList.any { it.taskId == "unrelated-task" })
+        assertEquals(1, fakeDb.tasksMap.size)
+        assertEquals(1, fakeDb.schedulesMap.size)
+        assertEquals(1, fakeDb.completionsList.size)
+    }
+
+    @Test
+    fun deleteTask_idempotentRetry_safelyDeletesAlreadyAbsentRows() = runTest {
+        val fakeApi = FakePlannerApi(deleteResult = Result.success(DeleteTaskResponseDto("absent-task")))
+        val fakeDb = InMemoryTestDatabase()
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        // 1. First delete
+        val res1 = repository.deleteTask("absent-task")
+        assertTrue(res1.isSuccess)
+
+        // 2. Retry delete for already deleted/absent task
+        val res2 = repository.deleteTask("absent-task")
+        assertTrue(res2.isSuccess)
+        assertEquals(2, fakeApi.deleteCallCount)
+        assertEquals(0, fakeDb.tasksMap.size)
+    }
+
+    @Test
+    fun deleteTask_networkFailure_leavesRoomUntouched() = runTest {
+        val fakeApi = FakePlannerApi(deleteResult = Result.failure(IOException("Connection failed")))
+        val fakeDb = InMemoryTestDatabase()
+
+        fakeDb.tasksMap["task-stay"] = TaskEntity("task-stay", "Stay", null, false, "", "")
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.deleteTask("task-stay")
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is IOException)
+        assertEquals(1, fakeDb.tasksMap.size)
+        assertNotNull(fakeDb.tasksMap["task-stay"])
+    }
+
+    @Test
+    fun deleteTask_401Unauthorized_propagatesHttpException() = runTest {
+        val http401 = HttpException(
+            Response.error<DeleteTaskResponseDto>(
+                401,
+                "{}".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeApi = FakePlannerApi(deleteResult = Result.failure(http401))
+        val fakeDb = InMemoryTestDatabase()
+        fakeDb.tasksMap["task-stay"] = TaskEntity("task-stay", "Stay", null, false, "", "")
+
+        val repository = PlannerRepository(fakeDb, tokenProvider = { "token_123" }, fakeApi)
+
+        val result = repository.deleteTask("task-stay")
+
+        assertTrue(result.isFailure)
+        val err = result.exceptionOrNull()
+        assertTrue(err is HttpException)
+        assertEquals(401, (err as HttpException).code())
+        assertEquals(1, fakeDb.tasksMap.size)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun sharedMutex_serializesRefreshAndDelete_staleRefreshCannotResurrectDeletedTask() = runTest {
+        val sharedMutex = Mutex()
+        val refreshDeferred = CompletableDeferred<Unit>()
+
+        val staleSnapshot = PlannerRefreshResponseDto(
+            tasks = listOf(
+                RefreshTaskDto(
+                    id = "task-to-delete",
+                    title = "Stale Task To Delete",
+                    note = null,
+                    isImportant = false,
+                    createdAt = "2026-08-18T10:00:00.000Z",
+                    updatedAt = "2026-08-18T10:00:00.000Z"
+                )
+            ),
+            schedules = emptyList(),
+            completions = emptyList()
+        )
+
+        val fakeApi = FakePlannerApi(
+            refreshResult = Result.success(staleSnapshot),
+            deleteResult = Result.success(DeleteTaskResponseDto("task-to-delete")),
+            delayRefreshDeferred = refreshDeferred
+        )
+        val fakeDb = InMemoryTestDatabase()
+
+        val repo1 = PlannerRepository(fakeDb, { "token" }, fakeApi, sharedMutex)
+        val repo2 = PlannerRepository(fakeDb, { "token" }, fakeApi, sharedMutex)
+
+        // 1. Start Refresh first (acquires lock, pauses on refreshDeferred)
+        val refreshJob = async { repo1.refresh() }
+        testScheduler.runCurrent()
+
+        assertEquals(1, fakeApi.getRefreshCallCount)
+        assertTrue(sharedMutex.isLocked)
+
+        // 2. Trigger Delete while Refresh is in-flight
+        val deleteJob = async { repo2.deleteTask("task-to-delete") }
+        testScheduler.runCurrent()
+
+        // Delete is queued behind Mutex and has NOT executed network call
+        assertEquals(0, fakeApi.deleteCallCount)
+
+        // 3. Complete Refresh response -> Refresh finishes and applies snapshot (including task-to-delete)
+        refreshDeferred.complete(Unit)
+        testScheduler.runCurrent()
+        refreshJob.await()
+
+        // 4. Now Delete executes and removes task-to-delete from Room
+        deleteJob.await()
+
+        assertEquals(1, fakeApi.deleteCallCount)
+        assertEquals(0, fakeDb.tasksMap.size)
+        assertNull(fakeDb.tasksMap["task-to-delete"])
     }
 }
