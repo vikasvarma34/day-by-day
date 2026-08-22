@@ -43,6 +43,15 @@ abstract class PlannerDatabase : RoomDatabase() {
         }
     }
 
+    open suspend fun applyCreateTask(task: TaskEntity, schedules: List<ScheduleEntity>) {
+        withTransaction {
+            taskDao().insert(task)
+            if (schedules.isNotEmpty()) {
+                scheduleDao().insertAll(schedules)
+            }
+        }
+    }
+
     open suspend fun applyComplete(completion: CompletionEntity) {
         completionDao().insert(completion)
     }

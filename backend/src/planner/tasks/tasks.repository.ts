@@ -278,7 +278,7 @@ export class TasksRepository {
     userId: string
   ): Promise<PlannerTaskResponse | null> {
     const taskRes = await executor.query(
-      `SELECT id, title, note, is_important
+      `SELECT id, title, note, is_important, created_at, updated_at
        FROM tasks
        WHERE id = $1 AND user_id = $2`,
       [taskId, userId]
@@ -293,7 +293,8 @@ export class TasksRepository {
     const schedulesRes = await executor.query(
       `SELECT
          id, schedule_type, start_date::text, end_date::text, scheduled_time,
-         interval_days, interval_anchor_date::text, weekdays_mask, reminder_minutes_before
+         interval_days, interval_anchor_date::text, weekdays_mask, reminder_minutes_before,
+         created_at, updated_at
        FROM task_schedules
        WHERE task_id = $1
        ORDER BY start_date ASC, id ASC`,
@@ -305,6 +306,8 @@ export class TasksRepository {
       title: row.title,
       note: row.note ?? null,
       isImportant: row.is_important,
+      createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString(),
+      updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : new Date(row.updated_at).toISOString(),
       schedules: schedulesRes.rows.map((s: any) => ({
         id: s.id,
         type: s.schedule_type,
@@ -315,6 +318,8 @@ export class TasksRepository {
         intervalAnchorDate: s.interval_anchor_date ?? null,
         weekdaysMask: s.weekdays_mask ?? null,
         reminderMinutesBefore: s.reminder_minutes_before ?? null,
+        createdAt: s.created_at instanceof Date ? s.created_at.toISOString() : new Date(s.created_at).toISOString(),
+        updatedAt: s.updated_at instanceof Date ? s.updated_at.toISOString() : new Date(s.updated_at).toISOString(),
       })),
     };
   }

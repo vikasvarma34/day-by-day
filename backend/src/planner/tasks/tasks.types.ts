@@ -27,6 +27,8 @@ export interface PlannerTaskScheduleResponse {
   intervalAnchorDate: string | null;
   weekdaysMask: number | null;
   reminderMinutesBefore: number | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PlannerTaskResponse {
@@ -34,6 +36,8 @@ export interface PlannerTaskResponse {
   title: string;
   note: string | null;
   isImportant: boolean;
+  createdAt: string;
+  updatedAt: string;
   schedules: PlannerTaskScheduleResponse[];
 }
 

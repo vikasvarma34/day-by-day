@@ -2,6 +2,8 @@ package com.vikaspokala.daybyday.data.remote.api
 
 import com.vikaspokala.daybyday.data.remote.dto.CompleteTaskRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.CompleteTaskResponseDto
+import com.vikaspokala.daybyday.data.remote.dto.CreateTaskRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.CreateTaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.PlannerRefreshResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.TaskActionResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.UndoTaskRequestDto
@@ -12,6 +14,12 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 
 interface PlannerApi {
+
+    @POST("tasks")
+    suspend fun createTask(
+        @Header("Authorization") authorization: String,
+        @Body request: CreateTaskRequestDto
+    ): CreateTaskResponseDto
 
     @GET("planner/refresh")
     suspend fun getRefresh(

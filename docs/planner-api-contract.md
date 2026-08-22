@@ -233,8 +233,34 @@ Returns the complete canonical database snapshot under `REPEATABLE READ` isolati
   - For scheduled task creation, `plannerToday` is required.
   - Historical `ONCE` task creation (`schedule.startDate < plannerToday` and `schedule.type === 'ONCE'`) is allowed as backfill without reminders (`reminderMinutesBefore` must be absent/null).
   - Historical recurring task creation (`INTERVAL_DAYS`, `WEEKDAYS` where `schedule.startDate < plannerToday`) is blocked.
-  - Later tasks without a schedule do not require `plannerToday`.
-* **Response**: `HTTP 201 Created` (or `HTTP 200 OK` on idempotent retry with existing task).
+* **Response**: `HTTP 201 Created` (or `HTTP 200 OK` on idempotent retry with existing task):
+```json
+{
+  "task": {
+    "id": "UUID",
+    "title": "String",
+    "note": "String | null",
+    "isImportant": false,
+    "createdAt": "ISO 8601 string",
+    "updatedAt": "ISO 8601 string",
+    "schedules": [
+      {
+        "id": "UUID",
+        "type": "ONCE | INTERVAL_DAYS | WEEKDAYS",
+        "startDate": "YYYY-MM-DD",
+        "endDate": "YYYY-MM-DD | null",
+        "scheduledTime": "HH:mm:ss | null",
+        "intervalDays": 1,
+        "intervalAnchorDate": "YYYY-MM-DD | null",
+        "weekdaysMask": 127,
+        "reminderMinutesBefore": 0,
+        "createdAt": "ISO 8601 string",
+        "updatedAt": "ISO 8601 string"
+      }
+    ]
+  }
+}
+```
 
 #### Edit (`PATCH /tasks/:taskId`)
 * **Request**:

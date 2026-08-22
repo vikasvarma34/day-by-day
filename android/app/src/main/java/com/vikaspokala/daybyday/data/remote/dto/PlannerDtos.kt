@@ -77,3 +77,56 @@ data class CompleteTaskResponseDto(
 data class TaskActionResponseDto(
     val success: Boolean = true
 )
+
+@Serializable
+data class CreateTaskScheduleRequestDto(
+    val type: String,
+    val startDate: String,
+    val endDate: String? = null,
+    val scheduledTime: String? = null,
+    val intervalDays: Int? = null,
+    val intervalAnchorDate: String? = null,
+    val weekdaysMask: Int? = null,
+    val reminderMinutesBefore: Int? = null
+)
+
+@Serializable
+data class CreateTaskRequestDto(
+    val id: String,
+    val title: String,
+    val note: String? = null,
+    val isImportant: Boolean = false,
+    val plannerToday: String? = null,
+    val schedule: CreateTaskScheduleRequestDto? = null
+)
+
+@Serializable
+data class TaskScheduleResponseDto(
+    val id: String,
+    val type: String,
+    val startDate: String,
+    val endDate: String? = null,
+    val scheduledTime: String? = null,
+    val intervalDays: Int? = null,
+    val intervalAnchorDate: String? = null,
+    val weekdaysMask: Int? = null,
+    val reminderMinutesBefore: Int? = null,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+@Serializable
+data class TaskResponseDto(
+    val id: String,
+    val title: String,
+    val note: String? = null,
+    val isImportant: Boolean,
+    val createdAt: String,
+    val updatedAt: String,
+    val schedules: List<TaskScheduleResponseDto> = emptyList()
+)
+
+@Serializable
+data class CreateTaskResponseDto(
+    val task: TaskResponseDto
+)

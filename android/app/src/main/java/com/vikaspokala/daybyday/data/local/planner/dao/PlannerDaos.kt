@@ -1,9 +1,8 @@
 package com.vikaspokala.daybyday.data.local.planner.dao
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import com.vikaspokala.daybyday.data.local.planner.entity.CompletionEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.ScheduleEntity
 import com.vikaspokala.daybyday.data.local.planner.entity.TaskEntity
@@ -23,8 +22,11 @@ data class HistoryCompletionRow(
 @Dao
 interface TaskDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertAll(tasks: List<TaskEntity>)
+
+    @Upsert
+    suspend fun insert(task: TaskEntity)
 
     @Query("DELETE FROM tasks")
     suspend fun deleteAll()
@@ -39,8 +41,11 @@ interface TaskDao {
 @Dao
 interface ScheduleDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertAll(schedules: List<ScheduleEntity>)
+
+    @Upsert
+    suspend fun insert(schedule: ScheduleEntity)
 
     @Query("DELETE FROM schedules")
     suspend fun deleteAll()
@@ -55,10 +60,10 @@ interface ScheduleDao {
 @Dao
 interface CompletionDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertAll(completions: List<CompletionEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insert(completion: CompletionEntity)
 
     @Query("DELETE FROM completions")

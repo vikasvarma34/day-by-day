@@ -7,6 +7,8 @@ import com.vikaspokala.daybyday.data.remote.dto.CompleteTaskResponseDto
 import com.vikaspokala.daybyday.data.remote.dto.RefreshCompletionDto
 import com.vikaspokala.daybyday.data.remote.dto.RefreshScheduleDto
 import com.vikaspokala.daybyday.data.remote.dto.RefreshTaskDto
+import com.vikaspokala.daybyday.data.remote.dto.TaskResponseDto
+import com.vikaspokala.daybyday.data.remote.dto.TaskScheduleResponseDto
 
 @Entity(tableName = "tasks")
 data class TaskEntity(
@@ -96,4 +98,28 @@ fun CompleteTaskResponseDto.toEntity(): CompletionEntity = CompletionEntity(
     completedAt = completedAt,
     titleSnapshot = titleSnapshot,
     isImportantSnapshot = isImportantSnapshot
+)
+
+fun TaskResponseDto.toEntity(): TaskEntity = TaskEntity(
+    id = id,
+    title = title,
+    note = note,
+    isImportant = isImportant,
+    createdAt = createdAt,
+    updatedAt = updatedAt
+)
+
+fun TaskScheduleResponseDto.toEntity(taskId: String): ScheduleEntity = ScheduleEntity(
+    id = id,
+    taskId = taskId,
+    scheduleType = type,
+    startDate = startDate,
+    endDate = endDate,
+    scheduledTime = scheduledTime,
+    intervalDays = intervalDays,
+    intervalAnchorDate = intervalAnchorDate,
+    weekdaysMask = weekdaysMask,
+    reminderMinutesBefore = reminderMinutesBefore,
+    createdAt = createdAt,
+    updatedAt = updatedAt
 )

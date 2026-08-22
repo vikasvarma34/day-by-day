@@ -6,6 +6,8 @@ import com.vikaspokala.daybyday.data.local.planner.entity.toEntity
 import com.vikaspokala.daybyday.data.remote.NetworkClient
 import com.vikaspokala.daybyday.data.remote.api.PlannerApi
 import com.vikaspokala.daybyday.data.remote.dto.CompleteTaskRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.CreateTaskRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.CreateTaskScheduleRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UndoTaskRequestDto
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,6 +30,36 @@ open class PlannerRepository(
         plannerApi = plannerApi,
         mutex = mutex
     )
+
+    open suspend fun createTask(
+        taskId: String,
+        title: String,
+        note: String? = null,
+        isImportant: Boolean = false,
+        plannerToday: String? = null,
+        schedule: CreateTaskScheduleRequestDto? = null
+    ): Result<Unit> = mutex.withLock {
+        val token = tokenProvider()
+            ?: return Result.failure(IllegalStateException("Missing authentication session token"))
+
+        try {
+            val request = CreateTaskRequestDto(
+                id = taskId,
+                title = title,
+                note = note,
+                isImportant = isImportant,
+                plannerToday = plannerToday,
+                schedule = schedule
+            )
+            val response = plannerApi.createTask("Bearer $token", request)
+            val taskEntity = response.task.toEntity()
+            val scheduleEntities = response.task.schedules.map { it.toEntity(response.task.id) }
+            plannerDatabase.applyCreateTask(taskEntity, scheduleEntities)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     open suspend fun refresh(): Result<Unit> = mutex.withLock {
         val token = tokenProvider()
