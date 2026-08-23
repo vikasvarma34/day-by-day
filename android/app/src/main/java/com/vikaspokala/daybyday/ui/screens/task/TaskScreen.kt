@@ -651,6 +651,11 @@ fun TaskScreen(
                 onTimeSelected = { newTimeString ->
                     currentTimeString = newTimeString
                     showTimePickerModal = false
+                },
+                onClearTime = {
+                    currentTimeString = null
+                    currentReminderString = null
+                    showTimePickerModal = false
                 }
             )
         }

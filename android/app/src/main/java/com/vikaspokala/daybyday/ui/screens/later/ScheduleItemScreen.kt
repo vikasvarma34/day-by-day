@@ -441,6 +441,11 @@ fun ScheduleItemScreen(
                 onTimeSelected = { newTimeString ->
                     timeString = newTimeString
                     showTimePickerModal = false
+                },
+                onClearTime = {
+                    timeString = null
+                    reminderString = null
+                    showTimePickerModal = false
                 }
             )
         }

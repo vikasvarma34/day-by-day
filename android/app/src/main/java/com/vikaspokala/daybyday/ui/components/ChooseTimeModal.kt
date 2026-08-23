@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
+import com.vikaspokala.daybyday.ui.theme.DayByDayDestructive
 import com.vikaspokala.daybyday.ui.theme.DayByDayFontFamily
 import com.vikaspokala.daybyday.ui.theme.DayByDayNeutralBorder
 import com.vikaspokala.daybyday.ui.theme.DayByDayPrimaryText
@@ -48,7 +49,8 @@ import com.vikaspokala.daybyday.ui.theme.DayByDayStrongAccent
 fun ChooseTimeModal(
     initialTimeString: String?,
     onDismiss: () -> Unit,
-    onTimeSelected: (String) -> Unit
+    onTimeSelected: (String) -> Unit,
+    onClearTime: (() -> Unit)? = null
 ) {
     val initialHour = parseHour(initialTimeString)
     val initialMinute = parseMinute(initialTimeString)
@@ -277,6 +279,27 @@ fun ChooseTimeModal(
                                 )
                             )
                         }
+                    }
+                }
+
+                if (!initialTimeString.isNullOrEmpty() && onClearTime != null) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onClearTime() }
+                            .padding(vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Remove time",
+                            style = TextStyle(
+                                fontFamily = DayByDayFontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp,
+                                color = DayByDayDestructive
+                            )
+                        )
                     }
                 }
             }

@@ -430,4 +430,25 @@ class TaskSaveContractTest {
         assertEquals("22:30:00", updateSchedule.scheduledTime)
         assertTrue(timeRegex.matches(updateSchedule.scheduledTime!!))
     }
+
+    @Test
+    fun buildUpdateSchedule_whenTimeRemoved_clearsScheduledTimeAndReminder() {
+        // Even if reminder was previously selected, removing time forces both to null
+        val updateSchedule = buildUpdateSchedule(today, null, "15 minutes before", null)
+        assertNull(updateSchedule.scheduledTime)
+        assertNull(updateSchedule.reminderMinutesBefore)
+    }
+
+    @Test
+    fun initialTaskScheduleFormState_whenTimeRemoved_clearsReminder() {
+        val state = initialTaskScheduleFormState(
+            isCreateMode = false,
+            targetDate = today,
+            plannerToday = today,
+            time = null,
+            reminder = "15 minutes before",
+            recurrence = null
+        )
+        assertNull(state.reminder)
+    }
 }
