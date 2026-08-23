@@ -22,16 +22,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,8 +50,17 @@ fun ChooseTimeModal(
     onDismiss: () -> Unit,
     onTimeSelected: (String) -> Unit
 ) {
-    var hour by remember(initialTimeString) { mutableIntStateOf(parseHour(initialTimeString)) }
-    var minute by remember(initialTimeString) { mutableIntStateOf(parseMinute(initialTimeString)) }
+    val initialHour = parseHour(initialTimeString)
+    val initialMinute = parseMinute(initialTimeString)
+
+    var hourField by remember(initialTimeString) {
+        val str = initialHour.toString()
+        mutableStateOf(TextFieldValue(text = str, selection = TextRange(str.length)))
+    }
+    var minuteField by remember(initialTimeString) {
+        val str = "%02d".format(initialMinute)
+        mutableStateOf(TextFieldValue(text = str, selection = TextRange(str.length)))
+    }
     var amPm by remember(initialTimeString) { mutableStateOf(parseAmPm(initialTimeString)) }
 
     Box(
@@ -118,14 +129,32 @@ fun ChooseTimeModal(
                 ) {
                     // Hour Box with Up/Down buttons
                     TimeNumberBox(
-                        value = hour,
-                        onIncrement = { hour = if (hour >= 12) 1 else hour + 1 },
-                        onDecrement = { hour = if (hour <= 1) 12 else hour - 1 },
-                        onValueChange = { input ->
-                            val parsed = input.toIntOrNull()
-                            if (parsed != null && parsed in 1..12) {
-                                hour = parsed
+                        value = hourField,
+                        onValueChange = { newValue ->
+                            val digits = newValue.text.filter { it.isDigit() }
+                            if (digits.length <= 2) {
+                                val intVal = digits.toIntOrNull()
+                                if (digits.isEmpty() || (intVal != null && intVal in 0..12)) {
+                                    hourField = newValue.copy(text = digits)
+                                }
                             }
+                        },
+                        onIncrement = {
+                            val curr = hourField.text.toIntOrNull() ?: initialHour
+                            val next = if (curr >= 12) 1 else (if (curr <= 0) 1 else curr + 1)
+                            val str = next.toString()
+                            hourField = TextFieldValue(text = str, selection = TextRange(str.length))
+                        },
+                        onDecrement = {
+                            val curr = hourField.text.toIntOrNull() ?: initialHour
+                            val next = if (curr <= 1) 12 else curr - 1
+                            val str = next.toString()
+                            hourField = TextFieldValue(text = str, selection = TextRange(str.length))
+                        },
+                        onFocusLost = {
+                            val normalized = normalizeHour(hourField.text, fallback = initialHour)
+                            val str = normalized.toString()
+                            hourField = TextFieldValue(text = str, selection = TextRange(str.length))
                         }
                     )
 
@@ -142,15 +171,32 @@ fun ChooseTimeModal(
 
                     // Minute Box with Up/Down buttons
                     TimeNumberBox(
-                        value = minute,
-                        formatTwoDigits = true,
-                        onIncrement = { minute = (minute + 5) % 60 },
-                        onDecrement = { minute = if (minute < 5) 55 else minute - 5 },
-                        onValueChange = { input ->
-                            val parsed = input.toIntOrNull()
-                            if (parsed != null && parsed in 0..59) {
-                                minute = parsed
+                        value = minuteField,
+                        onValueChange = { newValue ->
+                            val digits = newValue.text.filter { it.isDigit() }
+                            if (digits.length <= 2) {
+                                val intVal = digits.toIntOrNull()
+                                if (digits.isEmpty() || (intVal != null && intVal in 0..59)) {
+                                    minuteField = newValue.copy(text = digits)
+                                }
                             }
+                        },
+                        onIncrement = {
+                            val curr = minuteField.text.toIntOrNull() ?: initialMinute
+                            val next = (curr + 5) % 60
+                            val str = "%02d".format(next)
+                            minuteField = TextFieldValue(text = str, selection = TextRange(str.length))
+                        },
+                        onDecrement = {
+                            val curr = minuteField.text.toIntOrNull() ?: initialMinute
+                            val next = if (curr < 5) 55 else curr - 5
+                            val str = "%02d".format(next)
+                            minuteField = TextFieldValue(text = str, selection = TextRange(str.length))
+                        },
+                        onFocusLost = {
+                            val normalized = normalizeMinute(minuteField.text, fallback = initialMinute)
+                            val str = "%02d".format(normalized)
+                            minuteField = TextFieldValue(text = str, selection = TextRange(str.length))
                         }
                     )
 
@@ -210,8 +256,9 @@ fun ChooseTimeModal(
                             .weight(1f)
                             .height(50.dp)
                             .clickable {
-                                val formattedMinutes = "%02d".format(minute)
-                                onTimeSelected("$hour:$formattedMinutes $amPm")
+                                val finalHour = normalizeHour(hourField.text, fallback = initialHour)
+                                val finalMinute = normalizeMinute(minuteField.text, fallback = initialMinute)
+                                onTimeSelected(formatTimeSelection(finalHour, finalMinute, amPm))
                             },
                         shape = RoundedCornerShape(18.dp),
                         color = DayByDayAccent
@@ -239,15 +286,12 @@ fun ChooseTimeModal(
 
 @Composable
 private fun TimeNumberBox(
-    value: Int,
-    formatTwoDigits: Boolean = false,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     onIncrement: () -> Unit,
     onDecrement: () -> Unit,
-    onValueChange: (String) -> Unit
+    onFocusLost: () -> Unit
 ) {
-    val displayString = if (formatTwoDigits) "%02d".format(value) else value.toString()
-    var textInput by remember(value) { mutableStateOf(displayString) }
-
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -267,13 +311,15 @@ private fun TimeNumberBox(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 BasicTextField(
-                    value = textInput,
-                    onValueChange = {
-                        textInput = it
-                        onValueChange(it)
-                    },
+                    value = value,
+                    onValueChange = onValueChange,
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            onFocusLost()
+                        }
+                    },
                     textStyle = TextStyle(
                         fontFamily = DayByDayFontFamily,
                         fontWeight = FontWeight.SemiBold,
@@ -323,7 +369,25 @@ private fun AmPmPill(
     }
 }
 
-private fun parseHour(timeStr: String?): Int {
+fun normalizeHour(input: String, fallback: Int = 10): Int {
+    val parsed = input.trim().toIntOrNull()
+    return if (parsed != null && parsed in 1..12) parsed else fallback
+}
+
+fun normalizeMinute(input: String, fallback: Int = 0): Int {
+    val parsed = input.trim().toIntOrNull()
+    return if (parsed != null && parsed in 0..59) parsed else fallback
+}
+
+fun formatTimeSelection(hour: Int, minute: Int, amPm: String): String {
+    val normalizedHour = normalizeHour(hour.toString())
+    val normalizedMinute = normalizeMinute(minute.toString())
+    val formattedMinute = "%02d".format(normalizedMinute)
+    val normalizedAmPm = if (amPm.equals("PM", ignoreCase = true)) "PM" else "AM"
+    return "$normalizedHour:$formattedMinute $normalizedAmPm"
+}
+
+fun parseHour(timeStr: String?): Int {
     if (timeStr.isNullOrEmpty()) return 10
     return try {
         val parts = timeStr.trim().split(" ")
@@ -335,7 +399,7 @@ private fun parseHour(timeStr: String?): Int {
     }
 }
 
-private fun parseMinute(timeStr: String?): Int {
+fun parseMinute(timeStr: String?): Int {
     if (timeStr.isNullOrEmpty()) return 30
     return try {
         val parts = timeStr.trim().split(" ")
@@ -347,7 +411,7 @@ private fun parseMinute(timeStr: String?): Int {
     }
 }
 
-private fun parseAmPm(timeStr: String?): String {
+fun parseAmPm(timeStr: String?): String {
     if (timeStr.isNullOrEmpty()) return "AM"
     return try {
         val parts = timeStr.trim().split(" ")
