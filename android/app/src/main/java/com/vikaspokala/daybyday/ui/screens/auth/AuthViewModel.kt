@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.vikaspokala.daybyday.data.local.auth.SessionTokenStore
+import com.vikaspokala.daybyday.data.local.planner.PlannerDatabase
 import com.vikaspokala.daybyday.data.remote.dto.AuthUserDto
 import com.vikaspokala.daybyday.data.repository.AuthRepository
 import java.io.IOException
@@ -29,7 +30,8 @@ sealed interface AuthUiState {
 }
 
 class AuthViewModel(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val plannerDatabase: PlannerDatabase? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Loading)
@@ -37,6 +39,26 @@ class AuthViewModel(
 
     init {
         checkInitialSession()
+    }
+
+    private suspend fun onAuthenticationSuccess(user: AuthUserDto) {
+        val storedOwnerId = authRepository.getCacheOwner()
+        val db = plannerDatabase
+        if (storedOwnerId == user.id) {
+            // Matching owner: keep existing Room cache
+        } else if (storedOwnerId != null) {
+            // Different owner: clear all account-specific planner Room cache and store new owner
+            db?.clearPlannerData()
+            authRepository.saveCacheOwner(user.id)
+        } else {
+            // Missing/unknown cache owner
+            if (db != null && db.hasAnyData()) {
+                // Room contains data with unknown owner: unsafe, clear it
+                db.clearPlannerData()
+            }
+            authRepository.saveCacheOwner(user.id)
+        }
+        _uiState.value = AuthUiState.Authenticated(user)
     }
 
     fun checkInitialSession() {
@@ -50,7 +72,7 @@ class AuthViewModel(
 
             try {
                 val user = authRepository.verifySession(token)
-                _uiState.value = AuthUiState.Authenticated(user)
+                onAuthenticationSuccess(user)
             } catch (e: HttpException) {
                 if (e.code() == 401) {
                     authRepository.clearSession()
@@ -90,7 +112,7 @@ class AuthViewModel(
                 val token = authRepository.login(trimmedEmail, password)
                 tokenSaved = true
                 val user = authRepository.verifySession(token)
-                _uiState.value = AuthUiState.Authenticated(user)
+                onAuthenticationSuccess(user)
             } catch (e: HttpException) {
                 if (e.code() == 401 || e.code() == 400) {
                     authRepository.clearSession()
@@ -142,7 +164,7 @@ class AuthViewModel(
             _uiState.value = AuthUiState.ConnectionError(isRetrying = true)
             try {
                 val user = authRepository.verifySession(token)
-                _uiState.value = AuthUiState.Authenticated(user)
+                onAuthenticationSuccess(user)
             } catch (e: HttpException) {
                 if (e.code() == 401) {
                     authRepository.clearSession()
@@ -176,12 +198,43 @@ class AuthViewModel(
         }
     }
 
+    fun logout() {
+        viewModelScope.launch {
+            val token = authRepository.getStoredToken()
+
+            // 1. Immediately perform local logout
+            authRepository.clearSession()
+            try {
+                plannerDatabase?.clearPlannerData()
+            } catch (_: Exception) {
+                // Room clearing errors must not block local logout or UI transition
+            }
+            try {
+                authRepository.clearCacheOwner()
+            } catch (_: Exception) {
+                // Cache owner errors must not block local logout or UI transition
+            }
+            _uiState.value = AuthUiState.SignedOut()
+
+            // 2. Best-effort remote POST /auth/logout with captured token
+            if (!token.isNullOrBlank()) {
+                try {
+                    authRepository.logout(token)
+                } catch (_: Exception) {
+                    // Offline / network failure / server 5xx or 401 ignored as local logout is already complete
+                }
+            }
+        }
+    }
+
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val sessionTokenStore = SessionTokenStore(context.applicationContext)
+            val appContext = context.applicationContext
+            val sessionTokenStore = SessionTokenStore(appContext)
             val authRepository = AuthRepository(sessionTokenStore)
-            return AuthViewModel(authRepository) as T
+            val plannerDatabase = PlannerDatabase.getInstance(appContext)
+            return AuthViewModel(authRepository, plannerDatabase) as T
         }
     }
 }

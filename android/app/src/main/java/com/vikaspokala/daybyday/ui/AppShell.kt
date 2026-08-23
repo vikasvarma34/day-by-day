@@ -74,6 +74,7 @@ fun AppShell(
     onSessionExpired: () -> Unit = {},
     onUserUpdated: (AuthUserDto) -> Unit = {},
     onPasswordChanged: () -> Unit = onSessionExpired,
+    onLogout: () -> Unit = {},
     todayViewModel: TodayViewModel = viewModel(
         factory = TodayViewModel.Factory(LocalContext.current, onSessionExpired)
     ),
@@ -257,6 +258,7 @@ fun AppShell(
                                 settingsViewModel.resetProfileEditState()
                                 backStack.add(Screen.EditProfileField(fieldType))
                             },
+                            onLogoutClick = onLogout,
                             refreshState = refreshState,
                             onRefreshClick = { settingsViewModel.refreshPlannerData() }
                         )

@@ -45,7 +45,8 @@ class MainActivity : ComponentActivity() {
                             user = state.user,
                             onSessionExpired = { authViewModel.handleSessionExpired() },
                             onUserUpdated = { authViewModel.updateUser(it) },
-                            onPasswordChanged = { authViewModel.handlePasswordChanged() }
+                            onPasswordChanged = { authViewModel.handlePasswordChanged() },
+                            onLogout = { authViewModel.logout() }
                         )
                     }
                 }

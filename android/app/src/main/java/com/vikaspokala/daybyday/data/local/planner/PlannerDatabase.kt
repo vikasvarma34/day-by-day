@@ -31,6 +31,20 @@ abstract class PlannerDatabase : RoomDatabase() {
     abstract fun scheduleDao(): ScheduleDao
     abstract fun completionDao(): CompletionDao
 
+    open suspend fun clearPlannerData() {
+        withTransaction {
+            completionDao().deleteAll()
+            scheduleDao().deleteAll()
+            taskDao().deleteAll()
+        }
+    }
+
+    open suspend fun hasAnyData(): Boolean {
+        return taskDao().getAll().isNotEmpty() ||
+                scheduleDao().getAll().isNotEmpty() ||
+                completionDao().getAll().isNotEmpty()
+    }
+
     open suspend fun replaceSnapshot(
         tasks: List<TaskEntity>,
         schedules: List<ScheduleEntity>,

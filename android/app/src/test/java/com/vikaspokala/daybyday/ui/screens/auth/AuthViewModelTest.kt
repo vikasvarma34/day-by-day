@@ -35,16 +35,37 @@ class AuthViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private class FakeAuthRepository(
+    private open class FakeAuthRepository(
         var storedToken: String? = null,
+        var storedCacheOwner: String? = null,
         var loginResult: Result<String>? = null,
-        var verifyResult: ((String) -> Result<AuthUserDto>)? = null
+        var verifyResult: ((String) -> Result<AuthUserDto>)? = null,
+        var logoutResult: Result<Unit> = Result.success(Unit)
     ) : AuthRepository() {
 
         override suspend fun getStoredToken(): String? = storedToken
 
         override suspend fun clearSession() {
             storedToken = null
+        }
+
+        override suspend fun getCacheOwner(): String? = storedCacheOwner
+
+        override suspend fun saveCacheOwner(userId: String) {
+            storedCacheOwner = userId
+        }
+
+        override suspend fun clearCacheOwner() {
+            storedCacheOwner = null
+        }
+
+        var logoutCallCount = 0
+        var lastLogoutToken: String? = null
+
+        override suspend fun logout(token: String?) {
+            logoutCallCount++
+            lastLogoutToken = token
+            logoutResult.getOrThrow()
         }
 
         override suspend fun login(email: String, password: String): String {
@@ -298,5 +319,329 @@ class AuthViewModelTest {
         assertEquals(null, repo.storedToken)
         assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
         assertEquals(1, verifyCount)
+    }
+
+    @Test
+    fun login_matchingOwner_preservesRoomCache() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedCacheOwner = testUser.id,
+            loginResult = Result.success("valid_token"),
+            verifyResult = { Result.success(testUser) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = true
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        viewModel.signIn("test@example.com", "Password12345!")
+        advanceUntilIdle()
+
+        assertEquals(0, database.clearPlannerDataCallCount)
+        assertEquals(testUser.id, repo.storedCacheOwner)
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+    }
+
+    @Test
+    fun login_differentOwner_clearsRoomCacheAndStoresNewOwner() = runTest(testDispatcher) {
+        val userB = testUser.copy(id = "22222222-3333-4444-5555-666666666666", email = "userb@example.com")
+        val repo = FakeAuthRepository(
+            storedCacheOwner = "11111111-2222-3333-4444-555555555555", // User A's ID
+            loginResult = Result.success("user_b_token"),
+            verifyResult = { Result.success(userB) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = true
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        viewModel.signIn("userb@example.com", "Password12345!")
+        advanceUntilIdle()
+
+        assertEquals(1, database.clearPlannerDataCallCount)
+        assertEquals(userB.id, repo.storedCacheOwner)
+        assertEquals(AuthUiState.Authenticated(userB), viewModel.uiState.value)
+    }
+
+    @Test
+    fun initialSession_unknownOwner_withExistingCachedData_clearsCacheAndStoresNewOwner() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token",
+            storedCacheOwner = null,
+            verifyResult = { Result.success(testUser) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = true
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        assertEquals(1, database.clearPlannerDataCallCount)
+        assertEquals(testUser.id, repo.storedCacheOwner)
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+    }
+
+    @Test
+    fun initialSession_unknownOwner_withEmptyCache_storesOwnerWithoutClearing() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token",
+            storedCacheOwner = null,
+            verifyResult = { Result.success(testUser) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = false
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        assertEquals(0, database.clearPlannerDataCallCount)
+        assertEquals(testUser.id, repo.storedCacheOwner)
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+    }
+
+    @Test
+    fun passwordChangeSignout_preservesRoomCacheAndCacheOwner_andSubsequentSignInPreservesCache() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token",
+            storedCacheOwner = testUser.id,
+            loginResult = Result.success("new_valid_token"),
+            verifyResult = { Result.success(testUser) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = true
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+        assertEquals(0, database.clearPlannerDataCallCount)
+
+        // Password change triggers sign out
+        viewModel.handlePasswordChanged()
+        advanceUntilIdle()
+
+        assertEquals(null, repo.storedToken)
+        assertEquals(testUser.id, repo.storedCacheOwner) // Cache owner preserved
+        assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
+        assertEquals(0, database.clearPlannerDataCallCount) // Cache not cleared
+
+        // Same user signs in again
+        viewModel.signIn("test@example.com", "NewPassword12345!")
+        advanceUntilIdle()
+
+        assertEquals(0, database.clearPlannerDataCallCount) // Cache preserved!
+        assertEquals(testUser.id, repo.storedCacheOwner)
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+    }
+
+    @Test
+    fun authentication_isNotExposedAsAuthenticatedUntilOwnershipHandlingCompletes() = runTest(testDispatcher) {
+        val userB = testUser.copy(id = "22222222-3333-4444-5555-666666666666", email = "userb@example.com")
+        val repo = FakeAuthRepository(
+            storedCacheOwner = "11111111-2222-3333-4444-555555555555", // User A's ID
+            loginResult = Result.success("user_b_token"),
+            verifyResult = { Result.success(userB) }
+        )
+        var capturedStateDuringClear: AuthUiState? = null
+        val database = object : com.vikaspokala.daybyday.ui.FakePlannerDatabase() {
+            var viewModelRef: AuthViewModel? = null
+            override suspend fun clearPlannerData() {
+                super.clearPlannerData()
+                capturedStateDuringClear = viewModelRef?.uiState?.value
+            }
+        }
+        database.hasAnyDataResult = true
+
+        val viewModel = AuthViewModel(repo, database)
+        database.viewModelRef = viewModel
+        advanceUntilIdle()
+
+        viewModel.signIn("userb@example.com", "Password12345!")
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.SignedOut(isSubmitting = true), capturedStateDuringClear)
+        assertEquals(1, database.clearPlannerDataCallCount)
+        assertEquals(AuthUiState.Authenticated(userB), viewModel.uiState.value)
+    }
+
+    @Test
+    fun logout_success_callsBackendLogout_clearsSession_clearsRoom_clearsCacheOwner_andTransitionsToSignedOut() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token_123",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(testUser) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = true
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+        assertEquals(0, database.clearPlannerDataCallCount)
+        assertEquals(0, repo.logoutCallCount)
+
+        viewModel.logout()
+        advanceUntilIdle()
+
+        assertEquals(1, repo.logoutCallCount)
+        assertEquals("valid_token_123", repo.lastLogoutToken)
+        assertEquals(null, repo.storedToken)
+        assertEquals(null, repo.storedCacheOwner)
+        assertEquals(1, database.clearPlannerDataCallCount)
+        assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun logout_networkFailure_stillPerformsCompleteLocalLogout() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token_123",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(testUser) },
+            logoutResult = Result.failure(IOException("No network connectivity"))
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = true
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+
+        viewModel.logout()
+        advanceUntilIdle()
+
+        assertEquals(1, repo.logoutCallCount)
+        assertEquals("valid_token_123", repo.lastLogoutToken)
+        assertEquals(null, repo.storedToken)
+        assertEquals(null, repo.storedCacheOwner)
+        assertEquals(1, database.clearPlannerDataCallCount)
+        assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun logout_http500Failure_stillPerformsCompleteLocalLogout() = runTest(testDispatcher) {
+        val http500Exception = createHttpException(500)
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token_123",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(testUser) },
+            logoutResult = Result.failure(http500Exception)
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = true
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+
+        viewModel.logout()
+        advanceUntilIdle()
+
+        assertEquals(1, repo.logoutCallCount)
+        assertEquals(null, repo.storedToken)
+        assertEquals(null, repo.storedCacheOwner)
+        assertEquals(1, database.clearPlannerDataCallCount)
+        assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun logout_http401Failure_stillPerformsCompleteLocalLogout() = runTest(testDispatcher) {
+        val http401Exception = createHttpException(401)
+        val repo = FakeAuthRepository(
+            storedToken = "already_expired_token",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(testUser) },
+            logoutResult = Result.failure(http401Exception)
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = true
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        viewModel.logout()
+        advanceUntilIdle()
+
+        assertEquals(1, repo.logoutCallCount)
+        assertEquals(null, repo.storedToken)
+        assertEquals(null, repo.storedCacheOwner)
+        assertEquals(1, database.clearPlannerDataCallCount)
+        assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun logout_performsLocalLogoutBeforeRemoteCallCompletes_usingCapturedToken() = runTest(testDispatcher) {
+        var stateDuringRemoteLogout: AuthUiState? = null
+        var tokenInRepoDuringRemoteLogout: String? = "uninitialized"
+
+        val repo = object : FakeAuthRepository(
+            storedToken = "captured_token_xyz",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(testUser) }
+        ) {
+            var viewModelRef: AuthViewModel? = null
+            override suspend fun logout(token: String?) {
+                super.logout(token)
+                stateDuringRemoteLogout = viewModelRef?.uiState?.value
+                tokenInRepoDuringRemoteLogout = storedToken
+            }
+        }
+
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase().apply {
+            hasAnyDataResult = true
+        }
+
+        val viewModel = AuthViewModel(repo, database)
+        repo.viewModelRef = viewModel
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+
+        viewModel.logout()
+        advanceUntilIdle()
+
+        assertEquals("captured_token_xyz", repo.lastLogoutToken)
+        assertEquals(AuthUiState.SignedOut(), stateDuringRemoteLogout)
+        assertEquals(null, tokenInRepoDuringRemoteLogout)
+        assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun logout_whenRoomClearingThrowsException_stillClearsSessionAndSetsSignedOut() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token_123",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(testUser) }
+        )
+        val database = object : com.vikaspokala.daybyday.ui.FakePlannerDatabase() {
+            override suspend fun clearPlannerData() {
+                throw RuntimeException("Simulated SQLite disk error")
+            }
+        }
+        database.hasAnyDataResult = true
+
+        val viewModel = AuthViewModel(repo, database)
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+
+        viewModel.logout()
+        advanceUntilIdle()
+
+        assertEquals(null, repo.storedToken)
+        assertEquals(null, repo.storedCacheOwner)
+        assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
     }
 }

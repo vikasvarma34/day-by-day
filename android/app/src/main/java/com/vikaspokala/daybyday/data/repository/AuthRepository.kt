@@ -22,6 +22,18 @@ open class AuthRepository(
         sessionTokenStore?.clearToken()
     }
 
+    open suspend fun getCacheOwner(): String? {
+        return sessionTokenStore?.readCacheOwner()
+    }
+
+    open suspend fun saveCacheOwner(userId: String) {
+        sessionTokenStore?.saveCacheOwner(userId)
+    }
+
+    open suspend fun clearCacheOwner() {
+        sessionTokenStore?.clearCacheOwner()
+    }
+
     open suspend fun login(email: String, password: String): String {
         val response = authApi.login(
             LoginRequestDto(
@@ -49,5 +61,10 @@ open class AuthRepository(
         val token = getStoredToken()
             ?: throw IllegalStateException("Missing authentication session token")
         authApi.changePassword("Bearer $token", request)
+    }
+
+    open suspend fun logout(token: String? = null) {
+        val bearerToken = token ?: getStoredToken() ?: return
+        authApi.logout("Bearer $bearerToken")
     }
 }

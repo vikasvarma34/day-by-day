@@ -106,6 +106,24 @@ class SessionTokenStore(
         }
     }
 
+    suspend fun saveCacheOwner(userId: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_CACHE_OWNER_USER_ID] = userId
+        }
+    }
+
+    suspend fun readCacheOwner(): String? {
+        return dataStore.data.map { preferences ->
+            preferences[KEY_CACHE_OWNER_USER_ID]
+        }.firstOrNull()
+    }
+
+    suspend fun clearCacheOwner() {
+        dataStore.edit { preferences ->
+            preferences.remove(KEY_CACHE_OWNER_USER_ID)
+        }
+    }
+
     companion object {
         private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
         private const val KEY_ALIAS = "daybyday_session_token_key"
@@ -115,6 +133,7 @@ class SessionTokenStore(
 
         private val KEY_CIPHERTEXT = stringPreferencesKey("session_token_ciphertext")
         private val KEY_IV = stringPreferencesKey("session_token_iv")
+        private val KEY_CACHE_OWNER_USER_ID = stringPreferencesKey("planner_cache_owner_user_id")
 
         @Volatile
         private var dataStoreInstance: DataStore<Preferences>? = null

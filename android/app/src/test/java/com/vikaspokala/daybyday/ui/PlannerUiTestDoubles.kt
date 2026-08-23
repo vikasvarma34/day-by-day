@@ -21,11 +21,20 @@ import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 
-internal class FakePlannerDatabase : PlannerDatabase() {
+internal open class FakePlannerDatabase : PlannerDatabase() {
     val occurrences = MutableStateFlow<Map<LocalDate, List<ScheduledOccurrence>>>(emptyMap())
     val importantDates = MutableStateFlow<Set<LocalDate>>(emptySet())
     val laterTasks = MutableStateFlow<List<LaterTaskProjection>>(emptyList())
     val importantRanges = mutableListOf<Pair<LocalDate, LocalDate>>()
+    var clearPlannerDataCallCount = 0
+    var hasAnyDataResult = false
+
+    override suspend fun clearPlannerData() {
+        clearPlannerDataCallCount++
+        hasAnyDataResult = false
+    }
+
+    override suspend fun hasAnyData(): Boolean = hasAnyDataResult
 
     override fun observeScheduledOccurrences(date: LocalDate) =
         occurrences.map { rows -> rows[date].orEmpty() }
