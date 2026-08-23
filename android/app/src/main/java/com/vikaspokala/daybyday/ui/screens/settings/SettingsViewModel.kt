@@ -61,6 +61,13 @@ class SettingsViewModel(
 
     private val coroutineScope = scope
 
+    private val _currentUser = MutableStateFlow<AuthUserDto?>(null)
+    val currentUser: StateFlow<AuthUserDto?> = _currentUser.asStateFlow()
+
+    fun setCurrentUser(user: AuthUserDto?) {
+        _currentUser.value = user
+    }
+
     private val _isNotificationAllowed = MutableStateFlow(notificationManager?.areNotificationsAllowed() ?: false)
     val isNotificationAllowed: StateFlow<Boolean> = _isNotificationAllowed.asStateFlow()
 
@@ -208,6 +215,7 @@ class SettingsViewModel(
             _profileEditState.value = ProfileEditUiState.Saving
             try {
                 val updatedUser = authRepository.updateProfile(request)
+                _currentUser.value = updatedUser
                 onUserUpdated(updatedUser)
                 _profileEditState.value = ProfileEditUiState.Idle
                 onSuccess()
@@ -252,13 +260,39 @@ class SettingsViewModel(
         }
     }
 
-    fun refreshPlannerData() {
+    fun refreshPlannerData(onUserUpdated: (AuthUserDto) -> Unit = {}) {
         if (_refreshState.value is RefreshUiState.Refreshing) {
             return
         }
 
         coroutineScope.launch {
             _refreshState.value = RefreshUiState.Refreshing
+            val token = authRepository.getStoredToken()
+            if (token == null) {
+                _refreshState.value = RefreshUiState.Idle
+                onSessionExpired()
+                return@launch
+            }
+
+            // 1. Fetch latest user profile via GET /auth/me
+            try {
+                val freshUser = authRepository.verifySession(token)
+                _currentUser.value = freshUser
+                onUserUpdated(freshUser)
+            } catch (e: HttpException) {
+                if (e.code() == 401) {
+                    _refreshState.value = RefreshUiState.Idle
+                    onSessionExpired()
+                    return@launch
+                }
+                _refreshState.value = RefreshUiState.Error
+                return@launch
+            } catch (e: Exception) {
+                _refreshState.value = RefreshUiState.Error
+                return@launch
+            }
+
+            // 2. Fetch planner snapshot
             val result = plannerRepository.refresh()
             result.fold(
                 onSuccess = {

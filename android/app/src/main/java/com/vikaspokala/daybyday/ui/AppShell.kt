@@ -131,10 +131,10 @@ fun AppShell(
 
     val currentScreen = backStack.lastOrNull() as? Screen ?: Screen.Today
 
-    val currentFirstName = user?.firstName.orEmpty()
-    val currentLastName = user?.lastName.orEmpty()
-    val currentNickname = user?.nickname
-    val displayName = user?.nickname?.takeIf { it.isNotBlank() } ?: user?.firstName.orEmpty()
+    val currentUserState by settingsViewModel.currentUser.collectAsState()
+    LaunchedEffect(user) {
+        settingsViewModel.setCurrentUser(user)
+    }
 
     Scaffold(
         containerColor = DayByDayBackground,
@@ -230,9 +230,12 @@ fun AppShell(
             entryProvider = { key ->
                 when (key) {
                     is Screen.Today -> NavEntry(key) {
+                        val profileUser by settingsViewModel.currentUser.collectAsState()
+                        val activeProfile = profileUser ?: user
+                        val todayDisplayName = activeProfile?.nickname?.takeIf { it.isNotBlank() } ?: activeProfile?.firstName.orEmpty()
                         TodayScreen(
                             viewModel = todayViewModel,
-                            userName = displayName,
+                            userName = todayDisplayName,
                             onNavigateToSettings = {
                                 backStack.add(Screen.Settings)
                             },
@@ -270,6 +273,8 @@ fun AppShell(
                     is Screen.Settings -> NavEntry(key) {
                         val refreshState by settingsViewModel.refreshState.collectAsState()
                         val isNotificationAllowed by settingsViewModel.isNotificationAllowed.collectAsState()
+                        val profileUser by settingsViewModel.currentUser.collectAsState()
+                        val activeProfile = profileUser ?: user
                         val lifecycleOwner = LocalLifecycleOwner.current
 
                         DisposableEffect(lifecycleOwner) {
@@ -291,9 +296,9 @@ fun AppShell(
                         }
 
                         SettingsScreen(
-                            firstName = currentFirstName,
-                            lastName = currentLastName,
-                            nickname = currentNickname,
+                            firstName = activeProfile?.firstName.orEmpty(),
+                            lastName = activeProfile?.lastName.orEmpty(),
+                            nickname = activeProfile?.nickname,
                             onNavigateBack = {
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)
@@ -309,7 +314,7 @@ fun AppShell(
                             },
                             onLogoutClick = onLogout,
                             refreshState = refreshState,
-                            onRefreshClick = { settingsViewModel.refreshPlannerData() },
+                            onRefreshClick = { settingsViewModel.refreshPlannerData(onUserUpdated = onUserUpdated) },
                             isNotificationAllowed = isNotificationAllowed,
                             onNotificationPermissionClick = {
                                 if (!isNotificationAllowed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -357,10 +362,12 @@ fun AppShell(
                     }
                     is Screen.EditProfileField -> NavEntry(key) {
                         val fieldType = key.fieldType
+                        val profileUser by settingsViewModel.currentUser.collectAsState()
+                        val activeProfile = profileUser ?: user
                         val currentValue = when (fieldType) {
-                            ProfileFieldType.FIRST_NAME -> currentFirstName
-                            ProfileFieldType.LAST_NAME -> currentLastName
-                            ProfileFieldType.NICKNAME -> user?.nickname ?: ""
+                            ProfileFieldType.FIRST_NAME -> activeProfile?.firstName.orEmpty()
+                            ProfileFieldType.LAST_NAME -> activeProfile?.lastName.orEmpty()
+                            ProfileFieldType.NICKNAME -> activeProfile?.nickname.orEmpty()
                         }
                         val editState by settingsViewModel.profileEditState.collectAsState()
                         EditProfileFieldScreen(

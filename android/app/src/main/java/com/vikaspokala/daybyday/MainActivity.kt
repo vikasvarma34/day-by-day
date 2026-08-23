@@ -37,6 +37,19 @@ class MainActivity : ComponentActivity() {
                     val authState by authViewModel.uiState.collectAsState()
                     val todayTrigger by openTodayTrigger.collectAsState()
 
+                    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+                        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                                authViewModel.onAppForegrounded()
+                            }
+                        }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose {
+                            lifecycleOwner.lifecycle.removeObserver(observer)
+                        }
+                    }
+
                     when (val state = authState) {
                         is AuthUiState.Loading -> SplashScreen()
                         is AuthUiState.SignedOut -> SignInScreen(

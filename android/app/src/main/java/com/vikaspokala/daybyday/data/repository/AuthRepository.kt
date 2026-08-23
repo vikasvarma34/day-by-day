@@ -34,7 +34,7 @@ open class AuthRepository(
         sessionTokenStore?.clearCacheOwner()
     }
 
-    open suspend fun login(email: String, password: String): String {
+    open suspend fun login(email: String, password: String): AuthUserDto {
         val response = authApi.login(
             LoginRequestDto(
                 email = email.trim(),
@@ -42,7 +42,7 @@ open class AuthRepository(
             )
         )
         sessionTokenStore?.saveToken(response.token)
-        return response.token
+        return response.user
     }
 
     open suspend fun verifySession(token: String): AuthUserDto {

@@ -8,6 +8,7 @@ import com.vikaspokala.daybyday.data.local.auth.SessionTokenStore
 import com.vikaspokala.daybyday.data.local.planner.PlannerDatabase
 import com.vikaspokala.daybyday.data.remote.dto.AuthUserDto
 import com.vikaspokala.daybyday.data.repository.AuthRepository
+import com.vikaspokala.daybyday.data.repository.PlannerRepository
 import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,11 +36,16 @@ sealed interface AuthUiState {
 class AuthViewModel(
     private val authRepository: AuthRepository,
     private val plannerDatabase: PlannerDatabase? = null,
-    private val reminderScheduler: TaskReminderScheduler? = null
+    private val reminderScheduler: TaskReminderScheduler? = null,
+    private val plannerRepository: PlannerRepository? = null,
+    private val clock: () -> Long = { System.currentTimeMillis() }
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Loading)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+
+    private var lastSyncTimestamp: Long = 0L
+    private var isSyncInProgress: Boolean = false
 
     init {
         checkInitialSession()
@@ -48,24 +54,115 @@ class AuthViewModel(
     private suspend fun onAuthenticationSuccess(user: AuthUserDto) {
         val storedOwnerId = authRepository.getCacheOwner()
         val db = plannerDatabase
-        if (storedOwnerId == user.id) {
+        val isSameOwner = storedOwnerId == user.id
+
+        if (isSameOwner) {
             // Matching owner: keep existing Room cache and restore eligible future ONCE reminders
             reminderScheduler?.rescheduleAllFromDatabase()
+            _uiState.value = AuthUiState.Authenticated(user)
+            lastSyncTimestamp = clock()
+
+            // Non-blocking background refresh for cold start
+            viewModelScope.launch {
+                try {
+                    plannerRepository?.refresh()
+                } catch (_: Exception) {
+                    // Non-fatal background refresh failure
+                }
+            }
         } else if (storedOwnerId != null) {
             // Different owner: cancel previous owner's reminders, clear all account-specific planner Room cache and store new owner
             reminderScheduler?.cancelAllReminders()
             db?.clearPlannerData()
             authRepository.saveCacheOwner(user.id)
+
+            // When Room was cleared / new owner, populate Room first so user doesn't see a flash of empty screens
+            try {
+                plannerRepository?.refresh()
+            } catch (_: Exception) {
+                // Auto-refresh failure must NOT invalidate authentication
+            }
+            lastSyncTimestamp = clock()
+            _uiState.value = AuthUiState.Authenticated(user)
         } else {
             // Missing/unknown cache owner
             reminderScheduler?.cancelAllReminders()
             if (db != null && db.hasAnyData()) {
-                // Room contains data with unknown owner: unsafe, clear it
                 db.clearPlannerData()
             }
             authRepository.saveCacheOwner(user.id)
+
+            try {
+                plannerRepository?.refresh()
+            } catch (_: Exception) {
+                // Auto-refresh failure must NOT invalidate authentication
+            }
+            lastSyncTimestamp = clock()
+            _uiState.value = AuthUiState.Authenticated(user)
         }
-        _uiState.value = AuthUiState.Authenticated(user)
+    }
+
+    fun onAppForegrounded() {
+        val currentState = _uiState.value
+        if (currentState !is AuthUiState.Authenticated) {
+            return
+        }
+
+        val now = clock()
+        if (lastSyncTimestamp > 0L && (now - lastSyncTimestamp) < STALE_SYNC_INTERVAL_MILLIS) {
+            return
+        }
+
+        if (isSyncInProgress) {
+            return
+        }
+        isSyncInProgress = true
+
+        viewModelScope.launch {
+            try {
+                val token = authRepository.getStoredToken()
+                if (token == null) {
+                    handleSessionExpired()
+                    return@launch
+                }
+
+                // 1. Re-verify session and fetch updated user profile
+                try {
+                    val freshUser = authRepository.verifySession(token)
+                    _uiState.value = AuthUiState.Authenticated(freshUser)
+                } catch (e: HttpException) {
+                    if (e.code() == 401) {
+                        handleSessionExpired()
+                        return@launch
+                    }
+                } catch (_: Exception) {
+                    // Non-fatal network error on foreground check
+                }
+
+                // 2. Refresh planner snapshot
+                try {
+                    val refreshResult = plannerRepository?.refresh()
+                    if (refreshResult != null && refreshResult.isFailure) {
+                        val error = refreshResult.exceptionOrNull()
+                        if (error is HttpException && error.code() == 401) {
+                            handleSessionExpired()
+                            return@launch
+                        }
+                    }
+                } catch (e: HttpException) {
+                    if (e.code() == 401) {
+                        handleSessionExpired()
+                        return@launch
+                    }
+                } catch (_: Exception) {
+                    // Non-fatal
+                }
+
+                lastSyncTimestamp = clock()
+            } finally {
+                isSyncInProgress = false
+            }
+        }
     }
 
     fun checkInitialSession() {
@@ -114,11 +211,8 @@ class AuthViewModel(
 
         viewModelScope.launch {
             _uiState.value = AuthUiState.SignedOut(isSubmitting = true)
-            var tokenSaved = false
             try {
-                val token = authRepository.login(trimmedEmail, password)
-                tokenSaved = true
-                val user = authRepository.verifySession(token)
+                val user = authRepository.login(trimmedEmail, password)
                 onAuthenticationSuccess(user)
             } catch (e: HttpException) {
                 if (e.code() == 401 || e.code() == 400) {
@@ -127,9 +221,6 @@ class AuthViewModel(
                         error = "Invalid email or password.",
                         isSubmitting = false
                     )
-                } else if (tokenSaved) {
-                    // Login succeeded and token was saved, but /auth/me returned 5xx/server error
-                    _uiState.value = AuthUiState.ConnectionError(isRetrying = false)
                 } else {
                     _uiState.value = AuthUiState.SignedOut(
                         error = "Unable to connect to server. Check your connection and try again.",
@@ -137,15 +228,10 @@ class AuthViewModel(
                     )
                 }
             } catch (e: IOException) {
-                if (tokenSaved) {
-                    // Login succeeded and token was saved, but /auth/me failed due to network
-                    _uiState.value = AuthUiState.ConnectionError(isRetrying = false)
-                } else {
-                    _uiState.value = AuthUiState.SignedOut(
-                        error = "Unable to connect to server. Check your connection and try again.",
-                        isSubmitting = false
-                    )
-                }
+                _uiState.value = AuthUiState.SignedOut(
+                    error = "Unable to connect to server. Check your connection and try again.",
+                    isSubmitting = false
+                )
             } catch (e: Exception) {
                 _uiState.value = AuthUiState.SignedOut(
                     error = "An unexpected error occurred. Please try again.",
@@ -193,6 +279,8 @@ class AuthViewModel(
 
     fun handleSessionExpired() {
         viewModelScope.launch {
+            lastSyncTimestamp = 0L
+            isSyncInProgress = false
             reminderScheduler?.cancelAllReminders()
             authRepository.clearSession()
             _uiState.value = AuthUiState.SignedOut()
@@ -201,6 +289,8 @@ class AuthViewModel(
 
     fun handlePasswordChanged() {
         viewModelScope.launch {
+            lastSyncTimestamp = 0L
+            isSyncInProgress = false
             reminderScheduler?.cancelAllReminders()
             authRepository.clearSession()
             _uiState.value = AuthUiState.SignedOut()
@@ -210,6 +300,8 @@ class AuthViewModel(
     fun logout() {
         viewModelScope.launch {
             val token = authRepository.getStoredToken()
+            lastSyncTimestamp = 0L
+            isSyncInProgress = false
 
             // 1. Immediately perform local logout and cancel reminders
             reminderScheduler?.cancelAllReminders()
@@ -237,6 +329,10 @@ class AuthViewModel(
         }
     }
 
+    companion object {
+        const val STALE_SYNC_INTERVAL_MILLIS = 5 * 60 * 1000L // 5 minutes
+    }
+
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -245,7 +341,12 @@ class AuthViewModel(
             val authRepository = AuthRepository(sessionTokenStore)
             val plannerDatabase = PlannerDatabase.getInstance(appContext)
             val reminderScheduler = DefaultTaskReminderScheduler(appContext, plannerDatabase)
-            return AuthViewModel(authRepository, plannerDatabase, reminderScheduler) as T
+            val plannerRepository = PlannerRepository(
+                plannerDatabase = plannerDatabase,
+                sessionTokenStore = sessionTokenStore,
+                reminderScheduler = reminderScheduler
+            )
+            return AuthViewModel(authRepository, plannerDatabase, reminderScheduler, plannerRepository) as T
         }
     }
 }

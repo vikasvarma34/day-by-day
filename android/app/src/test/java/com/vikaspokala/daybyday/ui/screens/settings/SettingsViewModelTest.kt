@@ -25,6 +25,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -112,6 +113,8 @@ class SettingsViewModelTest {
             )
         ),
         var changePasswordResult: Result<Unit> = Result.success(Unit),
+        var verifySessionResult: Result<com.vikaspokala.daybyday.data.remote.dto.AuthUserDto>? = null,
+        var storedToken: String? = "test_token",
         var delayDeferred: CompletableDeferred<Unit>? = null
     ) : com.vikaspokala.daybyday.data.repository.AuthRepository() {
         var updateProfileCallCount = 0
@@ -119,6 +122,15 @@ class SettingsViewModelTest {
 
         var changePasswordCallCount = 0
         var lastChangePasswordRequest: com.vikaspokala.daybyday.data.remote.dto.ChangePasswordRequestDto? = null
+
+        var verifySessionCallCount = 0
+
+        override suspend fun getStoredToken(): String? = storedToken
+
+        override suspend fun verifySession(token: String): com.vikaspokala.daybyday.data.remote.dto.AuthUserDto {
+            verifySessionCallCount++
+            return (verifySessionResult ?: updateProfileResult).getOrThrow()
+        }
 
         override suspend fun updateProfile(request: com.vikaspokala.daybyday.data.remote.dto.UpdateProfileRequestDto): com.vikaspokala.daybyday.data.remote.dto.AuthUserDto {
             updateProfileCallCount++
@@ -168,6 +180,7 @@ class SettingsViewModelTest {
         val fakeRepo = FakePlannerRepository(refreshResult = Result.success(Unit))
         val viewModel = SettingsViewModel(
             plannerRepository = fakeRepo,
+            authRepository = FakeAuthRepository(),
             scope = CoroutineScope(testDispatcher)
         )
 
@@ -179,6 +192,91 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun refreshPlannerData_success_updatesCurrentUserProfile() = runTest(testDispatcher) {
+        val updatedUser = com.vikaspokala.daybyday.data.remote.dto.AuthUserDto(
+            id = "11111111-2222-3333-4444-555555555555",
+            email = "test@example.com",
+            firstName = "UpdatedFirst",
+            lastName = "UpdatedLast",
+            nickname = "UpdatedNick"
+        )
+        val fakePlannerRepo = FakePlannerRepository(refreshResult = Result.success(Unit))
+        val fakeAuthRepo = FakeAuthRepository(
+            verifySessionResult = Result.success(updatedUser)
+        )
+        val viewModel = SettingsViewModel(
+            plannerRepository = fakePlannerRepo,
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var passedUser: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        viewModel.refreshPlannerData(onUserUpdated = { passedUser = it })
+        advanceUntilIdle()
+
+        assertEquals(1, fakePlannerRepo.refreshCallCount)
+        assertEquals(1, fakeAuthRepo.verifySessionCallCount)
+        assertEquals(RefreshUiState.Idle, viewModel.refreshState.value)
+        assertEquals(updatedUser, passedUser)
+        assertEquals(updatedUser, viewModel.currentUser.value)
+    }
+
+    @Test
+    fun refreshPlannerData_profileVerificationFailsWith500_transitionsToError_andDoesNotSilentlySucceed() = runTest(testDispatcher) {
+        val http500Exception = HttpException(
+            Response.error<Any>(
+                500,
+                "{}".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeAuthRepo = FakeAuthRepository(
+            verifySessionResult = Result.failure(http500Exception)
+        )
+        val fakePlannerRepo = FakePlannerRepository(refreshResult = Result.success(Unit))
+        val viewModel = SettingsViewModel(
+            plannerRepository = fakePlannerRepo,
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var passedUser: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        viewModel.refreshPlannerData(onUserUpdated = { passedUser = it })
+        advanceUntilIdle()
+
+        assertEquals(RefreshUiState.Error, viewModel.refreshState.value)
+        assertNull(passedUser)
+        assertEquals(0, fakePlannerRepo.refreshCallCount)
+    }
+
+    @Test
+    fun refreshPlannerData_profileVerification401_invokesOnSessionExpired() = runTest(testDispatcher) {
+        val http401Exception = HttpException(
+            Response.error<Any>(
+                401,
+                "{}".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeAuthRepo = FakeAuthRepository(
+            verifySessionResult = Result.failure(http401Exception)
+        )
+        val fakePlannerRepo = FakePlannerRepository(refreshResult = Result.success(Unit))
+        var sessionExpiredCalled = false
+        val viewModel = SettingsViewModel(
+            plannerRepository = fakePlannerRepo,
+            authRepository = fakeAuthRepo,
+            onSessionExpired = { sessionExpiredCalled = true },
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        viewModel.refreshPlannerData()
+        advanceUntilIdle()
+
+        assertTrue(sessionExpiredCalled)
+        assertEquals(RefreshUiState.Idle, viewModel.refreshState.value)
+        assertEquals(0, fakePlannerRepo.refreshCallCount)
+    }
+
+    @Test
     fun refreshPlannerData_inFlight_preventsDuplicateExecution() = runTest(testDispatcher) {
         val deferred = CompletableDeferred<Unit>()
         val fakeRepo = FakePlannerRepository(
@@ -187,6 +285,7 @@ class SettingsViewModelTest {
         )
         val viewModel = SettingsViewModel(
             plannerRepository = fakeRepo,
+            authRepository = FakeAuthRepository(),
             scope = CoroutineScope(testDispatcher)
         )
 
@@ -220,6 +319,7 @@ class SettingsViewModelTest {
         var sessionExpiredCalled = false
         val viewModel = SettingsViewModel(
             plannerRepository = fakeRepo,
+            authRepository = FakeAuthRepository(),
             onSessionExpired = { sessionExpiredCalled = true },
             scope = CoroutineScope(testDispatcher)
         )
@@ -254,6 +354,7 @@ class SettingsViewModelTest {
         var sessionExpiredCalled = false
         val viewModel = SettingsViewModel(
             plannerRepository = fakeRepo,
+            authRepository = FakeAuthRepository(),
             onSessionExpired = { sessionExpiredCalled = true },
             scope = CoroutineScope(testDispatcher)
         )
@@ -300,6 +401,7 @@ class SettingsViewModelTest {
         assertFalse(fakeAuthRepo.lastRequest?.includeNickname ?: true)
 
         assertEquals(updatedUser, userUpdated)
+        assertEquals(updatedUser, viewModel.currentUser.value)
         assertTrue(successNavigated)
         assertEquals(ProfileEditUiState.Idle, viewModel.profileEditState.value)
     }
