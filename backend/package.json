@@ -8,7 +8,7 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node --env-file-if-exists=.env dist/server.js",
     "test:clean-users": "ALLOW_AUTOMATED_TEST_USER_CLEANUP=true tsx --env-file=.env scripts/clean-test-users.ts",
     "test": "tsx --test \"src/**/*.test.ts\" \"tests/unit/**/*.test.ts\" && npm run test:integration && npm run test:e2e",
     "test:unit": "tsx --test \"src/**/*.test.ts\" \"tests/unit/**/*.test.ts\"",

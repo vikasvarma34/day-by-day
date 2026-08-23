@@ -1,8 +1,10 @@
-import { createApp } from './app';
+import { logger } from './logging/logger';
+import { StartupError } from './startup/readiness';
+import { startServer } from './startup/server';
 
-const PORT = process.env.PORT || 3000;
-const app = createApp();
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+startServer().catch((error: unknown) => {
+  logger.error('startup_failed', {
+    reason: error instanceof StartupError ? error.message : 'Startup failed: server could not start',
+  });
+  process.exitCode = 1;
 });
