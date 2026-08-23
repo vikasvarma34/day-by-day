@@ -76,3 +76,48 @@ fun isScheduleOccurringOnDate(row: TaskWithScheduleRow, date: LocalDate): Boolea
         else -> false
     }
 }
+
+fun isScheduleOccurringOnDate(
+    schedule: com.vikaspokala.daybyday.data.local.planner.entity.ScheduleEntity,
+    date: LocalDate
+): Boolean {
+    val startDate = try {
+        LocalDate.parse(schedule.startDate)
+    } catch (_: DateTimeParseException) {
+        return false
+    }
+
+    if (date.isBefore(startDate)) return false
+
+    val endDate = schedule.endDate?.let {
+        try {
+            LocalDate.parse(it)
+        } catch (_: DateTimeParseException) {
+            null
+        }
+    }
+    if (endDate != null && date.isAfter(endDate)) return false
+
+    return when (schedule.scheduleType) {
+        "ONCE" -> date == startDate
+        "INTERVAL_DAYS" -> {
+            val anchor = schedule.intervalAnchorDate?.let {
+                try {
+                    LocalDate.parse(it)
+                } catch (_: DateTimeParseException) {
+                    null
+                }
+            } ?: startDate
+            if (date.isBefore(anchor)) return false
+            val interval = (schedule.intervalDays ?: 1).coerceAtLeast(1)
+            val daysDiff = ChronoUnit.DAYS.between(anchor, date)
+            (daysDiff % interval) == 0L
+        }
+        "WEEKDAYS" -> {
+            val weekday = date.dayOfWeek.value // 1 = Monday .. 7 = Sunday
+            val mask = schedule.weekdaysMask ?: 0
+            (mask and (1 shl (weekday - 1))) != 0
+        }
+        else -> false
+    }
+}

@@ -147,6 +147,9 @@ interface CompletionDao {
     @Query("SELECT * FROM completions")
     suspend fun getAll(): List<CompletionEntity>
 
+    @Query("SELECT * FROM completions WHERE taskId = :taskId")
+    suspend fun getByTaskId(taskId: String): List<CompletionEntity>
+
     @Query("SELECT * FROM completions WHERE taskId = :taskId AND scheduleId IS NULL AND scheduledDate IS NULL LIMIT 1")
     suspend fun findLaterCompletion(taskId: String): CompletionEntity?
 

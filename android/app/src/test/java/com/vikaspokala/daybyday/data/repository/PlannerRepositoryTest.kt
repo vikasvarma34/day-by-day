@@ -250,6 +250,7 @@ class PlannerRepositoryTest {
                 completionsList.removeAll { it.scheduleId in scheduleIds }
             }
             override suspend fun getAll(): List<CompletionEntity> = completionsList.toList()
+            override suspend fun getByTaskId(taskId: String): List<CompletionEntity> = completionsList.filter { it.taskId == taskId }
             override suspend fun findLaterCompletion(taskId: String): CompletionEntity? {
                 return completionsList.find { it.taskId == taskId && it.scheduleId == null && it.scheduledDate == null }
             }
@@ -2527,6 +2528,11 @@ class PlannerRepositoryTest {
             return com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
         }
 
+        override suspend fun scheduleTaskReminder(taskId: String): com.vikaspokala.daybyday.notification.ReminderScheduleResult {
+            scheduled.add(taskId)
+            return com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
+        }
+
         override fun cancelReminder(taskId: String) {
             cancelled.add(taskId)
         }
@@ -2587,7 +2593,7 @@ class PlannerRepositoryTest {
     }
 
     @Test
-    fun completeTask_cancelsAlarm() = runTest {
+    fun completeTask_reconcilesTaskReminder() = runTest {
         val fakeDb = InMemoryTestDatabase()
         val scheduler = RecordingReminderScheduler()
         val fakeApi = FakePlannerApi(
@@ -2608,7 +2614,7 @@ class PlannerRepositoryTest {
         val repo = PlannerRepository(fakeDb, { "token" }, fakeApi, reminderScheduler = scheduler)
         repo.completeTask("task-comp-1", "2026-08-25", "2026-08-25")
 
-        assertTrue(scheduler.cancelled.contains("task-comp-1"))
+        assertTrue(scheduler.scheduled.contains("task-comp-1"))
     }
 
     @Test

@@ -298,6 +298,10 @@ class TaskSaveContractTest {
             return if (exactAlarmsAllowed) com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
             else com.vikaspokala.daybyday.notification.ReminderScheduleResult.ExactAlarmPermissionDenied
         }
+        override suspend fun scheduleTaskReminder(taskId: String): com.vikaspokala.daybyday.notification.ReminderScheduleResult {
+            return if (exactAlarmsAllowed) com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
+            else com.vikaspokala.daybyday.notification.ReminderScheduleResult.ExactAlarmPermissionDenied
+        }
         override fun cancelReminder(taskId: String) {}
         override suspend fun cancelAllReminders() {}
         override suspend fun rescheduleAllFromDatabase() {}

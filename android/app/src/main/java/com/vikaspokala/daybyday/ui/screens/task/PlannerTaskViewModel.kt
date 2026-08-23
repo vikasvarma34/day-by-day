@@ -44,8 +44,8 @@ class PlannerTaskViewModel(
         reminderScheduler?.openExactAlarmSettings(context)
     }
 
-    private fun isExactAlarmDeniedForSchedule(isOnce: Boolean, time: String?, reminder: Int?): Boolean {
-        if (isOnce && !time.isNullOrBlank() && reminder != null) {
+    private fun isExactAlarmDeniedForSchedule(time: String?, reminder: Int?): Boolean {
+        if (!time.isNullOrBlank() && reminder != null) {
             val scheduler = reminderScheduler
             if (scheduler != null && !scheduler.canScheduleExactAlarms()) {
                 return true
@@ -64,7 +64,6 @@ class PlannerTaskViewModel(
         onSuccess: () -> Unit = {}
     ) {
         if (isExactAlarmDeniedForSchedule(
-                isOnce = schedule.type == "ONCE",
                 time = schedule.scheduledTime,
                 reminder = schedule.reminderMinutesBefore
             )
@@ -92,7 +91,6 @@ class PlannerTaskViewModel(
         onSuccess: () -> Unit = {}
     ) {
         if (scheduleChanged && isExactAlarmDeniedForSchedule(
-                isOnce = schedule.type == "ONCE",
                 time = schedule.scheduledTime,
                 reminder = schedule.reminderMinutesBefore
             )
@@ -125,7 +123,6 @@ class PlannerTaskViewModel(
         onSuccess: () -> Unit = {}
     ) {
         if (isExactAlarmDeniedForSchedule(
-                isOnce = schedule.type == "ONCE",
                 time = schedule.scheduledTime,
                 reminder = schedule.reminderMinutesBefore
             )

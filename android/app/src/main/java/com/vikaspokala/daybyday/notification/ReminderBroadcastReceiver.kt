@@ -8,6 +8,10 @@ import android.content.Context
 import android.content.Intent
 import com.vikaspokala.daybyday.MainActivity
 import com.vikaspokala.daybyday.R
+import com.vikaspokala.daybyday.data.local.planner.PlannerDatabase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class ReminderBroadcastReceiver : BroadcastReceiver() {
 
@@ -37,6 +41,19 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
             // Ignore if notification permission revoked
         } catch (_: Exception) {
             // Safe fallback
+        }
+
+        val pendingResult = goAsync()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                val db = com.vikaspokala.daybyday.data.local.planner.PlannerDatabase.getInstance(context.applicationContext)
+                val scheduler = DefaultTaskReminderScheduler(context.applicationContext, db)
+                scheduler.scheduleTaskReminder(taskId)
+            } catch (_: Exception) {
+                // Safe fallback
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 

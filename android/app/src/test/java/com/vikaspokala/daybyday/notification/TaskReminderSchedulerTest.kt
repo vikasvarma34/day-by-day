@@ -85,6 +85,10 @@ class TaskReminderSchedulerTest {
             return ReminderScheduleResult.Scheduled
         }
 
+        override suspend fun scheduleTaskReminder(taskId: String): ReminderScheduleResult {
+            return ReminderScheduleResult.Scheduled
+        }
+
         override fun cancelReminder(taskId: String) {
             cancelCallCount++
             cancelledTaskIds.add(taskId)
@@ -147,6 +151,314 @@ class TaskReminderSchedulerTest {
         val scheduler = FakeTestReminderScheduler()
         assertNull(scheduler.calculateTriggerEpochMillis("invalid-date", "14:00:00", 0, fixedZone))
         assertNull(scheduler.calculateTriggerEpochMillis("2026-08-25", "invalid-time", 0, fixedZone))
+    }
+
+    @Test
+    fun calculateNextEligibleReminder_daily_returnsEarliestFutureOccurrence() {
+        val schedule = ScheduleEntity(
+            id = "sched_1",
+            taskId = "task_1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-23",
+            endDate = null,
+            scheduledTime = "14:00:00",
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-23",
+            weekdaysMask = null,
+            reminderMinutesBefore = 10,
+            createdAt = "2026-08-23T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        val nowMillis = LocalDateTime.of(2026, 8, 23, 10, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Daily Standup",
+            schedules = listOf(schedule),
+            completions = emptyList(),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+
+        assertNotNull(candidate)
+        assertEquals("2026-08-23", candidate!!.occurrenceDate.toString())
+        val expectedTrigger = LocalDateTime.of(2026, 8, 23, 13, 50)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+        assertEquals(expectedTrigger, candidate.triggerEpochMillis)
+    }
+
+    @Test
+    fun calculateNextEligibleReminder_daily_pastTriggerToday_advancesToTomorrow() {
+        val schedule = ScheduleEntity(
+            id = "sched_1",
+            taskId = "task_1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-23",
+            endDate = null,
+            scheduledTime = "14:00:00",
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-23",
+            weekdaysMask = null,
+            reminderMinutesBefore = 10,
+            createdAt = "2026-08-23T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        // Clock is 14:05 on Aug 23 (trigger at 13:50 is already past)
+        val nowMillis = LocalDateTime.of(2026, 8, 23, 14, 5)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Daily Standup",
+            schedules = listOf(schedule),
+            completions = emptyList(),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+
+        assertNotNull(candidate)
+        assertEquals("2026-08-24", candidate!!.occurrenceDate.toString())
+        val expectedTrigger = LocalDateTime.of(2026, 8, 24, 13, 50)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+        assertEquals(expectedTrigger, candidate.triggerEpochMillis)
+    }
+
+    @Test
+    fun calculateNextEligibleReminder_intervalDays_preservesAnchorAcrossMonthBoundaries() {
+        val schedule = ScheduleEntity(
+            id = "sched_1",
+            taskId = "task_1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-28",
+            endDate = null,
+            scheduledTime = "10:00:00",
+            intervalDays = 3,
+            intervalAnchorDate = "2026-08-28",
+            weekdaysMask = null,
+            reminderMinutesBefore = 0,
+            createdAt = "2026-08-28T00:00:00Z",
+            updatedAt = "2026-08-28T00:00:00Z"
+        )
+        // Occurrences: Aug 28, Aug 31, Sep 3, Sep 6...
+        val nowMillis1 = LocalDateTime.of(2026, 8, 29, 0, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate1 = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Water Plants",
+            schedules = listOf(schedule),
+            completions = emptyList(),
+            nowMillis = nowMillis1,
+            zoneId = fixedZone
+        )
+        assertNotNull(candidate1)
+        assertEquals("2026-08-31", candidate1!!.occurrenceDate.toString())
+
+        // When clock is past Aug 31
+        val nowMillis2 = LocalDateTime.of(2026, 8, 31, 11, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate2 = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Water Plants",
+            schedules = listOf(schedule),
+            completions = emptyList(),
+            nowMillis = nowMillis2,
+            zoneId = fixedZone
+        )
+        assertNotNull(candidate2)
+        assertEquals("2026-09-03", candidate2!!.occurrenceDate.toString())
+    }
+
+    @Test
+    fun calculateNextEligibleReminder_weekdays_choosesCorrectNextDate() {
+        // 2026-08-24 is Monday. Weekdays mask = Tuesday (bit 1 = 2) and Thursday (bit 3 = 8) -> 10
+        val schedule = ScheduleEntity(
+            id = "sched_1",
+            taskId = "task_1",
+            scheduleType = "WEEKDAYS",
+            startDate = "2026-08-24",
+            endDate = null,
+            scheduledTime = "09:00:00",
+            intervalDays = null,
+            intervalAnchorDate = null,
+            weekdaysMask = 10,
+            reminderMinutesBefore = 15,
+            createdAt = "2026-08-24T00:00:00Z",
+            updatedAt = "2026-08-24T00:00:00Z"
+        )
+        val nowMillis = LocalDateTime.of(2026, 8, 24, 10, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Team Sync",
+            schedules = listOf(schedule),
+            completions = emptyList(),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+        assertNotNull(candidate)
+        assertEquals("2026-08-25", candidate!!.occurrenceDate.toString()) // Tuesday
+        val expectedTrigger = LocalDateTime.of(2026, 8, 25, 8, 45)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+        assertEquals(expectedTrigger, candidate.triggerEpochMillis)
+    }
+
+    @Test
+    fun calculateNextEligibleReminder_endDate_stopsGeneration() {
+        val schedule = ScheduleEntity(
+            id = "sched_1",
+            taskId = "task_1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-23",
+            endDate = "2026-08-24",
+            scheduledTime = "10:00:00",
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-23",
+            weekdaysMask = null,
+            reminderMinutesBefore = 0,
+            createdAt = "2026-08-23T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        // Clock is past Aug 24 10:00 AM
+        val nowMillis = LocalDateTime.of(2026, 8, 24, 11, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Short Workshop",
+            schedules = listOf(schedule),
+            completions = emptyList(),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+        assertNull(candidate)
+    }
+
+    @Test
+    fun calculateNextEligibleReminder_completedOccurrence_isSkipped() {
+        val schedule = ScheduleEntity(
+            id = "sched_1",
+            taskId = "task_1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-23",
+            endDate = null,
+            scheduledTime = "14:00:00",
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-23",
+            weekdaysMask = null,
+            reminderMinutesBefore = 10,
+            createdAt = "2026-08-23T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        val completion = CompletionEntity(
+            id = "comp_1",
+            taskId = "task_1",
+            scheduleId = "sched_1",
+            scheduledDate = "2026-08-23",
+            completedDate = "2026-08-23",
+            completedAt = "2026-08-23T08:00:00Z",
+            titleSnapshot = "Daily Standup",
+            isImportantSnapshot = false
+        )
+        val nowMillis = LocalDateTime.of(2026, 8, 23, 10, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Daily Standup",
+            schedules = listOf(schedule),
+            completions = listOf(completion),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+        assertNotNull(candidate)
+        assertEquals("2026-08-24", candidate!!.occurrenceDate.toString()) // Skipped Aug 23
+    }
+
+    @Test
+    fun calculateNextEligibleReminder_reminderOffset_crossesIntoPreviousDay() {
+        val schedule = ScheduleEntity(
+            id = "sched_1",
+            taskId = "task_1",
+            scheduleType = "ONCE",
+            startDate = "2026-08-25",
+            endDate = null,
+            scheduledTime = "09:00:00",
+            intervalDays = null,
+            intervalAnchorDate = null,
+            weekdaysMask = null,
+            reminderMinutesBefore = 1440, // 1 day before
+            createdAt = "2026-08-23T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        val nowMillis = LocalDateTime.of(2026, 8, 23, 12, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Flight",
+            schedules = listOf(schedule),
+            completions = emptyList(),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+        assertNotNull(candidate)
+        assertEquals("2026-08-25", candidate!!.occurrenceDate.toString())
+        val expectedTrigger = LocalDateTime.of(2026, 8, 24, 9, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+        assertEquals(expectedTrigger, candidate.triggerEpochMillis)
+    }
+
+    @Test
+    fun calculateNextEligibleReminder_futureEditSegments_usesActiveFutureSegment() {
+        val oldSegment = ScheduleEntity(
+            id = "sched_old",
+            taskId = "task_1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-01",
+            endDate = "2026-08-22",
+            scheduledTime = "10:00:00",
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-01",
+            weekdaysMask = null,
+            reminderMinutesBefore = 10,
+            createdAt = "2026-08-01T00:00:00Z",
+            updatedAt = "2026-08-01T00:00:00Z"
+        )
+        val newSegment = ScheduleEntity(
+            id = "sched_new",
+            taskId = "task_1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-23",
+            endDate = null,
+            scheduledTime = "16:00:00",
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-23",
+            weekdaysMask = null,
+            reminderMinutesBefore = 30,
+            createdAt = "2026-08-23T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        val nowMillis = LocalDateTime.of(2026, 8, 23, 11, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Daily Catchup",
+            schedules = listOf(oldSegment, newSegment),
+            completions = emptyList(),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+        assertNotNull(candidate)
+        assertEquals("sched_new", candidate!!.scheduleId)
+        assertEquals("2026-08-23", candidate.occurrenceDate.toString())
+        val expectedTrigger = LocalDateTime.of(2026, 8, 23, 15, 30)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+        assertEquals(expectedTrigger, candidate.triggerEpochMillis)
     }
 
     @Test
@@ -246,5 +558,142 @@ class TaskReminderSchedulerTest {
         assertEquals(2, scheduler.scheduledAlarms.size)
         scheduler.cancelAllReminders()
         assertEquals(0, scheduler.scheduledAlarms.size)
+    }
+
+    @Test
+    fun lifecycle_completingOneOccurrence_advancesToNextFutureOccurrence() {
+        val schedule = ScheduleEntity(
+            id = "sched_daily",
+            taskId = "task_daily",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-23",
+            endDate = null,
+            scheduledTime = "09:00:00",
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-23",
+            weekdaysMask = null,
+            reminderMinutesBefore = 15,
+            createdAt = "2026-08-23T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        val nowMillis = LocalDateTime.of(2026, 8, 23, 7, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        // 1. Initial state: uncompleted, candidate is Aug 23
+        val initialCandidate = calculateNextEligibleReminder(
+            taskId = "task_daily",
+            title = "Standup",
+            schedules = listOf(schedule),
+            completions = emptyList(),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+        assertNotNull(initialCandidate)
+        assertEquals("2026-08-23", initialCandidate!!.occurrenceDate.toString())
+
+        // 2. Complete Aug 23: candidate advances to Aug 24
+        val comp = CompletionEntity(
+            id = "comp_1",
+            taskId = "task_daily",
+            scheduleId = "sched_daily",
+            scheduledDate = "2026-08-23",
+            completedDate = "2026-08-23",
+            completedAt = "2026-08-23T07:30:00Z",
+            titleSnapshot = "Standup",
+            isImportantSnapshot = false
+        )
+        val afterCompletionCandidate = calculateNextEligibleReminder(
+            taskId = "task_daily",
+            title = "Standup",
+            schedules = listOf(schedule),
+            completions = listOf(comp),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+        assertNotNull(afterCompletionCandidate)
+        assertEquals("2026-08-24", afterCompletionCandidate!!.occurrenceDate.toString())
+        val expectedNextTrigger = LocalDateTime.of(2026, 8, 24, 8, 45)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+        assertEquals(expectedNextTrigger, afterCompletionCandidate.triggerEpochMillis)
+    }
+
+    @Test
+    fun lifecycle_stopRecurrence_leavesNoInvalidFutureAlarm() {
+        // Stopped recurrence sets endDate = 2026-08-23
+        val schedule = ScheduleEntity(
+            id = "sched_daily",
+            taskId = "task_daily",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-20",
+            endDate = "2026-08-23",
+            scheduledTime = "09:00:00",
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-20",
+            weekdaysMask = null,
+            reminderMinutesBefore = 15,
+            createdAt = "2026-08-20T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        // Clock is past Aug 23 trigger (e.g. 2026-08-23 10:00 AM)
+        val nowMillis = LocalDateTime.of(2026, 8, 23, 10, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate = calculateNextEligibleReminder(
+            taskId = "task_daily",
+            title = "Standup",
+            schedules = listOf(schedule),
+            completions = emptyList(),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+        assertNull(candidate)
+    }
+
+    @Test
+    fun lifecycle_editRecurrence_replacesStaleAlarm() {
+        val oldSchedule = ScheduleEntity(
+            id = "sched_1",
+            taskId = "task_1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-23",
+            endDate = null,
+            scheduledTime = "09:00:00",
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-23",
+            weekdaysMask = null,
+            reminderMinutesBefore = 10,
+            createdAt = "2026-08-23T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        val newSchedule = ScheduleEntity(
+            id = "sched_1",
+            taskId = "task_1",
+            scheduleType = "INTERVAL_DAYS",
+            startDate = "2026-08-23",
+            endDate = null,
+            scheduledTime = "15:00:00", // edited time to 15:00
+            intervalDays = 1,
+            intervalAnchorDate = "2026-08-23",
+            weekdaysMask = null,
+            reminderMinutesBefore = 20, // edited reminder to 20m before
+            createdAt = "2026-08-23T00:00:00Z",
+            updatedAt = "2026-08-23T00:00:00Z"
+        )
+        val nowMillis = LocalDateTime.of(2026, 8, 23, 10, 0)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+
+        val candidate = calculateNextEligibleReminder(
+            taskId = "task_1",
+            title = "Task",
+            schedules = listOf(newSchedule),
+            completions = emptyList(),
+            nowMillis = nowMillis,
+            zoneId = fixedZone
+        )
+        assertNotNull(candidate)
+        assertEquals("2026-08-23", candidate!!.occurrenceDate.toString())
+        val expectedTrigger = LocalDateTime.of(2026, 8, 23, 14, 40)
+            .atZone(fixedZone).toInstant().toEpochMilli()
+        assertEquals(expectedTrigger, candidate.triggerEpochMillis)
     }
 }

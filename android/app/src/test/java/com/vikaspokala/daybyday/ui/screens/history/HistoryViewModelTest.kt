@@ -35,6 +35,7 @@ class HistoryViewModelTest {
         override suspend fun insert(completion: CompletionEntity) = Unit
         override suspend fun deleteAll() = Unit
         override suspend fun getAll(): List<CompletionEntity> = emptyList()
+        override suspend fun getByTaskId(taskId: String): List<CompletionEntity> = emptyList()
         override suspend fun findLaterCompletion(taskId: String): CompletionEntity? = null
         override suspend fun findScheduledCompletion(taskId: String, scheduleId: String, scheduledDate: String): CompletionEntity? = null
         override suspend fun deleteLaterCompletion(taskId: String) = Unit
