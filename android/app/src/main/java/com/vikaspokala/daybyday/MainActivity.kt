@@ -9,6 +9,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.vikaspokala.daybyday.notification.DefaultAppNotificationManager
 import com.vikaspokala.daybyday.ui.AppShell
 import com.vikaspokala.daybyday.ui.screens.SplashScreen
 import com.vikaspokala.daybyday.ui.screens.auth.AuthUiState
@@ -20,6 +21,7 @@ import com.vikaspokala.daybyday.ui.theme.DayByDayTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DefaultAppNotificationManager(applicationContext).createNotificationChannel()
         setContent {
             DayByDayTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {

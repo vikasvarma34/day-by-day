@@ -832,4 +832,119 @@ class SettingsViewModelTest {
         assertTrue(sessionExpiredCalled)
         assertEquals(ChangePasswordUiState.Idle, viewModel.changePasswordState.value)
     }
+
+    private class FakeAppNotificationManager(
+        var notificationsAllowed: Boolean = true,
+        var postSampleResult: Boolean = true
+    ) : com.vikaspokala.daybyday.notification.AppNotificationManager {
+        var createChannelCallCount = 0
+        var postSampleCallCount = 0
+        var openSettingsCallCount = 0
+
+        override fun createNotificationChannel() {
+            createChannelCallCount++
+        }
+
+        override fun areNotificationsAllowed(): Boolean = notificationsAllowed
+
+        override fun postSampleNotification(): Boolean {
+            postSampleCallCount++
+            return postSampleResult
+        }
+
+        override fun openNotificationSettings(context: android.content.Context) {
+            openSettingsCallCount++
+        }
+    }
+
+    @Test
+    fun initialNotificationPermission_reflectsNotificationManager() {
+        val fakeManager = FakeAppNotificationManager(notificationsAllowed = true)
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = FakeAuthRepository(),
+            notificationManager = fakeManager,
+            scope = CoroutineScope(testDispatcher)
+        )
+        assertTrue(viewModel.isNotificationAllowed.value)
+
+        val deniedManager = FakeAppNotificationManager(notificationsAllowed = false)
+        val deniedViewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = FakeAuthRepository(),
+            notificationManager = deniedManager,
+            scope = CoroutineScope(testDispatcher)
+        )
+        assertFalse(deniedViewModel.isNotificationAllowed.value)
+    }
+
+    @Test
+    fun refreshNotificationPermission_updatesStateFlow() {
+        val fakeManager = FakeAppNotificationManager(notificationsAllowed = false)
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = FakeAuthRepository(),
+            notificationManager = fakeManager,
+            scope = CoroutineScope(testDispatcher)
+        )
+        assertFalse(viewModel.isNotificationAllowed.value)
+
+        fakeManager.notificationsAllowed = true
+        viewModel.refreshNotificationPermission()
+        assertTrue(viewModel.isNotificationAllowed.value)
+    }
+
+    @Test
+    fun sendTestNotification_whenAllowedAndSuccess_emitsSent() {
+        val fakeManager = FakeAppNotificationManager(notificationsAllowed = true, postSampleResult = true)
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = FakeAuthRepository(),
+            notificationManager = fakeManager,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var result: TestNotificationResult? = null
+        viewModel.sendTestNotification { result = it }
+
+        assertEquals(1, fakeManager.postSampleCallCount)
+        assertEquals(TestNotificationResult.Sent, result)
+        assertTrue(viewModel.isNotificationAllowed.value)
+    }
+
+    @Test
+    fun sendTestNotification_whenAllowedAndPostingFails_emitsPermissionDenied() {
+        val fakeManager = FakeAppNotificationManager(notificationsAllowed = true, postSampleResult = false)
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = FakeAuthRepository(),
+            notificationManager = fakeManager,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var result: TestNotificationResult? = null
+        viewModel.sendTestNotification { result = it }
+
+        assertEquals(1, fakeManager.postSampleCallCount)
+        assertEquals(TestNotificationResult.PermissionDenied, result)
+        assertFalse(viewModel.isNotificationAllowed.value)
+    }
+
+    @Test
+    fun sendTestNotification_whenDisallowed_emitsPermissionDeniedWithoutPosting() {
+        val fakeManager = FakeAppNotificationManager(notificationsAllowed = false)
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = FakeAuthRepository(),
+            notificationManager = fakeManager,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var result: TestNotificationResult? = null
+        viewModel.sendTestNotification { result = it }
+
+        assertEquals(0, fakeManager.postSampleCallCount)
+        assertEquals(TestNotificationResult.PermissionDenied, result)
+        assertFalse(viewModel.isNotificationAllowed.value)
+    }
 }

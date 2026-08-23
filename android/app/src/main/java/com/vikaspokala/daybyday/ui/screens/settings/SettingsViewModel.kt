@@ -24,6 +24,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import retrofit2.HttpException
 
+import com.vikaspokala.daybyday.notification.AppNotificationManager
+import com.vikaspokala.daybyday.notification.DefaultAppNotificationManager
+
 sealed interface RefreshUiState {
     data object Idle : RefreshUiState
     data object Refreshing : RefreshUiState
@@ -42,14 +45,23 @@ sealed interface ChangePasswordUiState {
     data class Error(val message: String) : ChangePasswordUiState
 }
 
+sealed interface TestNotificationResult {
+    data object Sent : TestNotificationResult
+    data object PermissionDenied : TestNotificationResult
+}
+
 class SettingsViewModel(
     private val plannerRepository: PlannerRepository,
     private val authRepository: AuthRepository = AuthRepository(),
+    private val notificationManager: AppNotificationManager? = null,
     private val onSessionExpired: () -> Unit = {},
     scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
 ) : ViewModel() {
 
     private val coroutineScope = scope
+
+    private val _isNotificationAllowed = MutableStateFlow(notificationManager?.areNotificationsAllowed() ?: false)
+    val isNotificationAllowed: StateFlow<Boolean> = _isNotificationAllowed.asStateFlow()
 
     private val _refreshState = MutableStateFlow<RefreshUiState>(RefreshUiState.Idle)
     val refreshState: StateFlow<RefreshUiState> = _refreshState.asStateFlow()
@@ -59,6 +71,31 @@ class SettingsViewModel(
 
     private val _changePasswordState = MutableStateFlow<ChangePasswordUiState>(ChangePasswordUiState.Idle)
     val changePasswordState: StateFlow<ChangePasswordUiState> = _changePasswordState.asStateFlow()
+
+    fun refreshNotificationPermission() {
+        _isNotificationAllowed.value = notificationManager?.areNotificationsAllowed() ?: false
+    }
+
+    fun openNotificationSettings(context: Context) {
+        notificationManager?.openNotificationSettings(context)
+    }
+
+    fun sendTestNotification(onResult: (TestNotificationResult) -> Unit = {}) {
+        val manager = notificationManager
+        if (manager != null && manager.areNotificationsAllowed()) {
+            val sent = manager.postSampleNotification()
+            if (sent) {
+                _isNotificationAllowed.value = true
+                onResult(TestNotificationResult.Sent)
+            } else {
+                _isNotificationAllowed.value = false
+                onResult(TestNotificationResult.PermissionDenied)
+            }
+        } else {
+            _isNotificationAllowed.value = false
+            onResult(TestNotificationResult.PermissionDenied)
+        }
+    }
 
     fun resetProfileEditState() {
         _profileEditState.value = ProfileEditUiState.Idle
@@ -244,11 +281,13 @@ class SettingsViewModel(
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val sessionTokenStore = SessionTokenStore(context.applicationContext)
-            val plannerDatabase = PlannerDatabase.getInstance(context.applicationContext)
+            val appContext = context.applicationContext
+            val sessionTokenStore = SessionTokenStore(appContext)
+            val plannerDatabase = PlannerDatabase.getInstance(appContext)
             val plannerRepository = PlannerRepository(plannerDatabase, sessionTokenStore)
             val authRepository = AuthRepository(sessionTokenStore)
-            return SettingsViewModel(plannerRepository, authRepository, onSessionExpired) as T
+            val notificationManager = DefaultAppNotificationManager(appContext)
+            return SettingsViewModel(plannerRepository, authRepository, notificationManager, onSessionExpired) as T
         }
     }
 }

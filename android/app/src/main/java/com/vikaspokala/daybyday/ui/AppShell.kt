@@ -3,6 +3,10 @@ package com.vikaspokala.daybyday.ui
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -24,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +36,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import android.widget.Toast
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
+import com.vikaspokala.daybyday.ui.screens.settings.TestNotificationResult
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import com.vikaspokala.daybyday.ui.navigation.ProfileFieldType
@@ -241,6 +250,27 @@ fun AppShell(
                     is Screen.History -> NavEntry(key) { HistoryScreen(viewModel = historyViewModel) }
                     is Screen.Settings -> NavEntry(key) {
                         val refreshState by settingsViewModel.refreshState.collectAsState()
+                        val isNotificationAllowed by settingsViewModel.isNotificationAllowed.collectAsState()
+                        val lifecycleOwner = LocalLifecycleOwner.current
+
+                        DisposableEffect(lifecycleOwner) {
+                            val observer = LifecycleEventObserver { _, event ->
+                                if (event == Lifecycle.Event.ON_RESUME) {
+                                    settingsViewModel.refreshNotificationPermission()
+                                }
+                            }
+                            lifecycleOwner.lifecycle.addObserver(observer)
+                            onDispose {
+                                lifecycleOwner.lifecycle.removeObserver(observer)
+                            }
+                        }
+
+                        val permissionLauncher = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.RequestPermission()
+                        ) { _ ->
+                            settingsViewModel.refreshNotificationPermission()
+                        }
+
                         SettingsScreen(
                             firstName = currentFirstName,
                             lastName = currentLastName,
@@ -260,7 +290,27 @@ fun AppShell(
                             },
                             onLogoutClick = onLogout,
                             refreshState = refreshState,
-                            onRefreshClick = { settingsViewModel.refreshPlannerData() }
+                            onRefreshClick = { settingsViewModel.refreshPlannerData() },
+                            isNotificationAllowed = isNotificationAllowed,
+                            onNotificationPermissionClick = {
+                                if (!isNotificationAllowed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    settingsViewModel.openNotificationSettings(context)
+                                }
+                            },
+                            onTestNotificationClick = {
+                                settingsViewModel.sendTestNotification { result ->
+                                    when (result) {
+                                        is TestNotificationResult.Sent -> {
+                                            Toast.makeText(context, "Sample reminder sent", Toast.LENGTH_SHORT).show()
+                                        }
+                                        is TestNotificationResult.PermissionDenied -> {
+                                            Toast.makeText(context, "Notifications are disabled. Allow notifications to test.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            }
                         )
                     }
                     is Screen.ChangePassword -> NavEntry(key) {

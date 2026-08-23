@@ -55,6 +55,9 @@ fun SettingsScreen(
     onLogoutClick: () -> Unit = {},
     refreshState: RefreshUiState = RefreshUiState.Idle,
     onRefreshClick: () -> Unit = {},
+    isNotificationAllowed: Boolean = false,
+    onNotificationPermissionClick: () -> Unit = {},
+    onTestNotificationClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val initialLetter = firstName.trim().take(1).uppercase()
@@ -309,13 +312,15 @@ fun SettingsScreen(
             StandardSettingsRow(
                 title = "Notification permission",
                 subtitle = "Open device settings",
-                statusText = "Allowed",
-                showChevron = false
+                statusText = if (isNotificationAllowed) "Allowed" else "Not allowed",
+                showChevron = true,
+                onClick = onNotificationPermissionClick
             )
             Spacer(modifier = Modifier.height(8.dp))
             StandardSettingsRow(
                 title = "Test notification",
-                subtitle = "Send one sample reminder"
+                subtitle = "Send one sample reminder",
+                onClick = onTestNotificationClick
             )
 
             Spacer(modifier = Modifier.height(18.dp))
