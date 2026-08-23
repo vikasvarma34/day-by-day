@@ -6,6 +6,9 @@ import com.vikaspokala.daybyday.data.remote.api.AuthApi
 import com.vikaspokala.daybyday.data.remote.dto.AuthUserDto
 import com.vikaspokala.daybyday.data.remote.dto.LoginRequestDto
 
+import com.vikaspokala.daybyday.data.remote.dto.ChangePasswordRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateProfileRequestDto
+
 open class AuthRepository(
     private val sessionTokenStore: SessionTokenStore? = null,
     private val authApi: AuthApi = NetworkClient.authApi
@@ -33,5 +36,18 @@ open class AuthRepository(
     open suspend fun verifySession(token: String): AuthUserDto {
         val response = authApi.getMe("Bearer $token")
         return response.user
+    }
+
+    open suspend fun updateProfile(request: UpdateProfileRequestDto): AuthUserDto {
+        val token = getStoredToken()
+            ?: throw IllegalStateException("Missing authentication session token")
+        val response = authApi.updateProfile("Bearer $token", request)
+        return response.user
+    }
+
+    open suspend fun changePassword(request: ChangePasswordRequestDto) {
+        val token = getStoredToken()
+            ?: throw IllegalStateException("Missing authentication session token")
+        authApi.changePassword("Bearer $token", request)
     }
 }

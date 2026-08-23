@@ -8,6 +8,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+import com.vikaspokala.daybyday.data.remote.dto.UpdateProfileRequestDto
+import com.vikaspokala.daybyday.data.remote.dto.UpdateProfileResponseDto
+
 class AuthDtoSerializationTest {
 
     private val json = NetworkClient.json
@@ -22,6 +25,84 @@ class AuthDtoSerializationTest {
 
         val expected = """{"email":"dev.user@example.com","password":"DevPassword12345!"}"""
         assertEquals(expected, serialized)
+    }
+
+    @Test
+    fun serializeUpdateProfileRequest_withFirstNameOnly_producesExactJsonShape() {
+        val request = UpdateProfileRequestDto.forFirstName("Vikram")
+        val serialized = json.encodeToString(UpdateProfileRequestDto.serializer(), request)
+
+        val expected = """{"firstName":"Vikram"}"""
+        assertEquals(expected, serialized)
+    }
+
+    @Test
+    fun serializeUpdateProfileRequest_withLastNameOnly_producesExactJsonShape() {
+        val request = UpdateProfileRequestDto.forLastName("Pokala")
+        val serialized = json.encodeToString(UpdateProfileRequestDto.serializer(), request)
+
+        val expected = """{"lastName":"Pokala"}"""
+        assertEquals(expected, serialized)
+    }
+
+    @Test
+    fun serializeUpdateProfileRequest_withNonNullNickname_producesExactJsonShape() {
+        val request = UpdateProfileRequestDto.forNickname("Vik")
+        val serialized = json.encodeToString(UpdateProfileRequestDto.serializer(), request)
+
+        val expected = """{"nickname":"Vik"}"""
+        assertEquals(expected, serialized)
+    }
+
+    @Test
+    fun serializeUpdateProfileRequest_withNullNickname_producesExactJsonShape() {
+        val request = UpdateProfileRequestDto.forNickname(null)
+        val serialized = json.encodeToString(UpdateProfileRequestDto.serializer(), request)
+
+        val expected = """{"nickname":null}"""
+        assertEquals(expected, serialized)
+    }
+
+    @Test
+    fun deserializeUpdateProfileResponse_matchesContract() {
+        val jsonString = """
+            {
+                "user": {
+                    "id": "11111111-2222-3333-4444-555555555555",
+                    "email": "dev.user@example.com",
+                    "firstName": "Vikram",
+                    "lastName": "Pokala",
+                    "nickname": "Vik"
+                }
+            }
+        """.trimIndent()
+
+        val response = json.decodeFromString(UpdateProfileResponseDto.serializer(), jsonString)
+
+        assertEquals("11111111-2222-3333-4444-555555555555", response.user.id)
+        assertEquals("dev.user@example.com", response.user.email)
+        assertEquals("Vikram", response.user.firstName)
+        assertEquals("Pokala", response.user.lastName)
+        assertEquals("Vik", response.user.nickname)
+    }
+
+    @Test
+    fun serializeChangePasswordRequest_producesExactJsonShape() {
+        val request = com.vikaspokala.daybyday.data.remote.dto.ChangePasswordRequestDto(
+            currentPassword = "OldPassword12345!",
+            newPassword = "NewPassword12345!"
+        )
+        val serialized = json.encodeToString(com.vikaspokala.daybyday.data.remote.dto.ChangePasswordRequestDto.serializer(), request)
+
+        val expected = """{"currentPassword":"OldPassword12345!","newPassword":"NewPassword12345!"}"""
+        assertEquals(expected, serialized)
+    }
+
+    @Test
+    fun deserializeChangePasswordResponse_matchesContract() {
+        val jsonString = """{"success":true}"""
+        val response = json.decodeFromString(com.vikaspokala.daybyday.data.remote.dto.ChangePasswordResponseDto.serializer(), jsonString)
+        assertEquals(true, response.success)
     }
 
     @Test

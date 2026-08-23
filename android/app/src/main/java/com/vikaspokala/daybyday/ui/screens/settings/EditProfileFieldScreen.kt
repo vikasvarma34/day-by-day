@@ -43,10 +43,14 @@ import com.vikaspokala.daybyday.ui.theme.DayByDayPrimaryText
 import com.vikaspokala.daybyday.ui.theme.DayByDaySecondaryText
 import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 
+import com.vikaspokala.daybyday.ui.theme.DayByDayDestructive
+
 @Composable
 fun EditProfileFieldScreen(
     fieldType: ProfileFieldType,
     initialValue: String,
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
     onNavigateBack: () -> Unit,
     onSave: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -56,7 +60,7 @@ fun EditProfileFieldScreen(
     val (titleText, labelText, placeholderText) = when (fieldType) {
         ProfileFieldType.FIRST_NAME -> Triple("Edit first name", "FIRST NAME", "Enter first name")
         ProfileFieldType.LAST_NAME -> Triple("Edit last name", "LAST NAME", "Enter last name")
-        ProfileFieldType.NICKNAME -> Triple("Edit nickname", "NICKNAME", "Enter nickname")
+        ProfileFieldType.NICKNAME -> Triple("Nickname (Optional)", "NICKNAME (Optional)", "Enter nickname")
     }
 
     Box(
@@ -125,10 +129,29 @@ fun EditProfileFieldScreen(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(
                     onDone = {
-                        onSave(textValue)
+                        if (!isLoading) {
+                            onSave(textValue)
+                        }
                     }
                 )
             )
+
+            // Inline Error Message
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = errorMessage,
+                    style = TextStyle(
+                        fontFamily = DayByDayFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
+                        color = DayByDayDestructive,
+                        textAlign = TextAlign.Center
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             Spacer(modifier = Modifier.height(28.dp))
 
@@ -137,16 +160,22 @@ fun EditProfileFieldScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .clickable { onSave(textValue) },
+                    .then(
+                        if (!isLoading) {
+                            Modifier.clickable { onSave(textValue) }
+                        } else {
+                            Modifier
+                        }
+                    ),
                 shape = RoundedCornerShape(18.dp),
-                color = DayByDayAccent
+                color = if (!isLoading) DayByDayAccent else DayByDayAccent.copy(alpha = 0.6f)
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Save",
+                        text = if (isLoading) "Saving..." else "Save",
                         style = TextStyle(
                             fontFamily = DayByDayFontFamily,
                             fontWeight = FontWeight.SemiBold,

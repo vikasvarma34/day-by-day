@@ -102,7 +102,7 @@ class TodayViewModel(
     }
 
     companion object {
-        fun getGreeting(time: LocalTime = LocalTime.now(), name: String = "Vicky"): String {
+        fun getGreeting(time: LocalTime = LocalTime.now(), name: String = ""): String {
             val minutes = time.hour * 60 + time.minute
             val greeting = when (minutes) {
                 in 300..719 -> "Good morning"

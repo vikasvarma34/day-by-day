@@ -43,7 +43,9 @@ class MainActivity : ComponentActivity() {
                         )
                         is AuthUiState.Authenticated -> AppShell(
                             user = state.user,
-                            onSessionExpired = { authViewModel.handleSessionExpired() }
+                            onSessionExpired = { authViewModel.handleSessionExpired() },
+                            onUserUpdated = { authViewModel.updateUser(it) },
+                            onPasswordChanged = { authViewModel.handlePasswordChanged() }
                         )
                     }
                 }

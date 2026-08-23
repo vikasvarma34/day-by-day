@@ -94,16 +94,60 @@ class TodayViewModelTest {
 
     @Test
     fun greetingRangesKeepAcceptedBoundaries() {
-        assertEquals("Good morning, Vicky", TodayViewModel.getGreeting(LocalTime.of(5, 0)))
-        assertEquals("Good morning, Vicky", TodayViewModel.getGreeting(LocalTime.of(11, 59)))
-        assertEquals("Good afternoon, Vicky", TodayViewModel.getGreeting(LocalTime.of(12, 0)))
-        assertEquals("Good afternoon, Vicky", TodayViewModel.getGreeting(LocalTime.of(16, 59)))
-        assertEquals("Good evening, Vicky", TodayViewModel.getGreeting(LocalTime.of(17, 0)))
-        assertEquals("Good evening, Vicky", TodayViewModel.getGreeting(LocalTime.of(20, 59)))
-        assertEquals("Good night, Vicky", TodayViewModel.getGreeting(LocalTime.of(21, 0)))
-        assertEquals("Good night, Vicky", TodayViewModel.getGreeting(LocalTime.of(21, 59)))
-        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(22, 0)))
-        assertEquals("Time to rest, Vicky", TodayViewModel.getGreeting(LocalTime.of(4, 59)))
+        assertEquals("Good morning", TodayViewModel.getGreeting(LocalTime.of(5, 0)))
+        assertEquals("Good morning", TodayViewModel.getGreeting(LocalTime.of(11, 59)))
+        assertEquals("Good afternoon", TodayViewModel.getGreeting(LocalTime.of(12, 0)))
+        assertEquals("Good afternoon", TodayViewModel.getGreeting(LocalTime.of(16, 59)))
+        assertEquals("Good evening", TodayViewModel.getGreeting(LocalTime.of(17, 0)))
+        assertEquals("Good evening", TodayViewModel.getGreeting(LocalTime.of(20, 59)))
+        assertEquals("Good night", TodayViewModel.getGreeting(LocalTime.of(21, 0)))
+        assertEquals("Good night", TodayViewModel.getGreeting(LocalTime.of(21, 59)))
+        assertEquals("Time to rest", TodayViewModel.getGreeting(LocalTime.of(22, 0)))
+        assertEquals("Time to rest", TodayViewModel.getGreeting(LocalTime.of(4, 59)))
+    }
+
+    @Test
+    fun greeting_withNonNullNickname_usesNickname() {
+        val user = com.vikaspokala.daybyday.data.remote.dto.AuthUserDto(
+            id = "11111111-2222-3333-4444-555555555555",
+            email = "alice@example.com",
+            firstName = "Alice",
+            lastName = "Smith",
+            nickname = "Ali"
+        )
+        val displayName = user.nickname?.takeIf { it.isNotBlank() } ?: user.firstName
+        val greeting = TodayViewModel.getGreeting(LocalTime.of(9, 0), displayName)
+        assertEquals("Good morning, Ali", greeting)
+    }
+
+    @Test
+    fun greeting_withNullNickname_fallsBackToRealFirstName() {
+        val user = com.vikaspokala.daybyday.data.remote.dto.AuthUserDto(
+            id = "11111111-2222-3333-4444-555555555555",
+            email = "alice@example.com",
+            firstName = "Alice",
+            lastName = "Smith",
+            nickname = null
+        )
+        val displayName = user.nickname?.takeIf { it.isNotBlank() } ?: user.firstName
+        val greeting = TodayViewModel.getGreeting(LocalTime.of(9, 0), displayName)
+        assertEquals("Good morning, Alice", greeting)
+    }
+
+    @Test
+    fun greeting_clearingNickname_cannotResurrectFakeNickname() {
+        val userAfterClear = com.vikaspokala.daybyday.data.remote.dto.AuthUserDto(
+            id = "11111111-2222-3333-4444-555555555555",
+            email = "dev.user@example.com",
+            firstName = "Vikram",
+            lastName = "Pokala",
+            nickname = null
+        )
+        val displayName = userAfterClear.nickname?.takeIf { it.isNotBlank() } ?: userAfterClear.firstName
+        val greeting = TodayViewModel.getGreeting(LocalTime.of(14, 0), displayName)
+        assertEquals("Good afternoon, Vikram", greeting)
+        assertFalse(greeting.contains("Vicky"))
+        assertFalse(greeting.contains("Wiki"))
     }
 
     @Test

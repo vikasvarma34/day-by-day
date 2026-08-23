@@ -39,9 +39,9 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 
 @Composable
 fun SettingsScreen(
-    firstName: String = "Vikas",
-    lastName: String = "Varma",
-    nickname: String = "Vicky",
+    firstName: String = "",
+    lastName: String = "",
+    nickname: String? = null,
     onNavigateBack: () -> Unit,
     onChangePasswordClick: () -> Unit = {},
     onEditFieldClick: (ProfileFieldType) -> Unit = {},
@@ -49,7 +49,7 @@ fun SettingsScreen(
     onRefreshClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val initialLetter = if (firstName.isNotEmpty()) firstName.take(1).uppercase() else "V"
+    val initialLetter = firstName.trim().take(1).uppercase()
 
     Box(
         modifier = modifier
@@ -148,8 +148,9 @@ fun SettingsScreen(
                     Column(
                         modifier = Modifier.weight(1f)
                     ) {
+                        val fullName = listOf(firstName, lastName).filter { it.isNotBlank() }.joinToString(" ")
                         Text(
-                            text = "$firstName $lastName",
+                            text = fullName,
                             style = TextStyle(
                                 fontFamily = DayByDayFontFamily,
                                 fontWeight = FontWeight.W500, // 500
@@ -158,17 +159,19 @@ fun SettingsScreen(
                                 color = DayByDayPrimaryText
                             )
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Nickname: $nickname",
-                            style = TextStyle(
-                                fontFamily = DayByDayFontFamily,
-                                fontWeight = FontWeight.W400, // 400
-                                fontSize = 12.5.sp,
-                                lineHeight = 16.sp,
-                                color = DayByDaySecondaryText
+                        if (!nickname.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Nickname: $nickname",
+                                style = TextStyle(
+                                    fontFamily = DayByDayFontFamily,
+                                    fontWeight = FontWeight.W400, // 400
+                                    fontSize = 12.5.sp,
+                                    lineHeight = 16.sp,
+                                    color = DayByDaySecondaryText
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -191,7 +194,7 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             StandardSettingsRow(
-                title = "Nickname",
+                title = "Nickname (Optional)",
                 subtitle = nickname,
                 onClick = { onEditFieldClick(ProfileFieldType.NICKNAME) }
             )

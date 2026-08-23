@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDayBackground
+import com.vikaspokala.daybyday.ui.theme.DayByDayDestructive
 import com.vikaspokala.daybyday.ui.theme.DayByDayFontFamily
 import com.vikaspokala.daybyday.ui.theme.DayByDayNeutralBorder
 import com.vikaspokala.daybyday.ui.theme.DayByDayPrimaryText
@@ -113,8 +114,10 @@ private val EyeOffIcon: ImageVector by lazy {
 
 @Composable
 fun ChangePasswordScreen(
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
     onNavigateBack: () -> Unit,
-    onChangePasswordSubmit: () -> Unit = {},
+    onChangePasswordSubmit: (currentPassword: String, newPassword: String, confirmPassword: String) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var currentPassword by remember { mutableStateOf("") }
@@ -245,7 +248,11 @@ fun ChangePasswordScreen(
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(
-                    onDone = { onChangePasswordSubmit() }
+                    onDone = {
+                        if (!isLoading) {
+                            onChangePasswordSubmit(currentPassword, newPassword, confirmPassword)
+                        }
+                    }
                 )
             )
 
@@ -263,23 +270,40 @@ fun ChangePasswordScreen(
                 )
             )
 
+            errorMessage?.let { error ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = error,
+                    style = TextStyle(
+                        fontFamily = DayByDayFontFamily,
+                        fontWeight = FontWeight.Normal, // 400
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
+                        color = DayByDayDestructive
+                    )
+                )
+            }
+
             Spacer(modifier = Modifier.height(28.dp))
 
             // Change password button
+            val isButtonEnabled = !isLoading
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .clickable { onChangePasswordSubmit() },
+                    .clickable(enabled = isButtonEnabled) {
+                        onChangePasswordSubmit(currentPassword, newPassword, confirmPassword)
+                    },
                 shape = RoundedCornerShape(18.dp),
-                color = DayByDayAccent
+                color = if (isButtonEnabled) DayByDayAccent else DayByDaySecondaryText.copy(alpha = 0.5f)
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Change password",
+                        text = if (isLoading) "Changing password..." else "Change password",
                         style = TextStyle(
                             fontFamily = DayByDayFontFamily,
                             fontWeight = FontWeight.SemiBold, // 600

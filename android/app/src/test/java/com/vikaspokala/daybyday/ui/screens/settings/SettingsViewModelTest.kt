@@ -101,6 +101,40 @@ class SettingsViewModelTest {
         }
     }
 
+    private class FakeAuthRepository(
+        var updateProfileResult: Result<com.vikaspokala.daybyday.data.remote.dto.AuthUserDto> = Result.success(
+            com.vikaspokala.daybyday.data.remote.dto.AuthUserDto(
+                id = "11111111-2222-3333-4444-555555555555",
+                email = "test@example.com",
+                firstName = "Vikas",
+                lastName = "Varma",
+                nickname = "Vicky"
+            )
+        ),
+        var changePasswordResult: Result<Unit> = Result.success(Unit),
+        var delayDeferred: CompletableDeferred<Unit>? = null
+    ) : com.vikaspokala.daybyday.data.repository.AuthRepository() {
+        var updateProfileCallCount = 0
+        var lastRequest: com.vikaspokala.daybyday.data.remote.dto.UpdateProfileRequestDto? = null
+
+        var changePasswordCallCount = 0
+        var lastChangePasswordRequest: com.vikaspokala.daybyday.data.remote.dto.ChangePasswordRequestDto? = null
+
+        override suspend fun updateProfile(request: com.vikaspokala.daybyday.data.remote.dto.UpdateProfileRequestDto): com.vikaspokala.daybyday.data.remote.dto.AuthUserDto {
+            updateProfileCallCount++
+            lastRequest = request
+            delayDeferred?.await()
+            return updateProfileResult.getOrThrow()
+        }
+
+        override suspend fun changePassword(request: com.vikaspokala.daybyday.data.remote.dto.ChangePasswordRequestDto) {
+            changePasswordCallCount++
+            lastChangePasswordRequest = request
+            delayDeferred?.await()
+            changePasswordResult.getOrThrow()
+        }
+    }
+
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
@@ -124,6 +158,7 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         assertEquals(RefreshUiState.Idle, viewModel.refreshState.value)
+        assertEquals(ProfileEditUiState.Idle, viewModel.profileEditState.value)
         assertEquals(0, fakeRepo.refreshCallCount)
         assertFalse(sessionExpiredCalled)
     }
@@ -229,5 +264,572 @@ class SettingsViewModelTest {
         assertEquals(1, fakeRepo.refreshCallCount)
         assertTrue("Session expiration callback must be triggered on 401", sessionExpiredCalled)
         assertEquals(RefreshUiState.Idle, viewModel.refreshState.value)
+    }
+
+    @Test
+    fun updateProfile_firstName_success_updatesCanonicalUserAndNavigates() = runTest(testDispatcher) {
+        val updatedUser = com.vikaspokala.daybyday.data.remote.dto.AuthUserDto(
+            id = "11111111-2222-3333-4444-555555555555",
+            email = "dev.user@example.com",
+            firstName = "Vikram",
+            lastName = "Varma",
+            nickname = "Vicky"
+        )
+        val fakeAuthRepo = FakeAuthRepository(updateProfileResult = Result.success(updatedUser))
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var userUpdated: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        var successNavigated = false
+
+        viewModel.updateProfile(
+            fieldType = com.vikaspokala.daybyday.ui.navigation.ProfileFieldType.FIRST_NAME,
+            newValue = "  Vikram  ",
+            onUserUpdated = { userUpdated = it },
+            onSuccess = { successNavigated = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.updateProfileCallCount)
+        assertEquals("Vikram", fakeAuthRepo.lastRequest?.firstName)
+        assertEquals(null, fakeAuthRepo.lastRequest?.lastName)
+        assertEquals(null, fakeAuthRepo.lastRequest?.nickname)
+        assertFalse(fakeAuthRepo.lastRequest?.includeNickname ?: true)
+
+        assertEquals(updatedUser, userUpdated)
+        assertTrue(successNavigated)
+        assertEquals(ProfileEditUiState.Idle, viewModel.profileEditState.value)
+    }
+
+    @Test
+    fun updateProfile_nickname_success_updatesCanonicalUser() = runTest(testDispatcher) {
+        val updatedUser = com.vikaspokala.daybyday.data.remote.dto.AuthUserDto(
+            id = "11111111-2222-3333-4444-555555555555",
+            email = "dev.user@example.com",
+            firstName = "Vikas",
+            lastName = "Varma",
+            nickname = "Vik"
+        )
+        val fakeAuthRepo = FakeAuthRepository(updateProfileResult = Result.success(updatedUser))
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var userUpdated: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        var successNavigated = false
+
+        viewModel.updateProfile(
+            fieldType = com.vikaspokala.daybyday.ui.navigation.ProfileFieldType.NICKNAME,
+            newValue = "Vik",
+            onUserUpdated = { userUpdated = it },
+            onSuccess = { successNavigated = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.updateProfileCallCount)
+        assertEquals("Vik", fakeAuthRepo.lastRequest?.nickname)
+        assertTrue(fakeAuthRepo.lastRequest?.includeNickname == true)
+        assertEquals(updatedUser, userUpdated)
+        assertTrue(successNavigated)
+        assertEquals(ProfileEditUiState.Idle, viewModel.profileEditState.value)
+    }
+
+    @Test
+    fun updateProfile_clearingNickname_sendsNullAndUpdatesCanonicalUser() = runTest(testDispatcher) {
+        val updatedUser = com.vikaspokala.daybyday.data.remote.dto.AuthUserDto(
+            id = "11111111-2222-3333-4444-555555555555",
+            email = "dev.user@example.com",
+            firstName = "Vikas",
+            lastName = "Varma",
+            nickname = null
+        )
+        val fakeAuthRepo = FakeAuthRepository(updateProfileResult = Result.success(updatedUser))
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var userUpdated: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        var successNavigated = false
+
+        viewModel.updateProfile(
+            fieldType = com.vikaspokala.daybyday.ui.navigation.ProfileFieldType.NICKNAME,
+            newValue = "   ",
+            onUserUpdated = { userUpdated = it },
+            onSuccess = { successNavigated = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.updateProfileCallCount)
+        assertEquals(null, fakeAuthRepo.lastRequest?.nickname)
+        assertTrue(fakeAuthRepo.lastRequest?.includeNickname == true)
+        assertEquals(updatedUser, userUpdated)
+        assertTrue(successNavigated)
+        assertEquals(ProfileEditUiState.Idle, viewModel.profileEditState.value)
+    }
+
+    @Test
+    fun updateProfile_blankFirstName_showsFriendlyErrorAndDoesNotCallRepository() = runTest(testDispatcher) {
+        val fakeAuthRepo = FakeAuthRepository()
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var userUpdated: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        var successNavigated = false
+
+        viewModel.updateProfile(
+            fieldType = com.vikaspokala.daybyday.ui.navigation.ProfileFieldType.FIRST_NAME,
+            newValue = "   ",
+            onUserUpdated = { userUpdated = it },
+            onSuccess = { successNavigated = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, fakeAuthRepo.updateProfileCallCount)
+        assertEquals(null, userUpdated)
+        assertFalse(successNavigated)
+        assertTrue(viewModel.profileEditState.value is ProfileEditUiState.Error)
+        assertEquals(
+            "Please enter your first name.",
+            (viewModel.profileEditState.value as ProfileEditUiState.Error).message
+        )
+    }
+
+    @Test
+    fun updateProfile_blankLastName_showsFriendlyErrorAndDoesNotCallRepository() = runTest(testDispatcher) {
+        val fakeAuthRepo = FakeAuthRepository()
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var userUpdated: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        var successNavigated = false
+
+        viewModel.updateProfile(
+            fieldType = com.vikaspokala.daybyday.ui.navigation.ProfileFieldType.LAST_NAME,
+            newValue = "",
+            onUserUpdated = { userUpdated = it },
+            onSuccess = { successNavigated = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, fakeAuthRepo.updateProfileCallCount)
+        assertEquals(null, userUpdated)
+        assertFalse(successNavigated)
+        assertTrue(viewModel.profileEditState.value is ProfileEditUiState.Error)
+        assertEquals(
+            "Please enter your last name.",
+            (viewModel.profileEditState.value as ProfileEditUiState.Error).message
+        )
+    }
+
+    @Test
+    fun updateProfile_backendValidationFailure_mapsToFriendlyMessage() = runTest(testDispatcher) {
+        val http400Exception = HttpException(
+            Response.error<com.vikaspokala.daybyday.data.remote.dto.UpdateProfileResponseDto>(
+                400,
+                """{"error":{"code":"BAD_REQUEST","message":"Invalid firstName: must not exceed length"}}""".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeAuthRepo = FakeAuthRepository(updateProfileResult = Result.failure(http400Exception))
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var userUpdated: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        var successNavigated = false
+
+        viewModel.updateProfile(
+            fieldType = com.vikaspokala.daybyday.ui.navigation.ProfileFieldType.FIRST_NAME,
+            newValue = "TooLongName",
+            onUserUpdated = { userUpdated = it },
+            onSuccess = { successNavigated = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.updateProfileCallCount)
+        assertEquals(null, userUpdated)
+        assertFalse(successNavigated)
+        assertTrue(viewModel.profileEditState.value is ProfileEditUiState.Error)
+        assertEquals(
+            "Please enter your first name.",
+            (viewModel.profileEditState.value as ProfileEditUiState.Error).message
+        )
+    }
+
+    @Test
+    fun updateProfile_networkError_setsCalmErrorAndPreservesUser() = runTest(testDispatcher) {
+        val fakeAuthRepo = FakeAuthRepository(updateProfileResult = Result.failure(IOException("No connection")))
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var userUpdated: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        var successNavigated = false
+
+        viewModel.updateProfile(
+            fieldType = com.vikaspokala.daybyday.ui.navigation.ProfileFieldType.FIRST_NAME,
+            newValue = "Vikram",
+            onUserUpdated = { userUpdated = it },
+            onSuccess = { successNavigated = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.updateProfileCallCount)
+        assertEquals(null, userUpdated)
+        assertFalse(successNavigated)
+        assertTrue(viewModel.profileEditState.value is ProfileEditUiState.Error)
+        assertEquals(
+            "Unable to connect to server. Check your connection and try again.",
+            (viewModel.profileEditState.value as ProfileEditUiState.Error).message
+        )
+    }
+
+    @Test
+    fun updateProfile_server500Error_setsCalmErrorAndPreservesUser() = runTest(testDispatcher) {
+        val http500Exception = HttpException(
+            Response.error<com.vikaspokala.daybyday.data.remote.dto.UpdateProfileResponseDto>(
+                500,
+                """{"error":{"code":"INTERNAL_ERROR","message":"Internal server error"}}""".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeAuthRepo = FakeAuthRepository(updateProfileResult = Result.failure(http500Exception))
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var userUpdated: com.vikaspokala.daybyday.data.remote.dto.AuthUserDto? = null
+        var successNavigated = false
+
+        viewModel.updateProfile(
+            fieldType = com.vikaspokala.daybyday.ui.navigation.ProfileFieldType.LAST_NAME,
+            newValue = "Pokala",
+            onUserUpdated = { userUpdated = it },
+            onSuccess = { successNavigated = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.updateProfileCallCount)
+        assertEquals(null, userUpdated)
+        assertFalse(successNavigated)
+        assertTrue(viewModel.profileEditState.value is ProfileEditUiState.Error)
+        assertEquals(
+            "Unable to update profile. Please try again.",
+            (viewModel.profileEditState.value as ProfileEditUiState.Error).message
+        )
+    }
+
+    @Test
+    fun updateProfile_401Unauthorized_triggersSessionExpiredAndResetsState() = runTest(testDispatcher) {
+        val http401Exception = HttpException(
+            Response.error<com.vikaspokala.daybyday.data.remote.dto.UpdateProfileResponseDto>(
+                401,
+                "{}".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeAuthRepo = FakeAuthRepository(updateProfileResult = Result.failure(http401Exception))
+        var sessionExpiredCalled = false
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            onSessionExpired = { sessionExpiredCalled = true },
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        viewModel.updateProfile(
+            fieldType = com.vikaspokala.daybyday.ui.navigation.ProfileFieldType.FIRST_NAME,
+            newValue = "Vikram",
+            onUserUpdated = {},
+            onSuccess = {}
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.updateProfileCallCount)
+        assertTrue(sessionExpiredCalled)
+        assertEquals(ProfileEditUiState.Idle, viewModel.profileEditState.value)
+    }
+
+    @Test
+    fun changePassword_blankCurrentPassword_showsFriendlyErrorAndDoesNotCallRepository() = runTest(testDispatcher) {
+        val fakeAuthRepo = FakeAuthRepository()
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var successCalled = false
+        viewModel.changePassword(
+            currentPassword = "   ",
+            newPassword = "NewValidPassword12345!",
+            confirmPassword = "NewValidPassword12345!",
+            onSuccess = { successCalled = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, fakeAuthRepo.changePasswordCallCount)
+        assertFalse(successCalled)
+        assertTrue(viewModel.changePasswordState.value is ChangePasswordUiState.Error)
+        assertEquals(
+            "Please enter your current password.",
+            (viewModel.changePasswordState.value as ChangePasswordUiState.Error).message
+        )
+    }
+
+    @Test
+    fun changePassword_blankNewPassword_showsFriendlyErrorAndDoesNotCallRepository() = runTest(testDispatcher) {
+        val fakeAuthRepo = FakeAuthRepository()
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var successCalled = false
+        viewModel.changePassword(
+            currentPassword = "CurrentPassword12345!",
+            newPassword = "",
+            confirmPassword = "",
+            onSuccess = { successCalled = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, fakeAuthRepo.changePasswordCallCount)
+        assertFalse(successCalled)
+        assertTrue(viewModel.changePasswordState.value is ChangePasswordUiState.Error)
+        assertEquals(
+            "Please enter a new password.",
+            (viewModel.changePasswordState.value as ChangePasswordUiState.Error).message
+        )
+    }
+
+    @Test
+    fun changePassword_blankConfirmPassword_showsFriendlyErrorAndDoesNotCallRepository() = runTest(testDispatcher) {
+        val fakeAuthRepo = FakeAuthRepository()
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var successCalled = false
+        viewModel.changePassword(
+            currentPassword = "CurrentPassword12345!",
+            newPassword = "NewValidPassword12345!",
+            confirmPassword = "   ",
+            onSuccess = { successCalled = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, fakeAuthRepo.changePasswordCallCount)
+        assertFalse(successCalled)
+        assertTrue(viewModel.changePasswordState.value is ChangePasswordUiState.Error)
+        assertEquals(
+            "Please confirm your new password.",
+            (viewModel.changePasswordState.value as ChangePasswordUiState.Error).message
+        )
+    }
+
+    @Test
+    fun changePassword_mismatchedPasswords_showsFriendlyErrorAndDoesNotCallRepository() = runTest(testDispatcher) {
+        val fakeAuthRepo = FakeAuthRepository()
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var successCalled = false
+        viewModel.changePassword(
+            currentPassword = "CurrentPassword12345!",
+            newPassword = "NewValidPassword12345!",
+            confirmPassword = "DifferentPassword12345!",
+            onSuccess = { successCalled = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, fakeAuthRepo.changePasswordCallCount)
+        assertFalse(successCalled)
+        assertTrue(viewModel.changePasswordState.value is ChangePasswordUiState.Error)
+        assertEquals(
+            "New passwords do not match.",
+            (viewModel.changePasswordState.value as ChangePasswordUiState.Error).message
+        )
+    }
+
+    @Test
+    fun changePassword_success_callsRepositoryWithOnlyCurrentAndNewPassword_andInvokesSuccessCallback() = runTest(testDispatcher) {
+        val fakeAuthRepo = FakeAuthRepository()
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        var successCalled = false
+        viewModel.changePassword(
+            currentPassword = "OldValidPassword12345!",
+            newPassword = "BrandNewValidPassword12345!",
+            confirmPassword = "BrandNewValidPassword12345!",
+            onSuccess = { successCalled = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.changePasswordCallCount)
+        assertEquals("OldValidPassword12345!", fakeAuthRepo.lastChangePasswordRequest?.currentPassword)
+        assertEquals("BrandNewValidPassword12345!", fakeAuthRepo.lastChangePasswordRequest?.newPassword)
+        assertTrue(successCalled)
+        assertEquals(ChangePasswordUiState.Idle, viewModel.changePasswordState.value)
+    }
+
+    @Test
+    fun changePassword_wrongCurrentPassword_showsFriendlyErrorAndPreservesState() = runTest(testDispatcher) {
+        val http401Exception = HttpException(
+            Response.error<com.vikaspokala.daybyday.data.remote.dto.ChangePasswordResponseDto>(
+                401,
+                """{"error":{"code":"UNAUTHORIZED","message":"Invalid current password"}}""".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeAuthRepo = FakeAuthRepository(changePasswordResult = Result.failure(http401Exception))
+        var sessionExpiredCalled = false
+        var successCalled = false
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            onSessionExpired = { sessionExpiredCalled = true },
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        viewModel.changePassword(
+            currentPassword = "WrongPassword12345!",
+            newPassword = "BrandNewValidPassword12345!",
+            confirmPassword = "BrandNewValidPassword12345!",
+            onSuccess = { successCalled = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.changePasswordCallCount)
+        assertFalse(successCalled)
+        assertFalse("Wrong current password must not trigger onSessionExpired", sessionExpiredCalled)
+        assertTrue(viewModel.changePasswordState.value is ChangePasswordUiState.Error)
+        assertEquals(
+            "Current password is incorrect.",
+            (viewModel.changePasswordState.value as ChangePasswordUiState.Error).message
+        )
+    }
+
+    @Test
+    fun changePassword_networkError_showsFriendlyErrorAndPreservesState() = runTest(testDispatcher) {
+        val fakeAuthRepo = FakeAuthRepository(changePasswordResult = Result.failure(IOException("No connection")))
+        var sessionExpiredCalled = false
+        var successCalled = false
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            onSessionExpired = { sessionExpiredCalled = true },
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        viewModel.changePassword(
+            currentPassword = "CurrentPassword12345!",
+            newPassword = "BrandNewValidPassword12345!",
+            confirmPassword = "BrandNewValidPassword12345!",
+            onSuccess = { successCalled = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.changePasswordCallCount)
+        assertFalse(successCalled)
+        assertFalse(sessionExpiredCalled)
+        assertTrue(viewModel.changePasswordState.value is ChangePasswordUiState.Error)
+        assertEquals(
+            "Unable to change password right now. Please try again.",
+            (viewModel.changePasswordState.value as ChangePasswordUiState.Error).message
+        )
+    }
+
+    @Test
+    fun changePassword_server500Error_showsFriendlyErrorAndPreservesState() = runTest(testDispatcher) {
+        val http500Exception = HttpException(
+            Response.error<com.vikaspokala.daybyday.data.remote.dto.ChangePasswordResponseDto>(
+                500,
+                """{"error":{"code":"INTERNAL_ERROR","message":"Internal server error"}}""".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeAuthRepo = FakeAuthRepository(changePasswordResult = Result.failure(http500Exception))
+        var sessionExpiredCalled = false
+        var successCalled = false
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            onSessionExpired = { sessionExpiredCalled = true },
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        viewModel.changePassword(
+            currentPassword = "CurrentPassword12345!",
+            newPassword = "BrandNewValidPassword12345!",
+            confirmPassword = "BrandNewValidPassword12345!",
+            onSuccess = { successCalled = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.changePasswordCallCount)
+        assertFalse(successCalled)
+        assertFalse(sessionExpiredCalled)
+        assertTrue(viewModel.changePasswordState.value is ChangePasswordUiState.Error)
+        assertEquals(
+            "Unable to change password right now. Please try again.",
+            (viewModel.changePasswordState.value as ChangePasswordUiState.Error).message
+        )
+    }
+
+    @Test
+    fun changePassword_401SessionExpired_triggersOnSessionExpired() = runTest(testDispatcher) {
+        val http401Exception = HttpException(
+            Response.error<com.vikaspokala.daybyday.data.remote.dto.ChangePasswordResponseDto>(
+                401,
+                """{"error":{"code":"UNAUTHORIZED","message":"Authentication required"}}""".toResponseBody("application/json".toMediaType())
+            )
+        )
+        val fakeAuthRepo = FakeAuthRepository(changePasswordResult = Result.failure(http401Exception))
+        var sessionExpiredCalled = false
+        var successCalled = false
+        val viewModel = SettingsViewModel(
+            plannerRepository = FakePlannerRepository(),
+            authRepository = fakeAuthRepo,
+            onSessionExpired = { sessionExpiredCalled = true },
+            scope = CoroutineScope(testDispatcher)
+        )
+
+        viewModel.changePassword(
+            currentPassword = "CurrentPassword12345!",
+            newPassword = "BrandNewValidPassword12345!",
+            confirmPassword = "BrandNewValidPassword12345!",
+            onSuccess = { successCalled = true }
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, fakeAuthRepo.changePasswordCallCount)
+        assertFalse(successCalled)
+        assertTrue(sessionExpiredCalled)
+        assertEquals(ChangePasswordUiState.Idle, viewModel.changePasswordState.value)
     }
 }

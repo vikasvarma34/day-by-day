@@ -254,4 +254,49 @@ class AuthViewModelTest {
 
         assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
     }
+
+    @Test
+    fun updateUser_updatesAuthenticatedUserState() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token",
+            verifyResult = { Result.success(testUser) }
+        )
+        val viewModel = AuthViewModel(repo)
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+
+        val updatedUser = testUser.copy(
+            firstName = "Vikram",
+            lastName = "Pokala",
+            nickname = "Vik"
+        )
+        viewModel.updateUser(updatedUser)
+
+        assertEquals(AuthUiState.Authenticated(updatedUser), viewModel.uiState.value)
+    }
+
+    @Test
+    fun handlePasswordChanged_clearsStoredTokenAndTransitionsToSignedOutWithoutCallingVerifySession() = runTest(testDispatcher) {
+        var verifyCount = 0
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token",
+            verifyResult = {
+                verifyCount++
+                Result.success(testUser)
+            }
+        )
+        val viewModel = AuthViewModel(repo)
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.Authenticated(testUser), viewModel.uiState.value)
+        assertEquals(1, verifyCount)
+
+        viewModel.handlePasswordChanged()
+        advanceUntilIdle()
+
+        assertEquals(null, repo.storedToken)
+        assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
+        assertEquals(1, verifyCount)
+    }
 }

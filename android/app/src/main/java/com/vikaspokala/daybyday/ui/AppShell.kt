@@ -50,7 +50,9 @@ import com.vikaspokala.daybyday.ui.screens.later.ScheduleItemScreen
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleScreen
 import com.vikaspokala.daybyday.ui.screens.schedule.ScheduleViewModel
 import com.vikaspokala.daybyday.ui.screens.settings.ChangePasswordScreen
+import com.vikaspokala.daybyday.ui.screens.settings.ChangePasswordUiState
 import com.vikaspokala.daybyday.ui.screens.settings.EditProfileFieldScreen
+import com.vikaspokala.daybyday.ui.screens.settings.ProfileEditUiState
 import com.vikaspokala.daybyday.ui.screens.settings.SettingsScreen
 import com.vikaspokala.daybyday.ui.screens.settings.SettingsViewModel
 import com.vikaspokala.daybyday.ui.screens.task.TaskScreen
@@ -70,6 +72,8 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 fun AppShell(
     user: AuthUserDto? = null,
     onSessionExpired: () -> Unit = {},
+    onUserUpdated: (AuthUserDto) -> Unit = {},
+    onPasswordChanged: () -> Unit = onSessionExpired,
     todayViewModel: TodayViewModel = viewModel(
         factory = TodayViewModel.Factory(LocalContext.current, onSessionExpired)
     ),
@@ -98,9 +102,10 @@ fun AppShell(
 
     val currentScreen = backStack.lastOrNull() as? Screen ?: Screen.Today
 
-    var firstName by remember(user) { mutableStateOf(user?.firstName ?: "Vikas") }
-    var lastName by remember(user) { mutableStateOf(user?.lastName ?: "Varma") }
-    var nickname by remember(user) { mutableStateOf(user?.nickname ?: "Vicky") }
+    val currentFirstName = user?.firstName.orEmpty()
+    val currentLastName = user?.lastName.orEmpty()
+    val currentNickname = user?.nickname
+    val displayName = user?.nickname?.takeIf { it.isNotBlank() } ?: user?.firstName.orEmpty()
 
     Scaffold(
         containerColor = DayByDayBackground,
@@ -198,6 +203,7 @@ fun AppShell(
                     is Screen.Today -> NavEntry(key) {
                         TodayScreen(
                             viewModel = todayViewModel,
+                            userName = displayName,
                             onNavigateToSettings = {
                                 backStack.add(Screen.Settings)
                             },
@@ -235,18 +241,20 @@ fun AppShell(
                     is Screen.Settings -> NavEntry(key) {
                         val refreshState by settingsViewModel.refreshState.collectAsState()
                         SettingsScreen(
-                            firstName = firstName,
-                            lastName = lastName,
-                            nickname = nickname,
+                            firstName = currentFirstName,
+                            lastName = currentLastName,
+                            nickname = currentNickname,
                             onNavigateBack = {
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)
                                 }
                             },
                             onChangePasswordClick = {
+                                settingsViewModel.resetChangePasswordState()
                                 backStack.add(Screen.ChangePassword)
                             },
                             onEditFieldClick = { fieldType ->
+                                settingsViewModel.resetProfileEditState()
                                 backStack.add(Screen.EditProfileField(fieldType))
                             },
                             refreshState = refreshState,
@@ -254,38 +262,58 @@ fun AppShell(
                         )
                     }
                     is Screen.ChangePassword -> NavEntry(key) {
+                        val changePasswordState by settingsViewModel.changePasswordState.collectAsState()
                         ChangePasswordScreen(
+                            isLoading = changePasswordState is ChangePasswordUiState.Submitting,
+                            errorMessage = (changePasswordState as? ChangePasswordUiState.Error)?.message,
                             onNavigateBack = {
+                                settingsViewModel.resetChangePasswordState()
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)
                                 }
+                            },
+                            onChangePasswordSubmit = { currentPw, newPw, confirmPw ->
+                                settingsViewModel.changePassword(
+                                    currentPassword = currentPw,
+                                    newPassword = newPw,
+                                    confirmPassword = confirmPw,
+                                    onSuccess = {
+                                        onPasswordChanged()
+                                    }
+                                )
                             }
                         )
                     }
                     is Screen.EditProfileField -> NavEntry(key) {
                         val fieldType = key.fieldType
                         val currentValue = when (fieldType) {
-                            ProfileFieldType.FIRST_NAME -> firstName
-                            ProfileFieldType.LAST_NAME -> lastName
-                            ProfileFieldType.NICKNAME -> nickname
+                            ProfileFieldType.FIRST_NAME -> currentFirstName
+                            ProfileFieldType.LAST_NAME -> currentLastName
+                            ProfileFieldType.NICKNAME -> user?.nickname ?: ""
                         }
+                        val editState by settingsViewModel.profileEditState.collectAsState()
                         EditProfileFieldScreen(
                             fieldType = fieldType,
                             initialValue = currentValue,
+                            isLoading = editState is ProfileEditUiState.Saving,
+                            errorMessage = (editState as? ProfileEditUiState.Error)?.message,
                             onNavigateBack = {
+                                settingsViewModel.resetProfileEditState()
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)
                                 }
                             },
                             onSave = { newValue ->
-                                when (fieldType) {
-                                    ProfileFieldType.FIRST_NAME -> firstName = newValue
-                                    ProfileFieldType.LAST_NAME -> lastName = newValue
-                                    ProfileFieldType.NICKNAME -> nickname = newValue
-                                }
-                                if (backStack.size > 1) {
-                                    backStack.removeAt(backStack.lastIndex)
-                                }
+                                settingsViewModel.updateProfile(
+                                    fieldType = fieldType,
+                                    newValue = newValue,
+                                    onUserUpdated = onUserUpdated,
+                                    onSuccess = {
+                                        if (backStack.size > 1) {
+                                            backStack.removeAt(backStack.lastIndex)
+                                        }
+                                    }
+                                )
                             }
                         )
                     }

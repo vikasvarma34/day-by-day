@@ -58,6 +58,7 @@ fun TodayScreen(
     onNavigateToSettings: () -> Unit,
     onTaskClick: (Screen.Task) -> Unit = {},
     onAddTask: (Screen.Task) -> Unit = {},
+    userName: String = "",
     modifier: Modifier = Modifier,
     viewModel: TodayViewModel
 ) {
@@ -86,8 +87,8 @@ fun TodayScreen(
     val actualTodayFormatted = remember {
         LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault()))
     }
-    val greeting = remember {
-        TodayViewModel.getGreeting()
+    val greeting = remember(userName) {
+        TodayViewModel.getGreeting(name = userName)
     }
 
     val selectedDateFormatted = remember(selectedDate) {

@@ -158,7 +158,18 @@ class AuthViewModel(
         }
     }
 
+    fun updateUser(user: AuthUserDto) {
+        _uiState.value = AuthUiState.Authenticated(user)
+    }
+
     fun handleSessionExpired() {
+        viewModelScope.launch {
+            authRepository.clearSession()
+            _uiState.value = AuthUiState.SignedOut()
+        }
+    }
+
+    fun handlePasswordChanged() {
         viewModelScope.launch {
             authRepository.clearSession()
             _uiState.value = AuthUiState.SignedOut()
