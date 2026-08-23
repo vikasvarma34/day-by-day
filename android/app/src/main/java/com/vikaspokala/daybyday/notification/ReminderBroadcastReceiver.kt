@@ -44,9 +44,9 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
         }
 
         val pendingResult = goAsync()
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             try {
-                val db = com.vikaspokala.daybyday.data.local.planner.PlannerDatabase.getInstance(context.applicationContext)
+                val db = PlannerDatabase.getInstance(context.applicationContext)
                 val scheduler = DefaultTaskReminderScheduler(context.applicationContext, db)
                 scheduler.scheduleTaskReminder(taskId)
             } catch (_: Exception) {
