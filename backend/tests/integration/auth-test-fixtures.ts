@@ -5,6 +5,17 @@ import { hashPassword } from '../../src/security/password';
 export const AUTOMATED_TEST_EMAIL_DOMAIN = 'daybyday-test.invalid';
 
 /**
+ * Generates an ISO calendar date (YYYY-MM-DD) anchored to the current UTC date
+ * with an optional day offset. Ensures integration test dates always satisfy
+ * the server's UTC ±1 plannerToday plausibility guard over time.
+ */
+export function getTestDate(offsetDays: number = 0, baseDate: Date = new Date()): string {
+  const d = new Date(baseDate);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
+  return d.toISOString().split('T')[0];
+}
+
+/**
  * Generates a unique automated test email strictly ending in @daybyday-test.invalid.
  */
 export function generateAutomatedTestEmail(label: string): string {

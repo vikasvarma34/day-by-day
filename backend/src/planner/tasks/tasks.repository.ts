@@ -113,9 +113,11 @@ export class TasksRepository {
       if (dto.isImportant !== undefined) {
         await client.query(`UPDATE tasks SET is_important = $1 WHERE id = $2`, [dto.isImportant, taskId]);
 
+        const lockedTitle = taskRes.rows[0].title;
         const compUpdateRes = await client.query(
           `UPDATE task_completions
-           SET is_important_snapshot = $1
+           SET is_important_snapshot = $1,
+               title_snapshot = COALESCE(title_snapshot, $3)
            WHERE task_id = $2
              AND (
                (schedule_id IS NULL AND scheduled_date IS NULL)
@@ -127,7 +129,7 @@ export class TasksRepository {
                )
              )
            RETURNING id, task_id, schedule_id, scheduled_date::text, completed_date::text, completed_at, title_snapshot, is_important_snapshot`,
-          [dto.isImportant, taskId]
+          [dto.isImportant, taskId, lockedTitle]
         );
 
         affectedCompletions = compUpdateRes.rows.map((r: any) => ({

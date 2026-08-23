@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import { createApp } from '../../src/app';
 import { getPool } from '../../src/db/pool';
-import { createTestUserFixture, deleteTestUserById } from './auth-test-fixtures';
+import { createTestUserFixture, deleteTestUserById, getTestDate } from './auth-test-fixtures';
 import { generateSessionToken, hashSessionToken } from '../../src/security/session';
 import { RefreshRepository } from '../../src/planner/refresh/refresh.repository';
 import { PlannerSnapshot } from '../../src/planner/refresh/refresh.types';
@@ -19,6 +19,9 @@ test('GET /planner/refresh Integration Suite', async (t) => {
   let userB: any;
   let tokenA: string;
   let tokenB: string;
+
+  const today = getTestDate(0);
+  const futureEnd = getTestDate(40);
 
   const createdUserIds: string[] = [];
 
@@ -48,11 +51,7 @@ test('GET /planner/refresh Integration Suite', async (t) => {
     }
   });
 
-  const getValidId = () =>
-    '22222222-2222-4222-a222-' +
-    Math.floor(Math.random() * 1000000000000)
-      .toString()
-      .padStart(12, '0');
+  const getValidId = () => crypto.randomUUID();
 
   await t.test('Authentication and Owner Isolation', async (sub) => {
     await sub.test('rejects unauthenticated request with 401', async () => {
@@ -61,7 +60,7 @@ test('GET /planner/refresh Integration Suite', async (t) => {
     });
 
     await sub.test('isolates snapshot data by authenticated user', async () => {
-      // Create task for userA
+      // Create task for User A
       const taskIdA = getValidId();
       await fetch(`${baseUrl}/tasks`, {
         method: 'POST',
@@ -72,22 +71,11 @@ test('GET /planner/refresh Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskIdA,
           title: 'User A Secret Task',
-          note: 'Secret Note A',
-          isImportant: true,
+          note: 'Confidential note',
         }),
       });
 
-      // User B requests refresh
-      const resB = await fetch(`${baseUrl}/planner/refresh`, {
-        headers: { Authorization: `Bearer ${tokenB}` },
-      });
-      assert.equal(resB.status, 200);
-      const snapshotB: PlannerSnapshot = await resB.json();
-      assert.equal(snapshotB.tasks.length, 0);
-      assert.equal(snapshotB.schedules.length, 0);
-      assert.equal(snapshotB.completions.length, 0);
-
-      // User A requests refresh
+      // Request snapshot for User A
       const resA = await fetch(`${baseUrl}/planner/refresh`, {
         headers: { Authorization: `Bearer ${tokenA}` },
       });
@@ -96,6 +84,16 @@ test('GET /planner/refresh Integration Suite', async (t) => {
       assert.equal(snapshotA.tasks.length, 1);
       assert.equal(snapshotA.tasks[0].id, taskIdA);
       assert.equal(snapshotA.tasks[0].title, 'User A Secret Task');
+
+      // Request snapshot for User B
+      const resB = await fetch(`${baseUrl}/planner/refresh`, {
+        headers: { Authorization: `Bearer ${tokenB}` },
+      });
+      assert.equal(resB.status, 200);
+      const snapshotB: PlannerSnapshot = await resB.json();
+      assert.equal(snapshotB.tasks.length, 0);
+      assert.equal(snapshotB.schedules.length, 0);
+      assert.equal(snapshotB.completions.length, 0);
 
       // Cleanup
       await pool.query('DELETE FROM tasks WHERE id = $1', [taskIdA]);
@@ -117,10 +115,10 @@ test('GET /planner/refresh Integration Suite', async (t) => {
           title: 'Doctor Appointment',
           note: 'Checkup',
           isImportant: true,
-          plannerToday: '2026-08-20',
+          plannerToday: today,
           schedule: {
             type: 'ONCE',
-            startDate: '2026-08-20',
+            startDate: today,
             scheduledTime: '14:30:00',
             reminderMinutesBefore: 30,
           },
@@ -138,10 +136,10 @@ test('GET /planner/refresh Integration Suite', async (t) => {
           Authorization: `Bearer ${tokenA}`,
         },
         body: JSON.stringify({
-          plannerToday: '2026-08-20',
-          completedDate: '2026-08-20',
+          plannerToday: today,
+          completedDate: today,
           scheduleId: schedId1,
-          scheduledDate: '2026-08-20',
+          scheduledDate: today,
         }),
       });
       assert.equal(compRes1.status, 200);
@@ -157,11 +155,11 @@ test('GET /planner/refresh Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskId2,
           title: 'Water Plants',
-          plannerToday: '2026-08-20',
+          plannerToday: today,
           schedule: {
             type: 'INTERVAL_DAYS',
-            startDate: '2026-08-20',
-            endDate: '2026-09-30',
+            startDate: today,
+            endDate: futureEnd,
             intervalDays: 3,
           },
         }),
@@ -179,10 +177,10 @@ test('GET /planner/refresh Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskId3,
           title: 'Daily Standup',
-          plannerToday: '2026-08-20',
+          plannerToday: today,
           schedule: {
             type: 'WEEKDAYS',
-            startDate: '2026-08-20',
+            startDate: today,
             weekdaysMask: 31, // Mon-Fri
             scheduledTime: '09:00:00',
           },
@@ -227,8 +225,8 @@ test('GET /planner/refresh Integration Suite', async (t) => {
           Authorization: `Bearer ${tokenA}`,
         },
         body: JSON.stringify({
-          plannerToday: '2026-08-20',
-          completedDate: '2026-08-20',
+          plannerToday: today,
+          completedDate: today,
         }),
       });
       assert.equal(compRes5.status, 200);
@@ -285,10 +283,10 @@ test('GET /planner/refresh Integration Suite', async (t) => {
         body: JSON.stringify({
           id: taskId,
           title: 'Timezone Check Task',
-          plannerToday: '2026-08-20',
+          plannerToday: today,
           schedule: {
             type: 'ONCE',
-            startDate: '2026-08-20',
+            startDate: today,
             scheduledTime: '15:45:00',
             reminderMinutesBefore: 15,
           },
@@ -305,8 +303,8 @@ test('GET /planner/refresh Integration Suite', async (t) => {
       assert.equal(snapshot.schedules.length, 1);
       const sched = snapshot.schedules[0];
 
-      assert.equal(sched.startDate, '2026-08-20');
-      assert.equal(sched.endDate, '2026-08-20');
+      assert.equal(sched.startDate, today);
+      assert.equal(sched.endDate, today);
       assert.equal(sched.scheduledTime, '15:45:00');
       assert.equal(sched.reminderMinutesBefore, 15);
 
