@@ -36,6 +36,8 @@ fun LaterTaskProjection.toLaterTaskItem(): LaterTaskItem = LaterTaskItem(
     completedAt = completedAt
 )
 
+private val apiTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.US)
+
 fun buildCreateSchedule(
     date: LocalDate,
     time: String?,
@@ -43,20 +45,21 @@ fun buildCreateSchedule(
     recurrence: Recurrence?
 ): CreateTaskScheduleRequestDto {
     val parsedTime = parseDisplayTime(time)
+    val formattedTime = parsedTime?.format(apiTimeFormatter)
     return when (recurrence) {
         is Recurrence.IntervalDays -> CreateTaskScheduleRequestDto(
             type = "INTERVAL_DAYS", startDate = date.toString(), endDate = recurrence.endDate?.toString(),
-            scheduledTime = parsedTime?.toString(), intervalDays = recurrence.intervalDays,
+            scheduledTime = formattedTime, intervalDays = recurrence.intervalDays,
             intervalAnchorDate = date.toString(), reminderMinutesBefore = if (parsedTime == null) null else parseReminder(reminder)
         )
         is Recurrence.Weekdays -> CreateTaskScheduleRequestDto(
             type = "WEEKDAYS", startDate = date.toString(), endDate = recurrence.endDate?.toString(),
-            scheduledTime = parsedTime?.toString(), weekdaysMask = recurrence.days.toWeekdaysMask(),
+            scheduledTime = formattedTime, weekdaysMask = recurrence.days.toWeekdaysMask(),
             reminderMinutesBefore = if (parsedTime == null) null else parseReminder(reminder)
         )
         else -> CreateTaskScheduleRequestDto(
             type = "ONCE", startDate = date.toString(), endDate = date.toString(),
-            scheduledTime = parsedTime?.toString(), reminderMinutesBefore = if (parsedTime == null) null else parseReminder(reminder)
+            scheduledTime = formattedTime, reminderMinutesBefore = if (parsedTime == null) null else parseReminder(reminder)
         )
     }
 }

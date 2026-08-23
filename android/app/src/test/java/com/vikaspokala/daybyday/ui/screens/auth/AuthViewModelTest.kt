@@ -644,4 +644,107 @@ class AuthViewModelTest {
         assertEquals(null, repo.storedCacheOwner)
         assertEquals(AuthUiState.SignedOut(), viewModel.uiState.value)
     }
+
+    private class RecordingReminderScheduler : com.vikaspokala.daybyday.notification.TaskReminderScheduler {
+        var cancelAllCallCount = 0
+        var rescheduleAllCallCount = 0
+
+        override fun canScheduleExactAlarms(): Boolean = true
+        override fun openExactAlarmSettings(context: android.content.Context) {}
+        override fun calculateTriggerEpochMillis(
+            startDate: String,
+            scheduledTime: String,
+            reminderMinutesBefore: Int,
+            zoneId: java.time.ZoneId
+        ): Long? = null
+        override fun scheduleOnceReminder(
+            taskId: String,
+            title: String,
+            startDate: String,
+            scheduledTime: String?,
+            reminderMinutesBefore: Int?
+        ): com.vikaspokala.daybyday.notification.ReminderScheduleResult = com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
+        override fun cancelReminder(taskId: String) {}
+        override suspend fun cancelAllReminders() {
+            cancelAllCallCount++
+        }
+        override suspend fun rescheduleAllFromDatabase() {
+            rescheduleAllCallCount++
+        }
+    }
+
+    @Test
+    fun logout_cancelsAllScheduledReminders() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(testUser) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase()
+        val scheduler = RecordingReminderScheduler()
+        val viewModel = AuthViewModel(repo, database, scheduler)
+        advanceUntilIdle()
+
+        viewModel.logout()
+        advanceUntilIdle()
+
+        assertEquals(1, scheduler.cancelAllCallCount)
+    }
+
+    @Test
+    fun handleSessionExpired_cancelsAllScheduledReminders() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(testUser) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase()
+        val scheduler = RecordingReminderScheduler()
+        val viewModel = AuthViewModel(repo, database, scheduler)
+        advanceUntilIdle()
+
+        viewModel.handleSessionExpired()
+        advanceUntilIdle()
+
+        assertEquals(1, scheduler.cancelAllCallCount)
+    }
+
+    @Test
+    fun accountSwitch_cancelsPreviousOwnerReminders() = runTest(testDispatcher) {
+        val differentUser = AuthUserDto(
+            id = "different_user_id",
+            email = "diff@example.com",
+            firstName = "Diff",
+            lastName = "User",
+            nickname = null
+        )
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(differentUser) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase()
+        val scheduler = RecordingReminderScheduler()
+        val viewModel = AuthViewModel(repo, database, scheduler)
+        advanceUntilIdle()
+
+        assertEquals(1, scheduler.cancelAllCallCount)
+        assertEquals(0, scheduler.rescheduleAllCallCount)
+    }
+
+    @Test
+    fun sameOwnerReauth_reschedulesPreservedReminders() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(
+            storedToken = "valid_token",
+            storedCacheOwner = testUser.id,
+            verifyResult = { Result.success(testUser) }
+        )
+        val database = com.vikaspokala.daybyday.ui.FakePlannerDatabase()
+        val scheduler = RecordingReminderScheduler()
+        val viewModel = AuthViewModel(repo, database, scheduler)
+        advanceUntilIdle()
+
+        assertEquals(0, scheduler.cancelAllCallCount)
+        assertEquals(1, scheduler.rescheduleAllCallCount)
+    }
 }

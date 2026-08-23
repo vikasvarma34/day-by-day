@@ -13,6 +13,7 @@ import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskContentRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskScheduleDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskSchedulePayloadDto
+import com.vikaspokala.daybyday.notification.TaskReminderScheduler
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -20,19 +21,22 @@ open class PlannerRepository(
     private val plannerDatabase: PlannerDatabase,
     private val tokenProvider: suspend () -> String?,
     private val plannerApi: PlannerApi = NetworkClient.plannerApi,
-    private val mutex: Mutex = defaultMutex
+    private val mutex: Mutex = defaultMutex,
+    private val reminderScheduler: TaskReminderScheduler? = null
 ) {
 
     constructor(
         plannerDatabase: PlannerDatabase,
         sessionTokenStore: SessionTokenStore,
         plannerApi: PlannerApi = NetworkClient.plannerApi,
-        mutex: Mutex = defaultMutex
+        mutex: Mutex = defaultMutex,
+        reminderScheduler: TaskReminderScheduler? = null
     ) : this(
         plannerDatabase = plannerDatabase,
         tokenProvider = { sessionTokenStore.readToken() },
         plannerApi = plannerApi,
-        mutex = mutex
+        mutex = mutex,
+        reminderScheduler = reminderScheduler
     )
 
     open suspend fun updateTask(
@@ -61,6 +65,20 @@ open class PlannerRepository(
             val scheduleEntities = response.task.schedules.map { it.toEntity(taskEntity.id) }
             val completionEntities = response.completions.map { it.toEntity() }
             plannerDatabase.applyUpdateTaskSchedule(taskEntity, scheduleEntities, completionEntities)
+
+            val onceSchedule = scheduleEntities.firstOrNull { it.scheduleType == "ONCE" }
+            if (onceSchedule != null && !onceSchedule.scheduledTime.isNullOrBlank() && onceSchedule.reminderMinutesBefore != null) {
+                safelyScheduleOnceReminder(
+                    taskId = taskEntity.id,
+                    title = taskEntity.title,
+                    startDate = onceSchedule.startDate,
+                    scheduledTime = onceSchedule.scheduledTime,
+                    reminderMinutesBefore = onceSchedule.reminderMinutesBefore
+                )
+            } else {
+                safelyCancelReminder(taskId)
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -87,6 +105,20 @@ open class PlannerRepository(
             val scheduleEntities = response.task.schedules.map { it.toEntity(taskEntity.id) }
             val completionEntities = response.completions.map { it.toEntity() }
             plannerDatabase.applyUpdateTaskSchedule(taskEntity, scheduleEntities, completionEntities)
+
+            val onceSchedule = scheduleEntities.firstOrNull { it.scheduleType == "ONCE" }
+            if (onceSchedule != null && !onceSchedule.scheduledTime.isNullOrBlank() && onceSchedule.reminderMinutesBefore != null) {
+                safelyScheduleOnceReminder(
+                    taskId = taskEntity.id,
+                    title = taskEntity.title,
+                    startDate = onceSchedule.startDate,
+                    scheduledTime = onceSchedule.scheduledTime,
+                    reminderMinutesBefore = onceSchedule.reminderMinutesBefore
+                )
+            } else {
+                safelyCancelReminder(taskId)
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -112,6 +144,22 @@ open class PlannerRepository(
             val taskEntity = response.task.toEntity()
             val completionEntities = response.completions.map { it.toEntity() }
             plannerDatabase.applyUpdateTaskContent(taskEntity, completionEntities)
+
+            val schedules = plannerDatabase.scheduleDao().getByTaskId(taskEntity.id)
+            val onceSchedule = schedules.firstOrNull { it.scheduleType == "ONCE" }
+            if (onceSchedule != null && !onceSchedule.scheduledTime.isNullOrBlank() && onceSchedule.reminderMinutesBefore != null) {
+                val completed = plannerDatabase.completionDao().findScheduledCompletion(taskEntity.id, onceSchedule.id, onceSchedule.startDate) != null
+                if (!completed) {
+                    safelyScheduleOnceReminder(
+                        taskId = taskEntity.id,
+                        title = taskEntity.title,
+                        startDate = onceSchedule.startDate,
+                        scheduledTime = onceSchedule.scheduledTime,
+                        reminderMinutesBefore = onceSchedule.reminderMinutesBefore
+                    )
+                }
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -142,6 +190,18 @@ open class PlannerRepository(
             val taskEntity = response.task.toEntity()
             val scheduleEntities = response.task.schedules.map { it.toEntity(response.task.id) }
             plannerDatabase.applyCreateTask(taskEntity, scheduleEntities)
+
+            val onceSchedule = scheduleEntities.firstOrNull { it.scheduleType == "ONCE" }
+            if (onceSchedule != null && !onceSchedule.scheduledTime.isNullOrBlank() && onceSchedule.reminderMinutesBefore != null) {
+                safelyScheduleOnceReminder(
+                    taskId = taskEntity.id,
+                    title = taskEntity.title,
+                    startDate = onceSchedule.startDate,
+                    scheduledTime = onceSchedule.scheduledTime,
+                    reminderMinutesBefore = onceSchedule.reminderMinutesBefore
+                )
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -155,6 +215,7 @@ open class PlannerRepository(
         try {
             val response = plannerApi.deleteTask("Bearer $token", taskId)
             plannerDatabase.applyDeleteTask(response.deletedTaskId)
+            safelyCancelReminder(response.deletedTaskId)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -176,6 +237,8 @@ open class PlannerRepository(
                 schedules = scheduleEntities,
                 completions = completionEntities
             )
+            safelyCancelAllReminders()
+            safelyRescheduleAllFromDatabase()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -201,6 +264,7 @@ open class PlannerRepository(
             )
             val response = plannerApi.completeTask("Bearer $token", taskId, request)
             plannerDatabase.applyComplete(response.toEntity())
+            safelyCancelReminder(taskId)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -226,9 +290,67 @@ open class PlannerRepository(
                 scheduleId = scheduleId,
                 scheduledDate = scheduledDate
             )
+
+            val task = plannerDatabase.taskDao().getById(taskId)
+            val schedules = plannerDatabase.scheduleDao().getByTaskId(taskId)
+            val onceSchedule = schedules.firstOrNull { it.scheduleType == "ONCE" }
+            if (task != null && onceSchedule != null && !onceSchedule.scheduledTime.isNullOrBlank() && onceSchedule.reminderMinutesBefore != null) {
+                safelyScheduleOnceReminder(
+                    taskId = task.id,
+                    title = task.title,
+                    startDate = onceSchedule.startDate,
+                    scheduledTime = onceSchedule.scheduledTime,
+                    reminderMinutesBefore = onceSchedule.reminderMinutesBefore
+                )
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private fun safelyScheduleOnceReminder(
+        taskId: String,
+        title: String,
+        startDate: String,
+        scheduledTime: String?,
+        reminderMinutesBefore: Int?
+    ) {
+        try {
+            reminderScheduler?.scheduleOnceReminder(
+                taskId = taskId,
+                title = title,
+                startDate = startDate,
+                scheduledTime = scheduledTime,
+                reminderMinutesBefore = reminderMinutesBefore
+            )
+        } catch (_: Exception) {
+            // Reminder scheduling failure must never fail the planner task mutation
+        }
+    }
+
+    private fun safelyCancelReminder(taskId: String) {
+        try {
+            reminderScheduler?.cancelReminder(taskId)
+        } catch (_: Exception) {
+            // Reminder cancellation failure must never fail the planner task mutation
+        }
+    }
+
+    private suspend fun safelyCancelAllReminders() {
+        try {
+            reminderScheduler?.cancelAllReminders()
+        } catch (_: Exception) {
+            // Safe fallback
+        }
+    }
+
+    private suspend fun safelyRescheduleAllFromDatabase() {
+        try {
+            reminderScheduler?.rescheduleAllFromDatabase()
+        } catch (_: Exception) {
+            // Safe fallback
         }
     }
 

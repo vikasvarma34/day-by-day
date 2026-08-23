@@ -8,6 +8,8 @@ import com.vikaspokala.daybyday.data.local.planner.PlannerDatabase
 import com.vikaspokala.daybyday.data.remote.dto.CreateTaskScheduleRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskScheduleDto
 import com.vikaspokala.daybyday.data.repository.PlannerRepository
+import com.vikaspokala.daybyday.notification.DefaultTaskReminderScheduler
+import com.vikaspokala.daybyday.notification.TaskReminderScheduler
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +24,7 @@ import retrofit2.HttpException
 class PlannerTaskViewModel(
     private val repository: PlannerRepository,
     private val plannerTodayProvider: () -> LocalDate = { LocalDate.now() },
+    private val reminderScheduler: TaskReminderScheduler? = null,
     private val onSessionExpired: () -> Unit = {},
     private val uuidProvider: () -> UUID = { UUID.randomUUID() },
     scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
@@ -29,6 +32,27 @@ class PlannerTaskViewModel(
     private val coroutineScope = scope
     private val _actionError = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = _actionError.asStateFlow()
+
+    private val _reminderNotice = MutableStateFlow<String?>(null)
+    val reminderNotice: StateFlow<String?> = _reminderNotice.asStateFlow()
+
+    fun dismissReminderNotice() {
+        _reminderNotice.value = null
+    }
+
+    fun openExactAlarmSettings(context: Context) {
+        reminderScheduler?.openExactAlarmSettings(context)
+    }
+
+    private fun isExactAlarmDeniedForSchedule(isOnce: Boolean, time: String?, reminder: Int?): Boolean {
+        if (isOnce && !time.isNullOrBlank() && reminder != null) {
+            val scheduler = reminderScheduler
+            if (scheduler != null && !scheduler.canScheduleExactAlarms()) {
+                return true
+            }
+        }
+        return false
+    }
 
     fun createLater(title: String, note: String?, isImportant: Boolean, onSuccess: () -> Unit = {}) {
         val taskId = uuidProvider().toString()
@@ -39,6 +63,17 @@ class PlannerTaskViewModel(
         title: String, note: String?, isImportant: Boolean, schedule: CreateTaskScheduleRequestDto,
         onSuccess: () -> Unit = {}
     ) {
+        if (isExactAlarmDeniedForSchedule(
+                isOnce = schedule.type == "ONCE",
+                time = schedule.scheduledTime,
+                reminder = schedule.reminderMinutesBefore
+            )
+        ) {
+            _actionError.value = null
+            _reminderNotice.value = "Turn on Alarms & reminders to use reminders."
+            return
+        }
+
         val taskId = uuidProvider().toString()
         launchAction(onSuccess) {
             repository.createTask(taskId, title, note, isImportant, plannerTodayProvider().toString(), schedule)
@@ -56,6 +91,17 @@ class PlannerTaskViewModel(
         schedule: UpdateTaskScheduleDto,
         onSuccess: () -> Unit = {}
     ) {
+        if (scheduleChanged && isExactAlarmDeniedForSchedule(
+                isOnce = schedule.type == "ONCE",
+                time = schedule.scheduledTime,
+                reminder = schedule.reminderMinutesBefore
+            )
+        ) {
+            _actionError.value = null
+            _reminderNotice.value = "Turn on Alarms & reminders to use reminders."
+            return
+        }
+
         val plannerToday = plannerTodayProvider().toString()
         launchAction(onSuccess) {
             when {
@@ -78,6 +124,17 @@ class PlannerTaskViewModel(
         schedule: UpdateTaskScheduleDto,
         onSuccess: () -> Unit = {}
     ) {
+        if (isExactAlarmDeniedForSchedule(
+                isOnce = schedule.type == "ONCE",
+                time = schedule.scheduledTime,
+                reminder = schedule.reminderMinutesBefore
+            )
+        ) {
+            _actionError.value = null
+            _reminderNotice.value = "Turn on Alarms & reminders to use reminders."
+            return
+        }
+
         val plannerToday = plannerTodayProvider().toString()
         launchAction(onSuccess) {
             if (contentChanged) repository.updateTask(
@@ -92,19 +149,28 @@ class PlannerTaskViewModel(
     private fun launchAction(onSuccess: () -> Unit, action: suspend () -> Result<Unit>) {
         coroutineScope.launch {
             _actionError.value = null
-            action().fold(onSuccess = { onSuccess() }, onFailure = { error ->
-                if (error is HttpException && error.code() == 401) onSessionExpired()
-                else _actionError.value = "Unable to save task. Please try again."
-            })
+            _reminderNotice.value = null
+            action().fold(
+                onSuccess = { onSuccess() },
+                onFailure = { error ->
+                    if (error is HttpException && error.code() == 401) onSessionExpired()
+                    else _actionError.value = "Unable to save task. Please try again."
+                }
+            )
         }
     }
 
     class Factory(private val context: Context, private val onSessionExpired: () -> Unit = {}) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val db = PlannerDatabase.getInstance(context.applicationContext)
+            val appContext = context.applicationContext
+            val db = PlannerDatabase.getInstance(appContext)
+            val sessionTokenStore = SessionTokenStore(appContext)
+            val reminderScheduler = DefaultTaskReminderScheduler(appContext, db)
+            val repository = PlannerRepository(db, sessionTokenStore, reminderScheduler = reminderScheduler)
             return PlannerTaskViewModel(
-                PlannerRepository(db, SessionTokenStore(context.applicationContext)),
+                repository = repository,
+                reminderScheduler = reminderScheduler,
                 onSessionExpired = onSessionExpired
             ) as T
         }

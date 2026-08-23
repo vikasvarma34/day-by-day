@@ -96,8 +96,12 @@ class TodayViewModel(
     class Factory(private val context: Context, private val onSessionExpired: () -> Unit = {}) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            val db = PlannerDatabase.getInstance(context.applicationContext)
-            return TodayViewModel(db, PlannerRepository(db, SessionTokenStore(context.applicationContext)), onSessionExpired = onSessionExpired) as T
+            val appContext = context.applicationContext
+            val db = PlannerDatabase.getInstance(appContext)
+            val sessionTokenStore = SessionTokenStore(appContext)
+            val reminderScheduler = com.vikaspokala.daybyday.notification.DefaultTaskReminderScheduler(appContext, db)
+            val repository = PlannerRepository(db, sessionTokenStore, reminderScheduler = reminderScheduler)
+            return TodayViewModel(db, repository, onSessionExpired = onSessionExpired) as T
         }
     }
 

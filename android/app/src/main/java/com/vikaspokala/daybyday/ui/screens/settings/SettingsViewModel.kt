@@ -26,6 +26,7 @@ import retrofit2.HttpException
 
 import com.vikaspokala.daybyday.notification.AppNotificationManager
 import com.vikaspokala.daybyday.notification.DefaultAppNotificationManager
+import com.vikaspokala.daybyday.notification.DefaultTaskReminderScheduler
 
 sealed interface RefreshUiState {
     data object Idle : RefreshUiState
@@ -284,7 +285,8 @@ class SettingsViewModel(
             val appContext = context.applicationContext
             val sessionTokenStore = SessionTokenStore(appContext)
             val plannerDatabase = PlannerDatabase.getInstance(appContext)
-            val plannerRepository = PlannerRepository(plannerDatabase, sessionTokenStore)
+            val reminderScheduler = DefaultTaskReminderScheduler(appContext, plannerDatabase)
+            val plannerRepository = PlannerRepository(plannerDatabase, sessionTokenStore, reminderScheduler = reminderScheduler)
             val authRepository = AuthRepository(sessionTokenStore)
             val notificationManager = DefaultAppNotificationManager(appContext)
             return SettingsViewModel(plannerRepository, authRepository, notificationManager, onSessionExpired) as T

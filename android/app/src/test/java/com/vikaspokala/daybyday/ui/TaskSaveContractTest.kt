@@ -217,7 +217,7 @@ class TaskSaveContractTest {
         assertNull(state.recurrence)
         assertFalse(shouldShowTaskReminderAndRepeat(true, past, today))
         assertEquals(past, parseTaskDate(past.toString(), today))
-        assertEquals("10:30", buildCreateSchedule(past, "10:30 AM", state.reminder, state.recurrence).scheduledTime)
+        assertEquals("10:30:00", buildCreateSchedule(past, "10:30 AM", state.reminder, state.recurrence).scheduledTime)
     }
 
     @Test
@@ -275,5 +275,155 @@ class TaskSaveContractTest {
                 true, start, null, today, false, null, Recurrence.IntervalDays(2, start.plusDays(1))
             )
         )
+    }
+
+    private class FakeExactAlarmScheduler(
+        var exactAlarmsAllowed: Boolean = true
+    ) : com.vikaspokala.daybyday.notification.TaskReminderScheduler {
+        override fun canScheduleExactAlarms(): Boolean = exactAlarmsAllowed
+        override fun openExactAlarmSettings(context: android.content.Context) {}
+        override fun calculateTriggerEpochMillis(
+            startDate: String,
+            scheduledTime: String,
+            reminderMinutesBefore: Int,
+            zoneId: java.time.ZoneId
+        ): Long? = null
+        override fun scheduleOnceReminder(
+            taskId: String,
+            title: String,
+            startDate: String,
+            scheduledTime: String?,
+            reminderMinutesBefore: Int?
+        ): com.vikaspokala.daybyday.notification.ReminderScheduleResult {
+            return if (exactAlarmsAllowed) com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
+            else com.vikaspokala.daybyday.notification.ReminderScheduleResult.ExactAlarmPermissionDenied
+        }
+        override fun cancelReminder(taskId: String) {}
+        override suspend fun cancelAllReminders() {}
+        override suspend fun rescheduleAllFromDatabase() {}
+    }
+
+    @Test
+    fun saveTask_withReminderAndExactAlarmDenied_doesNotCallRepository_andEmitsFriendlyNotice() {
+        val database = FakePlannerDatabase()
+        val repository = RecordingPlannerRepository(database)
+        val scheduler = FakeExactAlarmScheduler(exactAlarmsAllowed = false)
+        val viewModel = PlannerTaskViewModel(
+            repository = repository,
+            plannerTodayProvider = { today },
+            reminderScheduler = scheduler
+        )
+
+        var successCalled = false
+        val schedule = buildCreateSchedule(today, "2:00 PM", "15 minutes before", null)
+        viewModel.createScheduled("Doctor", null, false, schedule, onSuccess = { successCalled = true })
+
+        assertFalse("Task creation must not succeed when exact alarm is denied", successCalled)
+        assertEquals("Repository must NOT be called", 0, repository.calls.size)
+        assertEquals(
+            "Turn on Alarms & reminders to use reminders.",
+            viewModel.reminderNotice.value
+        )
+        assertNull("Save error must be null (not a save failure)", viewModel.actionError.value)
+    }
+
+    @Test
+    fun saveTask_withReminderAndExactAlarmAllowed_callsRepositoryNormally() {
+        val database = FakePlannerDatabase()
+        val repository = RecordingPlannerRepository(database)
+        val scheduler = FakeExactAlarmScheduler(exactAlarmsAllowed = true)
+        val viewModel = PlannerTaskViewModel(
+            repository = repository,
+            plannerTodayProvider = { today },
+            reminderScheduler = scheduler
+        )
+
+        var successCalled = false
+        val schedule = buildCreateSchedule(today, "2:00 PM", "15 minutes before", null)
+        viewModel.createScheduled("Doctor", null, false, schedule, onSuccess = { successCalled = true })
+
+        assertTrue("Task creation must succeed", successCalled)
+        assertEquals("Repository must be called once", 1, repository.calls.size)
+        assertNull("Reminder notice must be null when exact alarm allowed", viewModel.reminderNotice.value)
+        assertNull("Save error must be null", viewModel.actionError.value)
+    }
+
+    @Test
+    fun saveTask_withoutReminder_callsRepositoryNormally_evenWhenExactAlarmDenied() {
+        val database = FakePlannerDatabase()
+        val repository = RecordingPlannerRepository(database)
+        val scheduler = FakeExactAlarmScheduler(exactAlarmsAllowed = false)
+        val viewModel = PlannerTaskViewModel(
+            repository = repository,
+            plannerTodayProvider = { today },
+            reminderScheduler = scheduler
+        )
+
+        var successCalled = false
+        val schedule = buildCreateSchedule(today, "2:00 PM", null, null)
+        viewModel.createScheduled("Untimed Task", null, false, schedule, onSuccess = { successCalled = true })
+
+        assertTrue("Task creation without reminder must succeed even if exact alarm is off", successCalled)
+        assertEquals(1, repository.calls.size)
+        assertNull(viewModel.reminderNotice.value)
+        assertNull(viewModel.actionError.value)
+    }
+
+    @Test
+    fun saveTask_withReminderAndExactAlarmAllowed_whenRepositoryFails_showsSaveErrorOnly() {
+        val database = FakePlannerDatabase()
+        val repository = RecordingPlannerRepository(database, result = Result.failure(java.io.IOException("Network error")))
+        val scheduler = FakeExactAlarmScheduler(exactAlarmsAllowed = true)
+        val viewModel = PlannerTaskViewModel(
+            repository = repository,
+            plannerTodayProvider = { today },
+            reminderScheduler = scheduler
+        )
+
+        var successCalled = false
+        val schedule = buildCreateSchedule(today, "2:00 PM", "15 minutes before", null)
+        viewModel.createScheduled("Doctor", null, false, schedule, onSuccess = { successCalled = true })
+
+        assertFalse("Task creation must not succeed", successCalled)
+        assertEquals(1, repository.calls.size)
+        assertEquals("Unable to save task. Please try again.", viewModel.actionError.value)
+        assertNull("Reminder notice must NOT be emitted on genuine save failure", viewModel.reminderNotice.value)
+    }
+
+    @Test
+    fun buildCreateSchedule_withNoTime_producesNullScheduledTime() {
+        val schedule = buildCreateSchedule(today, null, null, null)
+        assertEquals("ONCE", schedule.type)
+        assertNull(schedule.scheduledTime)
+        assertNull(schedule.reminderMinutesBefore)
+    }
+
+    @Test
+    fun buildCreateSchedule_withValidTime_producesIsoTimeWithSeconds_matchingBackendContract() {
+        val timeRegex = Regex("^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$")
+
+        // 10:30 PM -> 22:30:00
+        val schedule1 = buildCreateSchedule(today, "10:30 PM", null, null)
+        assertEquals("22:30:00", schedule1.scheduledTime)
+        assertTrue(timeRegex.matches(schedule1.scheduledTime!!))
+
+        // 9:05 AM -> 09:05:00
+        val schedule2 = buildCreateSchedule(today, "9:05 AM", "5 minutes before", null)
+        assertEquals("09:05:00", schedule2.scheduledTime)
+        assertEquals(5, schedule2.reminderMinutesBefore)
+        assertTrue(timeRegex.matches(schedule2.scheduledTime!!))
+
+        // 14:00 -> 14:00:00
+        val schedule3 = buildCreateSchedule(today, "14:00", null, null)
+        assertEquals("14:00:00", schedule3.scheduledTime)
+        assertTrue(timeRegex.matches(schedule3.scheduledTime!!))
+    }
+
+    @Test
+    fun buildUpdateSchedule_withValidTime_producesIsoTimeWithSeconds_matchingBackendContract() {
+        val timeRegex = Regex("^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$")
+        val updateSchedule = com.vikaspokala.daybyday.ui.planner.buildUpdateSchedule(today, "10:30 PM", null, null)
+        assertEquals("22:30:00", updateSchedule.scheduledTime)
+        assertTrue(timeRegex.matches(updateSchedule.scheduledTime!!))
     }
 }

@@ -80,6 +80,7 @@ import com.vikaspokala.daybyday.ui.theme.DayByDaySurface
 @Composable
 fun AppShell(
     user: AuthUserDto? = null,
+    openTodayTrigger: Int = 0,
     onSessionExpired: () -> Unit = {},
     onUserUpdated: (AuthUserDto) -> Unit = {},
     onPasswordChanged: () -> Unit = onSessionExpired,
@@ -108,7 +109,25 @@ fun AppShell(
     LaunchedEffect(taskActionError) {
         taskActionError?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     }
+    val reminderNotice by plannerTaskViewModel.reminderNotice.collectAsState()
+    LaunchedEffect(reminderNotice) {
+        reminderNotice?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            plannerTaskViewModel.dismissReminderNotice()
+        }
+    }
     val backStack = rememberNavBackStack(Screen.Today as NavKey)
+
+    LaunchedEffect(openTodayTrigger) {
+        if (openTodayTrigger > 0) {
+            if (backStack.size == 1) {
+                backStack[0] = Screen.Today
+            } else {
+                backStack.clear()
+                backStack.add(Screen.Today)
+            }
+        }
+    }
 
     val currentScreen = backStack.lastOrNull() as? Screen ?: Screen.Today
 

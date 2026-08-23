@@ -2500,4 +2500,149 @@ class PlannerRepositoryTest {
         assertEquals(true, fakeDb.tasksMap["task-comb-lock"]?.isImportant)
         assertNotNull(fakeDb.schedulesMap["sched-comb-lock"])
     }
+
+    private class RecordingReminderScheduler : com.vikaspokala.daybyday.notification.TaskReminderScheduler {
+        val scheduled = mutableListOf<String>()
+        val cancelled = mutableListOf<String>()
+        var cancelAllCount = 0
+        var rescheduleAllCount = 0
+
+        override fun canScheduleExactAlarms(): Boolean = true
+        override fun openExactAlarmSettings(context: android.content.Context) {}
+        override fun calculateTriggerEpochMillis(
+            startDate: String,
+            scheduledTime: String,
+            reminderMinutesBefore: Int,
+            zoneId: java.time.ZoneId
+        ): Long? = null
+
+        override fun scheduleOnceReminder(
+            taskId: String,
+            title: String,
+            startDate: String,
+            scheduledTime: String?,
+            reminderMinutesBefore: Int?
+        ): com.vikaspokala.daybyday.notification.ReminderScheduleResult {
+            scheduled.add(taskId)
+            return com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
+        }
+
+        override fun cancelReminder(taskId: String) {
+            cancelled.add(taskId)
+        }
+
+        override suspend fun cancelAllReminders() {
+            cancelAllCount++
+        }
+
+        override suspend fun rescheduleAllFromDatabase() {
+            rescheduleAllCount++
+        }
+    }
+
+    @Test
+    fun createTask_withOnceReminder_triggersScheduler() = runTest {
+        val fakeDb = InMemoryTestDatabase()
+        val scheduler = RecordingReminderScheduler()
+        val fakeApi = FakePlannerApi(
+            createResult = Result.success(
+                CreateTaskResponseDto(
+                    task = TaskResponseDto(
+                        id = "task-rem-1",
+                        title = "Task with Reminder",
+                        note = null,
+                        isImportant = false,
+                        schedules = listOf(
+                            TaskScheduleResponseDto(
+                                id = "sched-rem-1",
+                                type = "ONCE",
+                                startDate = "2026-08-25",
+                                scheduledTime = "14:00:00",
+                                reminderMinutesBefore = 15,
+                                createdAt = "2026-08-23T10:00:00.000Z",
+                                updatedAt = "2026-08-23T10:00:00.000Z"
+                            )
+                        ),
+                        createdAt = "2026-08-23T10:00:00.000Z",
+                        updatedAt = "2026-08-23T10:00:00.000Z"
+                    )
+                )
+            )
+        )
+
+        val repo = PlannerRepository(fakeDb, { "token" }, fakeApi, reminderScheduler = scheduler)
+        val result = repo.createTask(
+            taskId = "task-rem-1",
+            title = "Task with Reminder",
+            schedule = CreateTaskScheduleRequestDto(
+                type = "ONCE",
+                startDate = "2026-08-25",
+                scheduledTime = "14:00:00",
+                reminderMinutesBefore = 15
+            )
+        )
+
+        assertTrue(result.isSuccess)
+        assertTrue(scheduler.scheduled.contains("task-rem-1"))
+    }
+
+    @Test
+    fun completeTask_cancelsAlarm() = runTest {
+        val fakeDb = InMemoryTestDatabase()
+        val scheduler = RecordingReminderScheduler()
+        val fakeApi = FakePlannerApi(
+            completeResult = Result.success(
+                CompleteTaskResponseDto(
+                    id = "comp-1",
+                    taskId = "task-comp-1",
+                    scheduleId = "sched-1",
+                    scheduledDate = "2026-08-25",
+                    completedDate = "2026-08-25",
+                    completedAt = "2026-08-25T14:00:00.000Z",
+                    titleSnapshot = "Task",
+                    isImportantSnapshot = false
+                )
+            )
+        )
+
+        val repo = PlannerRepository(fakeDb, { "token" }, fakeApi, reminderScheduler = scheduler)
+        repo.completeTask("task-comp-1", "2026-08-25", "2026-08-25")
+
+        assertTrue(scheduler.cancelled.contains("task-comp-1"))
+    }
+
+    @Test
+    fun deleteTask_cancelsAlarm() = runTest {
+        val fakeDb = InMemoryTestDatabase()
+        val scheduler = RecordingReminderScheduler()
+        val fakeApi = FakePlannerApi(
+            deleteResult = Result.success(DeleteTaskResponseDto("task-del-1"))
+        )
+
+        val repo = PlannerRepository(fakeDb, { "token" }, fakeApi, reminderScheduler = scheduler)
+        repo.deleteTask("task-del-1")
+
+        assertTrue(scheduler.cancelled.contains("task-del-1"))
+    }
+
+    @Test
+    fun refresh_reschedulesAllReminders() = runTest {
+        val fakeDb = InMemoryTestDatabase()
+        val scheduler = RecordingReminderScheduler()
+        val fakeApi = FakePlannerApi(
+            refreshResult = Result.success(
+                PlannerRefreshResponseDto(
+                    tasks = emptyList(),
+                    schedules = emptyList(),
+                    completions = emptyList()
+                )
+            )
+        )
+
+        val repo = PlannerRepository(fakeDb, { "token" }, fakeApi, reminderScheduler = scheduler)
+        repo.refresh()
+
+        assertEquals(1, scheduler.cancelAllCount)
+        assertEquals(1, scheduler.rescheduleAllCount)
+    }
 }

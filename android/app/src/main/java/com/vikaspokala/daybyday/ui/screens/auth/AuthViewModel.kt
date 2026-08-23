@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
+import com.vikaspokala.daybyday.notification.DefaultTaskReminderScheduler
+import com.vikaspokala.daybyday.notification.TaskReminderScheduler
+
 sealed interface AuthUiState {
     data object Loading : AuthUiState
     data class SignedOut(
@@ -31,7 +34,8 @@ sealed interface AuthUiState {
 
 class AuthViewModel(
     private val authRepository: AuthRepository,
-    private val plannerDatabase: PlannerDatabase? = null
+    private val plannerDatabase: PlannerDatabase? = null,
+    private val reminderScheduler: TaskReminderScheduler? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Loading)
@@ -45,13 +49,16 @@ class AuthViewModel(
         val storedOwnerId = authRepository.getCacheOwner()
         val db = plannerDatabase
         if (storedOwnerId == user.id) {
-            // Matching owner: keep existing Room cache
+            // Matching owner: keep existing Room cache and restore eligible future ONCE reminders
+            reminderScheduler?.rescheduleAllFromDatabase()
         } else if (storedOwnerId != null) {
-            // Different owner: clear all account-specific planner Room cache and store new owner
+            // Different owner: cancel previous owner's reminders, clear all account-specific planner Room cache and store new owner
+            reminderScheduler?.cancelAllReminders()
             db?.clearPlannerData()
             authRepository.saveCacheOwner(user.id)
         } else {
             // Missing/unknown cache owner
+            reminderScheduler?.cancelAllReminders()
             if (db != null && db.hasAnyData()) {
                 // Room contains data with unknown owner: unsafe, clear it
                 db.clearPlannerData()
@@ -186,6 +193,7 @@ class AuthViewModel(
 
     fun handleSessionExpired() {
         viewModelScope.launch {
+            reminderScheduler?.cancelAllReminders()
             authRepository.clearSession()
             _uiState.value = AuthUiState.SignedOut()
         }
@@ -193,6 +201,7 @@ class AuthViewModel(
 
     fun handlePasswordChanged() {
         viewModelScope.launch {
+            reminderScheduler?.cancelAllReminders()
             authRepository.clearSession()
             _uiState.value = AuthUiState.SignedOut()
         }
@@ -202,7 +211,8 @@ class AuthViewModel(
         viewModelScope.launch {
             val token = authRepository.getStoredToken()
 
-            // 1. Immediately perform local logout
+            // 1. Immediately perform local logout and cancel reminders
+            reminderScheduler?.cancelAllReminders()
             authRepository.clearSession()
             try {
                 plannerDatabase?.clearPlannerData()
@@ -234,7 +244,8 @@ class AuthViewModel(
             val sessionTokenStore = SessionTokenStore(appContext)
             val authRepository = AuthRepository(sessionTokenStore)
             val plannerDatabase = PlannerDatabase.getInstance(appContext)
-            return AuthViewModel(authRepository, plannerDatabase) as T
+            val reminderScheduler = DefaultTaskReminderScheduler(appContext, plannerDatabase)
+            return AuthViewModel(authRepository, plannerDatabase, reminderScheduler) as T
         }
     }
 }
