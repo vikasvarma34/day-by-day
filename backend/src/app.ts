@@ -5,12 +5,19 @@ import helmet from 'helmet';
 import { createAuthRouter } from './auth/auth.router';
 import { createPlannerRouter } from './planner/planner.router';
 import { createTasksRouter } from './planner/tasks/tasks.router';
+import { getPool } from './db/pool';
 import { errorHandler } from './errors/error.middleware';
 import { NotFoundError } from './errors/http-errors';
 import { requestLogger } from './logging/request-logger.middleware';
 import { validateContentType } from './middleware/content-type.middleware';
 
-export function createApp(): Express {
+export interface AppOptions {
+  dbClient?: {
+    query: (text: string, values?: readonly unknown[]) => Promise<unknown>;
+  };
+}
+
+export function createApp(options: AppOptions = {}): Express {
   const app = express();
 
   // Disable Express signature
@@ -30,6 +37,16 @@ export function createApp(): Express {
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
+  });
+
+  app.get('/ready', async (_req, res) => {
+    try {
+      const client = options.dbClient ?? getPool();
+      await client.query('SELECT 1');
+      res.json({ status: 'ready' });
+    } catch {
+      res.status(503).json({ status: 'unavailable' });
+    }
   });
 
   app.use('/auth', createAuthRouter());
