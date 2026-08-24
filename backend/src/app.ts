@@ -1,3 +1,5 @@
+/// <reference path="./types/express.d.ts" />
+
 import express, { Express } from 'express';
 import helmet from 'helmet';
 import { createAuthRouter } from './auth/auth.router';
