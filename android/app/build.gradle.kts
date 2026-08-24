@@ -8,6 +8,11 @@ plugins {
 val debugBaseUrl: String = providers.gradleProperty("DAY_BY_DAY_BASE_URL")
     .getOrElse("http://10.0.2.2:3000/")
 
+val releaseStoreFile = providers.gradleProperty("DAY_BY_DAY_RELEASE_STORE_FILE")
+val releaseStorePassword = providers.gradleProperty("DAY_BY_DAY_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = providers.gradleProperty("DAY_BY_DAY_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = providers.gradleProperty("DAY_BY_DAY_RELEASE_KEY_PASSWORD")
+
 android {
     namespace = "com.vikaspokala.daybyday"
     compileSdk = 37
@@ -22,12 +27,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseStoreFile.isPresent) {
+                storeFile = file(releaseStoreFile.get())
+                storePassword = releaseStorePassword.orNull
+                keyAlias = releaseKeyAlias.orNull
+                keyPassword = releaseKeyPassword.orNull
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "BASE_URL", "\"$debugBaseUrl\"")
         }
         release {
-            buildConfigField("String", "BASE_URL", "\"https://api.daybyday.invalid/\"")
+            signingConfig = signingConfigs.getByName("release")
+            buildConfigField("String", "BASE_URL", "\"https://day-by-day-one.vercel.app/\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
