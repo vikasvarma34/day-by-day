@@ -451,4 +451,29 @@ class TaskSaveContractTest {
         )
         assertNull(state.reminder)
     }
+
+    @Test
+    fun reschedulingPastTaskToToday_usesPlannerTodayAsEffectiveDate() {
+        val database = FakePlannerDatabase()
+        val repository = RecordingPlannerRepository(database)
+        val viewModel = PlannerTaskViewModel(repository, { today })
+        val past = today.minusDays(1)
+        val schedule = buildUpdateSchedule(today, null, null, null)
+
+        val initialDate = past
+        val effectiveDate = if (initialDate.isBefore(today)) today else initialDate
+
+        viewModel.saveExisting(
+            "task", "Past Task", null, false,
+            contentChanged = false,
+            scheduleChanged = true,
+            effectiveDate = effectiveDate,
+            schedule = schedule
+        )
+
+        assertEquals(
+            PlannerUiCall.Schedule("task", today.toString(), today.toString(), schedule),
+            repository.calls.single()
+        )
+    }
 }

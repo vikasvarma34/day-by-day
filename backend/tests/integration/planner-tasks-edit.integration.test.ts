@@ -214,6 +214,38 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     assert.equal(body.task.schedules[0].startDate, tomorrow);
   });
 
+  await t.test('reschedules past incomplete ONCE task forward to today', async () => {
+    const taskId = getValidId();
+    // 1. Create task scheduled for yesterday
+    const createRes = await fetch(`${baseUrl}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+      body: JSON.stringify({
+        id: taskId,
+        title: 'Past Incomplete ONCE',
+        plannerToday: yesterday,
+        schedule: { type: 'ONCE', startDate: yesterday }
+      }),
+    });
+    assert.equal(createRes.status, 201);
+
+    // 2. Reschedule it forward to today with effectiveDate = today and plannerToday = today
+    const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+      body: JSON.stringify({
+        plannerToday: today,
+        effectiveDate: today,
+        schedule: { type: 'ONCE', startDate: today }
+      }),
+    });
+    assert.equal(res.status, 200);
+    const body = await (res.json() as any);
+    assert.equal(body.task.schedules.length, 1);
+    assert.equal(body.task.schedules[0].startDate, today);
+    assert.equal(body.task.schedules[0].endDate, today);
+  });
+
   await t.test('content-only edit of a historical task with past schedule is not blocked', async () => {
     const taskId = getValidId();
     // Directly insert historical task with past schedule in DB

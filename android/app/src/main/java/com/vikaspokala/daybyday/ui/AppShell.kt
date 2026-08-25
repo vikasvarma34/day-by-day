@@ -447,11 +447,13 @@ fun AppShell(
                                         val contentChanged = title != key.initialTitle || note.orEmpty() != key.initialNote.orEmpty() || isImp != key.initialIsImportant
                                         val scheduleChanged = newDateStr != key.dateString || newTimeStr != key.timeString ||
                                             newReminderStr != key.reminderString || newRecurrenceStr != key.recurrence
-                                        val date = parseDateString(newDateStr, todayViewModel.getPlannerToday())
-                                            ?: parseDateString(key.dateString, todayViewModel.getPlannerToday())
-                                            ?: todayViewModel.getPlannerToday()
-                                        val effectiveDate = parseDateString(key.dateString, todayViewModel.getPlannerToday())
-                                            ?: todayViewModel.getPlannerToday()
+                                        val plannerToday = todayViewModel.getPlannerToday()
+                                        val date = parseDateString(newDateStr, plannerToday)
+                                            ?: parseDateString(key.dateString, plannerToday)
+                                            ?: plannerToday
+                                        val initialDate = parseDateString(key.dateString, plannerToday)
+                                            ?: plannerToday
+                                        val effectiveDate = if (initialDate.isBefore(plannerToday)) plannerToday else initialDate
                                         plannerTaskViewModel.saveExisting(
                                             id, title, note, isImp, contentChanged, scheduleChanged,
                                             effectiveDate, buildUpdateSchedule(date, newTimeStr, newReminderStr, newRecurrenceStr), onSuccess
