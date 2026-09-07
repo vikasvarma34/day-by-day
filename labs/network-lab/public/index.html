@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Networking Learning Lab</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="lab-container">
+    <header class="lab-header">
+      <div class="badge-tag">Phase 3: Deep TLS Inspection</div>
+      <h1>Networking Learning Lab</h1>
+      <p class="subtitle">Inspect real HTTPS connections, capture raw TLS record bytes, and examine TLS 1.3 key derivation.</p>
+    </header>
+
+    <section class="target-panel">
+      <div class="target-input-wrap">
+        <label for="target-input" class="target-label">Target URL:</label>
+        <input
+          type="url"
+          id="target-input"
+          class="target-input"
+          value="https://day-by-day-one.vercel.app/health"
+          placeholder="https://example.com/"
+          spellcheck="false"
+          autocomplete="off"
+        />
+      </div>
+      <div class="actions-wrap">
+        <button id="inspect-btn" class="primary-btn" type="button">
+          Run Real Inspection
+        </button>
+        <button id="deep-inspect-btn" class="warning-btn" type="button">
+          Run Deep TLS Inspection
+        </button>
+      </div>
+      <div class="deep-warning-note">
+        Deep TLS inspection exposes encryption secrets for this temporary debugging connection. Use only for learning.
+      </div>
+    </section>
+
+    <div id="status-banner" class="status-banner hidden"></div>
+
+    <section class="stages-section">
+      <h2 class="section-title">Inspection Stages</h2>
+      
+      <!-- Stage 1: DNS -->
+      <article class="stage-card" id="stage-dns">
+        <div class="stage-header">
+          <div class="stage-order">1</div>
+          <div class="stage-title-wrap">
+            <h3 class="stage-title">DNS</h3>
+            <span class="layer-pill">Name Resolution</span>
+          </div>
+          <span class="status-pill waiting" id="dns-status">waiting</span>
+        </div>
+        <div class="conceptual-box">
+          <span class="tag conceptual-tag">CONCEPTUAL</span>
+          <p class="conceptual-text">Translates human-readable hostnames into numerical IP addresses before establishing a connection.</p>
+        </div>
+        <div class="observed-box">
+          <span class="tag observed-tag">OBSERVED</span>
+          <div class="observed-summary" id="dns-summary">Awaiting inspection...</div>
+        </div>
+        <details class="details-accordion" id="dns-details">
+          <summary>Details</summary>
+          <div class="details-content" id="dns-details-content">No data yet.</div>
+        </details>
+      </article>
+
+      <!-- Stage 2: TCP -->
+      <article class="stage-card" id="stage-tcp">
+        <div class="stage-header">
+          <div class="stage-order">2</div>
+          <div class="stage-title-wrap">
+            <h3 class="stage-title">TCP</h3>
+            <span class="layer-pill">Transport Layer</span>
+          </div>
+          <span class="status-pill waiting" id="tcp-status">waiting</span>
+        </div>
+        <div class="conceptual-box">
+          <span class="tag conceptual-tag">CONCEPTUAL</span>
+          <p class="conceptual-text">Establishes a reliable, ordered, bidirectional byte stream connection between this Mac and the destination server.</p>
+        </div>
+        <div class="observed-box">
+          <span class="tag observed-tag">OBSERVED</span>
+          <div class="observed-summary" id="tcp-summary">Awaiting inspection...</div>
+          <p class="ip-boundary-note">
+            <em>Note on IP Routing:</em> Destination IP observed. IP routing between your Mac and the destination happens across network infrastructure, but this lab does not inspect every router hop.
+          </p>
+        </div>
+        <details class="details-accordion" id="tcp-details">
+          <summary>Details</summary>
+          <div class="details-content" id="tcp-details-content">No data yet.</div>
+        </details>
+      </article>
+
+      <!-- Stage 3: TLS -->
+      <article class="stage-card" id="stage-tls">
+        <div class="stage-header">
+          <div class="stage-order">3</div>
+          <div class="stage-title-wrap">
+            <h3 class="stage-title">TLS</h3>
+            <span class="layer-pill">Security &amp; Encryption</span>
+          </div>
+          <span class="status-pill waiting" id="tls-status">waiting</span>
+        </div>
+        <div class="conceptual-box">
+          <span class="tag conceptual-tag">CONCEPTUAL</span>
+          <p class="conceptual-text">Authenticates the server's identity using certificates and negotiates cryptographic keys to encrypt the transport stream.</p>
+        </div>
+        <div class="observed-box">
+          <span class="tag observed-tag">OBSERVED</span>
+          <div class="observed-summary" id="tls-summary">Awaiting inspection...</div>
+        </div>
+        <details class="details-accordion" id="tls-details">
+          <summary>Details</summary>
+          <div class="details-content" id="tls-details-content">No data yet.</div>
+        </details>
+        <details class="details-accordion" id="public-key-accordion">
+          <summary>Public Key</summary>
+          <div class="details-content" id="public-key-details-content">
+            <p class="crypto-note">This is public information from the server certificate. The corresponding private key stays secret on the server.</p>
+            <div id="public-key-info">No key loaded yet.</div>
+          </div>
+        </details>
+      </article>
+
+      <!-- Stage 4: HTTP -->
+      <article class="stage-card" id="stage-http">
+        <div class="stage-header">
+          <div class="stage-order">4</div>
+          <div class="stage-title-wrap">
+            <h3 class="stage-title">HTTP</h3>
+            <span class="layer-pill">Application Protocol</span>
+          </div>
+          <span class="status-pill waiting" id="http-status">waiting</span>
+        </div>
+        <div class="conceptual-box">
+          <span class="tag conceptual-tag">CONCEPTUAL</span>
+          <p class="conceptual-text">Gives meaning and structure to the request transmitted across the established secure channel.</p>
+        </div>
+        <div class="observed-box">
+          <span class="tag observed-tag">OBSERVED</span>
+          <div class="observed-summary" id="http-summary">Awaiting inspection...</div>
+        </div>
+        <details class="details-accordion" id="http-details">
+          <summary>Details</summary>
+          <div class="details-content" id="http-details-content">No data yet.</div>
+        </details>
+      </article>
+
+      <!-- Stage 5: RESPONSE -->
+      <article class="stage-card" id="stage-response">
+        <div class="stage-header">
+          <div class="stage-order">5</div>
+          <div class="stage-title-wrap">
+            <h3 class="stage-title">RESPONSE</h3>
+            <span class="layer-pill">Application Payload</span>
+          </div>
+          <span class="status-pill waiting" id="response-status">waiting</span>
+        </div>
+        <div class="conceptual-box">
+          <span class="tag conceptual-tag">CONCEPTUAL</span>
+          <p class="conceptual-text">Transfers the status code, response headers, and payload bytes returned by the server.</p>
+        </div>
+        <div class="observed-box">
+          <span class="tag observed-tag">OBSERVED</span>
+          <div class="observed-summary" id="response-summary">Awaiting inspection...</div>
+        </div>
+        <details class="details-accordion" id="response-details">
+          <summary>Details</summary>
+          <div class="details-content" id="response-details-content">No data yet.</div>
+        </details>
+      </article>
+    </section>
+
+    <!-- Application Bytes & TLS Boundary Section -->
+    <section class="boundary-section">
+      <h2 class="section-title">Application Bytes &amp; TLS Boundary</h2>
+
+      <div class="boundary-flow-card">
+        <h3 class="card-subtitle">Encryption &amp; Decryption Flow</h3>
+        <div class="flow-columns">
+          <div class="flow-column">
+            <div class="flow-header">Request Direction (Outbound)</div>
+            <div class="flow-step">HTTP request bytes</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step highlight-tls">TLS encryption</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step wire-step">
+              <div>Encrypted TLS records travel over TCP/IP</div>
+              <div class="wire-notice">Encrypted wire bytes are not captured by this Phase 2 lab.</div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step highlight-tls">Remote TLS decryption</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">HTTP server</div>
+          </div>
+
+          <div class="flow-column">
+            <div class="flow-header">Return Path (Inbound)</div>
+            <div class="flow-step">HTTP response</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step highlight-tls">TLS encryption</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step wire-step">
+              <div>Encrypted TLS records travel over TCP/IP</div>
+              <div class="wire-notice">Encrypted wire bytes are not captured by this Phase 2 lab.</div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step highlight-tls">Local TLS decryption</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">HTTP response bytes</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bytes-card">
+        <div class="bytes-card-header">
+          <span class="tag observed-tag">OBSERVED/CONSTRUCTED FROM THE ACTUAL HTTP REQUEST BEFORE TLS ENCRYPTION</span>
+          <span class="byte-count-badge" id="req-byte-badge">0 bytes</span>
+        </div>
+        <p class="bytes-desc">Plaintext HTTP request formed locally before transmission to the TLS layer.</p>
+        <details class="details-accordion">
+          <summary>HTTP Request Plaintext</summary>
+          <div class="details-content" id="req-plaintext">Awaiting inspection...</div>
+        </details>
+        <details class="details-accordion">
+          <summary>HTTP Request UTF-8 Hexadecimal Bytes</summary>
+          <div class="details-content" id="req-hexdump">Awaiting inspection...</div>
+        </details>
+      </div>
+
+      <div class="bytes-card">
+        <div class="bytes-card-header">
+          <span class="tag observed-tag">PLAINTEXT RESPONSE BODY AFTER TLS DECRYPTION</span>
+          <span class="byte-count-badge" id="res-byte-badge">0 bytes</span>
+        </div>
+        <p class="bytes-desc">Decrypted payload bytes received from the TLS layer.</p>
+        <details class="details-accordion">
+          <summary>Response Body Plaintext</summary>
+          <div class="details-content" id="res-plaintext">Awaiting inspection...</div>
+        </details>
+        <details class="details-accordion">
+          <summary>Response Body UTF-8 Hexadecimal Bytes</summary>
+          <div class="details-content" id="res-hexdump">Awaiting inspection...</div>
+        </details>
+      </div>
+    </section>
+
+    <!-- Deep TLS View Section (Phase 3) -->
+    <section class="deep-tls-section" id="deep-tls-view">
+      <h2 class="section-title">Deep TLS View — Phase 3 Real Byte &amp; Key Analysis</h2>
+
+      <!-- Cryptographic Key Roles Explanation -->
+      <div class="boundary-flow-card">
+        <h3 class="card-subtitle">Cryptographic Key Roles</h3>
+        <div class="key-roles-grid">
+          <div class="role-box">
+            <div class="role-title">Certificate Public/Private Key</div>
+            <div class="role-desc">Used exclusively for authentication during initial TLS setup to verify server identity. Does not encrypt individual HTTP requests.</div>
+          </div>
+          <div class="role-box">
+            <div class="role-title">TLS Traffic Secrets</div>
+            <div class="role-desc">Temporary master secrets generated and negotiated strictly for this specific connection.</div>
+          </div>
+          <div class="role-box">
+            <div class="role-title">Symmetric Application Keys</div>
+            <div class="role-desc">Derived from traffic secrets via HKDF-Expand-Label to provide fast, authenticated symmetric payload encryption (e.g. AES-GCM).</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 3 Learning Visual Flow -->
+      <div class="boundary-flow-card">
+        <h3 class="card-subtitle">Real Transformation &amp; Network Flow</h3>
+        <div class="flow-columns">
+          <div class="flow-column">
+            <div class="flow-header">Outbound Request Flow</div>
+            <div class="flow-step">PLAINTEXT REQUEST<br><small id="flow-req-line">GET /health HTTP/1.1</small></div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step highlight-tls">TLS<br><small>uses Client → Server application encryption key</small></div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step wire-step">REAL OUTBOUND TLS BYTES<br><small>actual captured raw wire bytes</small></div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">TCP / IP</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">REMOTE TLS</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">HTTP SERVER</div>
+          </div>
+
+          <div class="flow-column">
+            <div class="flow-header">Inbound Return Flow</div>
+            <div class="flow-step">HTTP RESPONSE</div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">REMOTE TLS<br><small>uses Server → Client encryption</small></div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step wire-step">REAL INBOUND TLS BYTES<br><small>actual captured raw wire bytes</small></div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step highlight-tls">LOCAL TLS<br><small>decrypts using Server → Client key</small></div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-step">PLAINTEXT HTTP RESPONSE</div>
+          </div>
+        </div>
+        <p class="remote-notice">Note: This lab observes the remote side only through the network bytes exchanged. It does not directly observe the remote TLS implementation internally.</p>
+      </div>
+
+      <!-- Plaintext Application Bytes Given to TLS -->
+      <div class="bytes-card">
+        <div class="bytes-card-header">
+          <span class="tag observed-tag">Plaintext application bytes given TO TLS</span>
+          <span class="byte-count-badge" id="deep-req-plain-badge">0 bytes</span>
+        </div>
+        <details class="details-accordion">
+          <summary>Plaintext Request Text</summary>
+          <pre class="details-content" id="deep-req-plain-text">No deep inspection data yet.</pre>
+        </details>
+        <details class="details-accordion">
+          <summary>Plaintext Request UTF-8 Hex Bytes</summary>
+          <pre class="details-content" id="deep-req-plain-hex">No deep inspection data yet.</pre>
+        </details>
+      </div>
+
+      <!-- Actual Captured Outbound TLS Bytes -->
+      <div class="bytes-card">
+        <div class="bytes-card-header">
+          <span class="tag observed-tag">OUTBOUND TLS BYTES (TLS → TCP)</span>
+          <span class="byte-count-badge" id="deep-outbound-tls-badge">0 bytes</span>
+        </div>
+        <p class="bytes-desc">Real TLS wire bytes observed between Node's TLS layer and the underlying TCP connection.</p>
+        <details class="details-accordion">
+          <summary>Outbound TLS Record Structure Analysis</summary>
+          <pre class="details-content" id="deep-outbound-tls-records">No deep inspection data yet.</pre>
+        </details>
+        <details class="details-accordion">
+          <summary>Outbound Raw TLS Bytes (Hexadecimal)</summary>
+          <pre class="details-content" id="deep-outbound-tls-hex">No deep inspection data yet.</pre>
+        </details>
+      </div>
+
+      <!-- Actual Captured Inbound TLS Bytes -->
+      <div class="bytes-card">
+        <div class="bytes-card-header">
+          <span class="tag observed-tag">INBOUND TLS BYTES (TCP → TLS)</span>
+          <span class="byte-count-badge" id="deep-inbound-tls-badge">0 bytes</span>
+        </div>
+        <p class="bytes-desc">Real TLS wire bytes supplied by the TCP connection into Node's TLS layer.</p>
+        <details class="details-accordion">
+          <summary>Inbound TLS Record Structure Analysis</summary>
+          <pre class="details-content" id="deep-inbound-tls-records">No deep inspection data yet.</pre>
+        </details>
+        <details class="details-accordion">
+          <summary>Inbound Raw TLS Bytes (Hexadecimal)</summary>
+          <pre class="details-content" id="deep-inbound-tls-hex">No deep inspection data yet.</pre>
+        </details>
+      </div>
+
+      <!-- Decrypted Response Received From TLS -->
+      <div class="bytes-card">
+        <div class="bytes-card-header">
+          <span class="tag observed-tag">Plaintext application bytes received FROM TLS</span>
+          <span class="byte-count-badge" id="deep-res-plain-badge">0 bytes</span>
+        </div>
+        <details class="details-accordion">
+          <summary>Decrypted Response Status &amp; Headers</summary>
+          <pre class="details-content" id="deep-res-headers">No deep inspection data yet.</pre>
+        </details>
+        <details class="details-accordion">
+          <summary>Decrypted Response Body Plaintext</summary>
+          <pre class="details-content" id="deep-res-plain-body">No deep inspection data yet.</pre>
+        </details>
+        <details class="details-accordion">
+          <summary>Decrypted Response Full UTF-8 Hex Bytes</summary>
+          <pre class="details-content" id="deep-res-plain-hex">No deep inspection data yet.</pre>
+        </details>
+      </div>
+
+      <!-- TLS 1.3 Traffic Secrets -->
+      <div class="bytes-card sensitive-card">
+        <div class="bytes-card-header">
+          <span class="tag warning-tag">TLS 1.3 Traffic Secrets — Sensitive Debug Data</span>
+          <span class="byte-count-badge" id="deep-secrets-badge">0 secrets</span>
+        </div>
+        <p class="crypto-warning">
+          Anyone who has these secrets together with the captured TLS traffic may be able to decrypt this connection. These values exist here only for this local learning experiment.
+        </p>
+        <details class="details-accordion">
+          <summary>TLS Key Log NSS Lines</summary>
+          <pre class="details-content" id="deep-secrets-content">No secrets loaded yet.</pre>
+        </details>
+      </div>
+
+      <!-- Derived TLS 1.3 Application Encryption Keys -->
+      <div class="bytes-card sensitive-card">
+        <div class="bytes-card-header">
+          <span class="tag warning-tag">Derived TLS 1.3 Application Encryption Keys</span>
+          <span class="byte-count-badge" id="deep-derived-badge">HKDF-Expand-Label</span>
+        </div>
+        <p class="crypto-note">
+          These are connection-specific. Another HTTPS connection normally derives different values.
+        </p>
+        <details class="details-accordion">
+          <summary>Client → Server &amp; Server → Client Derived Keys</summary>
+          <pre class="details-content" id="deep-derived-content">No derived keys loaded yet.</pre>
+        </details>
+      </div>
+    </section>
+
+    <!-- Timeline Summary -->
+    <section class="timeline-section">
+      <h2 class="section-title">Measured Timeline</h2>
+      <div class="timeline-grid">
+        <div class="timeline-item">
+          <span class="timeline-label">DNS lookup</span>
+          <span class="timeline-value" id="time-dns">— ms</span>
+        </div>
+        <div class="timeline-item">
+          <span class="timeline-label">TCP connect</span>
+          <span class="timeline-value" id="time-tcp">— ms</span>
+        </div>
+        <div class="timeline-item">
+          <span class="timeline-label">TLS handshake</span>
+          <span class="timeline-value" id="time-tls">— ms</span>
+        </div>
+        <div class="timeline-item">
+          <span class="timeline-label">HTTP response wait</span>
+          <span class="timeline-value" id="time-http-wait">— ms</span>
+        </div>
+        <div class="timeline-item total-item">
+          <span class="timeline-label">Total</span>
+          <span class="timeline-value" id="time-total">— ms</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Mental Model Section -->
+    <section class="mental-model-section">
+      <h2 class="section-title">Mental Model</h2>
+      
+      <div class="mental-model-container">
+        <div class="stack-diagram">
+          <div class="stack-layer layer-http">
+            <div class="layer-name">HTTP</div>
+            <div class="layer-desc">gives meaning/structure to the request and response</div>
+          </div>
+          <div class="stack-arrow">↓</div>
+          <div class="stack-layer layer-tls">
+            <div class="layer-name">TLS</div>
+            <div class="layer-desc">authenticates the server and encrypts communication</div>
+          </div>
+          <div class="stack-arrow">↓</div>
+          <div class="stack-layer layer-tcp">
+            <div class="layer-name">TCP</div>
+            <div class="layer-desc">provides the reliable ordered byte stream</div>
+          </div>
+          <div class="stack-arrow">↓</div>
+          <div class="stack-layer layer-ip">
+            <div class="layer-name">IP</div>
+            <div class="layer-desc">routes packets toward the network destination</div>
+          </div>
+        </div>
+
+        <div class="dns-preconnection-box">
+          <div class="dns-name">DNS</div>
+          <div class="dns-desc">finds the network address before the connection begins</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
