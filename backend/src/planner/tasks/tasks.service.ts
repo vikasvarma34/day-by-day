@@ -8,7 +8,10 @@ const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
 const ALLOWED_REMINDERS = [0, 5, 10, 15, 30, 60, 1440, 2880];
 
 export class TasksService {
-  constructor(private readonly tasksRepository: TasksRepository = new TasksRepository()) {}
+  constructor(
+    private readonly tasksRepository: TasksRepository = new TasksRepository(),
+    private readonly nowProvider: () => Date = () => new Date()
+  ) {}
 
   async createTask(
     userId: string,
@@ -72,7 +75,7 @@ export class TasksService {
       if (!plannerToday) {
         throw new BadRequestError('plannerToday is required for scheduled task creation');
       }
-      const today = validatePlausiblePlannerToday(plannerToday);
+      const today = validatePlausiblePlannerToday(plannerToday, this.nowProvider());
 
       const startDate = validatePlannerDate(s.startDate, 'startDate');
 
@@ -244,7 +247,7 @@ export class TasksService {
       if (!payload.effectiveDate) {
         throw new BadRequestError('effectiveDate is required for schedule changes');
       }
-      dto.plannerToday = validatePlausiblePlannerToday(payload.plannerToday);
+      dto.plannerToday = validatePlausiblePlannerToday(payload.plannerToday, this.nowProvider());
       dto.effectiveDate = validatePlannerDate(payload.effectiveDate, 'effectiveDate');
 
       if (dto.effectiveDate < dto.plannerToday) {
@@ -367,7 +370,7 @@ export class TasksService {
     if (!payload.plannerToday) {
       throw new BadRequestError('plannerToday is required');
     }
-    const plannerToday = validatePlausiblePlannerToday(payload.plannerToday);
+    const plannerToday = validatePlausiblePlannerToday(payload.plannerToday, this.nowProvider());
 
     if (!payload.completedDate) {
       throw new BadRequestError('completedDate is required');
@@ -462,7 +465,7 @@ export class TasksService {
     if (!payload.plannerToday) {
       throw new BadRequestError('plannerToday is required');
     }
-    const plannerToday = validatePlausiblePlannerToday(payload.plannerToday);
+    const plannerToday = validatePlausiblePlannerToday(payload.plannerToday, this.nowProvider());
 
     await this.tasksRepository.stopRecurrence(userId, taskId, { plannerToday });
   }

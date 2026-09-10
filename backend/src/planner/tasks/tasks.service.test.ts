@@ -10,12 +10,16 @@ describe('TasksService', () => {
   let service: TasksService;
   const mockUserId = 'user-123';
 
-  const today = new Date().toISOString().split('T')[0];
-  const dPast1 = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const dPast2 = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const dPast4 = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const dFuture5 = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const dFuture6 = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  // Deterministic fixed reference clock (immune to UTC midnight / real clock drift)
+  const FIXED_NOW = new Date('2026-06-15T12:00:00.000Z');
+  const nowProvider = () => new Date(FIXED_NOW.getTime());
+
+  const today = '2026-06-15';
+  const dPast1 = '2026-06-14';
+  const dPast2 = '2026-06-13';
+  const dPast4 = '2026-06-11';
+  const dFuture5 = '2026-06-20';
+  const dFuture6 = '2026-06-21';
 
   beforeEach(() => {
     mockRepository = {
@@ -27,7 +31,7 @@ describe('TasksService', () => {
       deleteTask: mock.fn(),
       stopRecurrence: mock.fn(),
     };
-    service = new TasksService(mockRepository as any);
+    service = new TasksService(mockRepository as any, nowProvider);
   });
 
   it('rejects missing or invalid UUID', async () => {
@@ -53,16 +57,18 @@ describe('TasksService', () => {
   });
 
   it('creates task without schedule (Later task)', async () => {
-    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: {} }));
+    const mockTask = { id: '00000000-0000-4000-a000-000000000000', title: 'Later Task', note: 'No schedule' };
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: mockTask }));
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Later Task',
       note: 'No schedule'
     };
-    await service.createTask(mockUserId, payload);
-    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
-    assert.equal(callArgs[0], mockUserId);
-    assert.equal(callArgs[1].schedule, null);
+    const result = await service.createTask(mockUserId, payload);
+    assert.deepEqual(result, { isNew: true, task: mockTask });
+    const [calledUserId, calledDto] = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(calledUserId, mockUserId);
+    assert.equal(calledDto.schedule, null);
   });
 
   it('rejects schedule creation without plannerToday for scheduled tasks (ONCE)', async () => {
@@ -90,16 +96,17 @@ describe('TasksService', () => {
   });
 
   it('allows historical ONCE start date before plannerToday without reminder', async () => {
-    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: {} }));
+    const mockTask = { id: '00000000-0000-4000-a000-000000000000' };
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: mockTask }));
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Task',
       plannerToday: today,
       schedule: { type: 'ONCE', startDate: dPast2 }
     };
-    await service.createTask(mockUserId, payload);
-    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
-    assert.equal(callArgs[1].schedule.startDate, dPast2);
+    const result = await service.createTask(mockUserId, payload);
+    assert.equal(mockRepository.createIdempotent.mock.calls.length, 1);
+    assert.deepEqual(result, { isNew: true, task: mockTask });
   });
 
   it('rejects historical ONCE start date before plannerToday when reminder is provided', async () => {
@@ -116,29 +123,31 @@ describe('TasksService', () => {
   });
 
   it('allows ONCE start date equal to plannerToday', async () => {
-    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: {} }));
+    const mockTask = { id: '00000000-0000-4000-a000-000000000000' };
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: mockTask }));
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Task',
       plannerToday: today,
       schedule: { type: 'ONCE', startDate: today }
     };
-    await service.createTask(mockUserId, payload);
-    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
-    assert.equal(callArgs[1].schedule.startDate, today);
+    const result = await service.createTask(mockUserId, payload);
+    assert.equal(mockRepository.createIdempotent.mock.calls.length, 1);
+    assert.deepEqual(result, { isNew: true, task: mockTask });
   });
 
   it('allows ONCE start date after plannerToday', async () => {
-    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: {} }));
+    const mockTask = { id: '00000000-0000-4000-a000-000000000000' };
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: mockTask }));
     const payload = {
       id: '00000000-0000-4000-a000-000000000000',
       title: 'Task',
       plannerToday: today,
       schedule: { type: 'ONCE', startDate: dFuture5 }
     };
-    await service.createTask(mockUserId, payload);
-    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
-    assert.equal(callArgs[1].schedule.startDate, dFuture5);
+    const result = await service.createTask(mockUserId, payload);
+    assert.equal(mockRepository.createIdempotent.mock.calls.length, 1);
+    assert.deepEqual(result, { isNew: true, task: mockTask });
   });
 
   it('rejects recurring start date before plannerToday', async () => {
@@ -163,9 +172,8 @@ describe('TasksService', () => {
       schedule: { type: 'ONCE', startDate: today, endDate: dFuture5 }
     };
     await service.createTask(mockUserId, payload);
-    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
-    assert.equal(callArgs[0], mockUserId);
-    assert.equal(callArgs[1].schedule.endDate, today);
+    const [, calledDto] = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(calledDto.schedule.endDate, today);
   });
 
   it('rejects finite recurring range containing no occurrences', async () => {
@@ -222,8 +230,8 @@ describe('TasksService', () => {
       schedule: { type: 'WEEKDAYS', startDate: '2050-01-01', endDate: '2050-01-05', weekdaysMask: 127 }
     };
     await service.createTask(mockUserId, payload);
-    const callArgs = mockRepository.createIdempotent.mock.calls[0].arguments;
-    assert.equal(callArgs[1].schedule.endDate, '2050-01-05');
+    const [, calledDto] = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(calledDto.schedule.endDate, '2050-01-05');
   });
 
   it('updateTask rejects schedule change if startDate < plannerToday for ONCE', async () => {
@@ -282,7 +290,7 @@ describe('TasksService', () => {
     await assert.rejects(
       service.completeTask(mockUserId, '00000000-0000-4000-a000-000000000000', {
         plannerToday: today,
-        completedDate: '2026-08-01',
+        completedDate: dPast4,
         scheduleId: '00000000-0000-4000-a000-000000000001',
         scheduledDate: dPast2
       }),

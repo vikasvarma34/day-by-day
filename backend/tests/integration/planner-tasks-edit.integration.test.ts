@@ -2,7 +2,7 @@ import { test, describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import { createApp } from '../../src/app';
-import { getPool } from '../../src/db/pool';
+import { getPool, closePool } from '../../src/db/pool';
 import { createTestUserFixture, deleteTestUserById, getTestDate } from './auth-test-fixtures';
 import { generateSessionToken, hashSessionToken } from '../../src/security/session';
 import crypto from 'node:crypto';
@@ -59,6 +59,7 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
 
     await deleteTestUserById(user1.id);
     await deleteTestUserById(user2.id);
+    await closePool();
   });
 
   const getValidId = () => crypto.randomUUID();
@@ -545,6 +546,23 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
   });
 
   await t.test('Concurrency: FOR UPDATE lock serializes edits', async () => {
+    async function waitForBlockedLock(queryPattern: string, maxWaitMs = 4000): Promise<boolean> {
+      const start = Date.now();
+      while (Date.now() - start < maxWaitMs) {
+        const res = await pool.query(
+          `SELECT pid, wait_event_type, wait_event, state 
+           FROM pg_stat_activity 
+           WHERE wait_event_type = 'Lock' AND state = 'active' AND query ILIKE $1`,
+          [`%${queryPattern}%`]
+        );
+        if (res.rows.length > 0) {
+          return true;
+        }
+        await new Promise(r => setTimeout(r, 20));
+      }
+      return false;
+    }
+
     const taskId = getValidId();
     await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
@@ -569,16 +587,23 @@ test('PATCH /tasks/:taskId Integration Suite', async (t) => {
     let patchFinished = false;
     patchPromise.then(() => { patchFinished = true; });
 
-    await new Promise(r => setTimeout(r, 200));
-    assert.equal(patchFinished, false);
+    // Deterministically wait for PostgreSQL to record that the PATCH transaction is blocked waiting on the lock
+    const isBlocked = await waitForBlockedLock('tasks');
+    assert.equal(isBlocked, true, 'PostgreSQL should report the PATCH task query is waiting on a Lock');
+    assert.equal(patchFinished, false, 'PATCH request should not complete while the FOR UPDATE lock is held');
 
     await lockClient.query('UPDATE tasks SET title = $1 WHERE id = $2', ['Updated By Lock', taskId]);
     await lockClient.query('COMMIT');
     lockClient.release();
 
     const res = await patchPromise;
+    assert.equal(patchFinished, true, 'PATCH request must finish once lock transaction commits');
     assert.equal(res.status, 200);
     const body = await (res.json() as any);
     assert.equal(body.task.title, 'Updated After Lock');
+
+    // Verify DB reflects the update made after lock release
+    const taskInDb = await pool.query('SELECT title FROM tasks WHERE id = $1', [taskId]);
+    assert.equal(taskInDb.rows[0].title, 'Updated After Lock');
   });
 });

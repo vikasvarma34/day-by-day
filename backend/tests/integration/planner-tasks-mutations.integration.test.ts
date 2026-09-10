@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import { createApp } from '../../src/app';
-import { getPool } from '../../src/db/pool';
+import { getPool, closePool } from '../../src/db/pool';
 import { createTestUserFixture, deleteTestUserById, getTestDate } from './auth-test-fixtures';
 import { generateSessionToken, hashSessionToken } from '../../src/security/session';
 import crypto from 'node:crypto';
@@ -52,6 +52,7 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
     await pool.query('DELETE FROM tasks WHERE user_id = $1 OR user_id = $2', [user1.id, user2.id]);
     await deleteTestUserById(user1.id);
     await deleteTestUserById(user2.id);
+    await closePool();
   });
 
   const getValidId = () => '11111111-1111-4111-a111-' + Math.floor(Math.random() * 1000000000000).toString().padStart(12, '0');
@@ -410,7 +411,36 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
   await t.test('Concurrency and Rollback Proofs', async (sub) => {
     await sub.test('held-row-lock serializes FOR UPDATE queries', async () => {
       const taskId = getValidId();
-      await pool.query(`INSERT INTO tasks (id, user_id, title) VALUES ($1, $2, 'Lock Test')`, [taskId, user1.id]);
+      const createRes = await fetch(`${baseUrl}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+        body: JSON.stringify({
+          id: taskId,
+          title: 'Lock Test',
+          plannerToday: today,
+          schedule: { type: 'ONCE', startDate: today }
+        })
+      });
+      assert.equal(createRes.status, 201);
+      const createdData = (await createRes.json()) as any;
+      const scheduleId = createdData.task.schedules[0].id;
+
+      async function waitForBlockedLock(queryPattern: string, maxWaitMs = 4000): Promise<boolean> {
+        const start = Date.now();
+        while (Date.now() - start < maxWaitMs) {
+          const res = await pool.query(
+            `SELECT pid, wait_event_type, wait_event, state 
+             FROM pg_stat_activity 
+             WHERE wait_event_type = 'Lock' AND state = 'active' AND query ILIKE $1`,
+            [`%${queryPattern}%`]
+          );
+          if (res.rows.length > 0) {
+            return true;
+          }
+          await new Promise(r => setTimeout(r, 20));
+        }
+        return false;
+      }
 
       const client1 = await pool.connect();
       await client1.query('BEGIN');
@@ -418,20 +448,34 @@ test('Planner Tasks Mutations API Integration Suite', async (t) => {
 
       let fetchCompleted = false;
       const fetchPromise = fetch(`${baseUrl}/tasks/${taskId}/complete`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
-        body: JSON.stringify({ plannerToday: today, completedDate: today })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+        body: JSON.stringify({
+          plannerToday: today,
+          completedDate: today,
+          scheduleId,
+          scheduledDate: today
+        })
       }).then(r => { fetchCompleted = true; return r; });
 
-      // Wait a bit to prove it's blocked
-      await new Promise(r => setTimeout(r, 100));
-      assert.equal(fetchCompleted, false, 'Fetch should be blocked by FOR UPDATE lock');
+      // Deterministically wait for PostgreSQL to record that the complete transaction is waiting on the lock
+      const isBlocked = await waitForBlockedLock('tasks');
+      assert.equal(isBlocked, true, 'PostgreSQL should report the completeTask query is waiting on a Lock');
+      assert.equal(fetchCompleted, false, 'Fetch should not complete while the FOR UPDATE lock is held');
 
       await client1.query('COMMIT');
       client1.release();
 
       const res = await fetchPromise;
-      // It returns 409 because we didn't setup schedule properly, but the block works and it returns!
-      assert.equal(fetchCompleted, true);
+      assert.equal(fetchCompleted, true, 'Fetch must complete after lock is released');
+      assert.equal(res.status, 200, 'Complete request should succeed with HTTP 200 once unblocked');
+      const body = (await res.json()) as any;
+      assert.ok(body.id, 'Should return completion in response');
+      assert.equal(body.completedDate, today);
+
+      // Verify completion row was persisted in database
+      const completionCheck = await pool.query('SELECT * FROM task_completions WHERE task_id = $1', [taskId]);
+      assert.equal(completionCheck.rows.length, 1);
     });
 
     await sub.test('mid-transaction PostgreSQL failure rolls back prior mutations', async () => {

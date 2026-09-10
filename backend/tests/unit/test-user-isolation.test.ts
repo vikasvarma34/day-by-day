@@ -50,15 +50,88 @@ test('Automated Test User Isolation & Cleanup Unit Suite', async (t) => {
     assert.equal(pattern.test(trickyDomain3), false, 'Must not match non-.invalid TLD');
   });
 
-  await t.test('8. cleanup implementation is idempotent and uses scoped queries', async () => {
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const fixturesPath = path.resolve(__dirname, '../integration/auth-test-fixtures.ts');
-    const content = fs.readFileSync(fixturesPath, 'utf8');
+  await t.test('8. cleanup execution is idempotent, scopes deletes to @daybyday-test.invalid, and wraps in transaction', async () => {
+    const originalGuard = process.env.ALLOW_AUTOMATED_TEST_USER_CLEANUP;
+    process.env.ALLOW_AUTOMATED_TEST_USER_CLEANUP = 'true';
 
-    assert.ok(content.includes('WHERE LOWER(email) LIKE $1'));
-    assert.ok(content.includes('testDomainPattern'));
-    assert.ok(!content.includes('DELETE FROM users;') && !content.includes('DELETE FROM users WHERE id !='));
+    try {
+      const executedQueries: Array<{ text: string; values?: readonly unknown[] }> = [];
+      let clientReleased = false;
+
+      const createFakePool = () => ({
+        connect: async () => ({
+          query: async (text: string, values?: readonly unknown[]) => {
+            executedQueries.push({ text: text.trim(), values });
+            if (text.includes('DELETE FROM users')) {
+              return { rowCount: 2 };
+            }
+            return { rowCount: 0 };
+          },
+          release: () => {
+            clientReleased = true;
+          },
+        }),
+      });
+
+      // 1. Run cleanup
+      const result1 = await cleanAutomatedTestUsers({ pool: createFakePool() });
+      assert.equal(result1.deletedUserCount, 2);
+      assert.equal(clientReleased, true);
+
+      // Verify transaction boundary
+      assert.equal(executedQueries[0].text, 'BEGIN');
+      assert.equal(executedQueries[executedQueries.length - 1].text, 'COMMIT');
+
+      // Verify all DELETE queries are scoped to the testDomainPattern parameter
+      const deleteQueries = executedQueries.filter((q) => q.text.startsWith('DELETE FROM'));
+      assert.equal(deleteQueries.length, 6, 'Should execute 6 scoped deletes (completions, schedules, tasks, throttles, sessions, users)');
+
+      for (const q of deleteQueries) {
+        assert.ok(
+          q.values && q.values[0] === '%@daybyday-test.invalid',
+          `Delete query must be parameterized with test domain pattern: ${q.text}`
+        );
+        assert.ok(
+          !q.text.includes('DELETE FROM users;') && !q.text.includes('TRUNCATE'),
+          'Must never issue unconditional DELETE or TRUNCATE on users'
+        );
+      }
+
+      // 2. Idempotency: run cleanup a second time
+      executedQueries.length = 0;
+      const result2 = await cleanAutomatedTestUsers({ pool: createFakePool() });
+      assert.equal(result2.deletedUserCount, 2);
+      assert.equal(executedQueries[0].text, 'BEGIN');
+      assert.equal(executedQueries[executedQueries.length - 1].text, 'COMMIT');
+
+      // 3. Rollback on query failure
+      let rollbackCalled = false;
+      const failingPool = {
+        connect: async () => ({
+          query: async (text: string) => {
+            if (text === 'BEGIN') return {};
+            if (text === 'ROLLBACK') {
+              rollbackCalled = true;
+              return {};
+            }
+            throw new Error('database disk failure');
+          },
+          release: () => {},
+        }),
+      };
+
+      await assert.rejects(
+        () => cleanAutomatedTestUsers({ pool: failingPool }),
+        /database disk failure/
+      );
+      assert.equal(rollbackCalled, true, 'Must execute ROLLBACK when query fails');
+    } finally {
+      if (originalGuard !== undefined) {
+        process.env.ALLOW_AUTOMATED_TEST_USER_CLEANUP = originalGuard;
+      } else {
+        delete process.env.ALLOW_AUTOMATED_TEST_USER_CLEANUP;
+      }
+    }
   });
 
   await t.test('9. cleanup refuses to run without its explicit safety guard ALLOW_AUTOMATED_TEST_USER_CLEANUP=true', async () => {

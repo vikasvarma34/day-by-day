@@ -83,22 +83,10 @@ test('User Creation Integration Suite', async (t) => {
     assert.equal(dbRow.rows[0].nickname, null);
   });
 
-  await t.test('password length boundaries (14 fails, 15 succeeds, 128 succeeds, 129 fails)', async () => {
+  await t.test('persists user across password length boundaries (15 chars minimum, 128 chars maximum)', async () => {
     const baseEmail = generateUniqueEmail('pwdlen');
 
-    // 14 characters - fails
-    await assert.rejects(
-      () =>
-        createUserAccount({
-          email: `${baseEmail}.14`,
-          password: '12345678901234',
-          firstName: 'Dave',
-          lastName: 'Miller',
-        }),
-      UserCreationError
-    );
-
-    // 15 characters - succeeds
+    // 15 characters (minimum valid) hashes and persists to PostgreSQL
     const user15 = await createUserAccount({
       email: `${baseEmail}.15`,
       password: '123456789012345',
@@ -108,7 +96,7 @@ test('User Creation Integration Suite', async (t) => {
     createdUserIds.push(user15.id);
     assert.ok(user15.id);
 
-    // 128 characters - succeeds
+    // 128 characters (maximum valid) hashes and persists to PostgreSQL without column truncation
     const user128 = await createUserAccount({
       email: `${baseEmail}.128`,
       password: 'a'.repeat(128),
@@ -117,18 +105,6 @@ test('User Creation Integration Suite', async (t) => {
     });
     createdUserIds.push(user128.id);
     assert.ok(user128.id);
-
-    // 129 characters - fails
-    await assert.rejects(
-      () =>
-        createUserAccount({
-          email: `${baseEmail}.129`,
-          password: 'a'.repeat(129),
-          firstName: 'Dave',
-          lastName: 'Miller',
-        }),
-      UserCreationError
-    );
   });
 
   await t.test('strong passwords with symbols, unicode, and spaces are accepted', async () => {

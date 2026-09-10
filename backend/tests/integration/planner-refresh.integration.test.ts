@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import { createApp } from '../../src/app';
-import { getPool } from '../../src/db/pool';
+import { getPool, closePool } from '../../src/db/pool';
 import { createTestUserFixture, deleteTestUserById, getTestDate } from './auth-test-fixtures';
 import { generateSessionToken, hashSessionToken } from '../../src/security/session';
 import { RefreshRepository } from '../../src/planner/refresh/refresh.repository';
@@ -49,6 +49,7 @@ test('GET /planner/refresh Integration Suite', async (t) => {
       await pool.query('DELETE FROM tasks WHERE user_id = $1', [id]);
       await deleteTestUserById(id);
     }
+    await closePool();
   });
 
   const getValidId = () => crypto.randomUUID();

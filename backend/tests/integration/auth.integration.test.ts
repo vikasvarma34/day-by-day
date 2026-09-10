@@ -59,6 +59,13 @@ test('Authentication Service Integration Suite', async (t) => {
 
     await loginSuite.test('unknown email fails with generic AuthenticationError and creates zero throttle/session rows', async () => {
       const unknownEmail = 'nonexistent.user.12345@daybyday-test.invalid';
+
+      // Capture pre-login baseline counts
+      const throttlesBeforeRes = await pool.query('SELECT COUNT(*) FROM auth_throttles');
+      const sessionsBeforeRes = await pool.query('SELECT COUNT(*) FROM auth_sessions');
+      const throttlesBefore = parseInt(throttlesBeforeRes.rows[0].count, 10);
+      const sessionsBefore = parseInt(sessionsBeforeRes.rows[0].count, 10);
+
       await assert.rejects(
         async () => {
           await authService.login(unknownEmail, 'ValidPassword12345!');
@@ -71,9 +78,33 @@ test('Authentication Service Integration Suite', async (t) => {
       );
 
       // Verify zero throttle or session rows exist in DB for nonexistent email
-      const throttleCount = await pool.query('SELECT COUNT(*) FROM auth_throttles');
-      const initialCount = parseInt(throttleCount.rows[0].count, 10);
-      assert.ok(initialCount >= 0);
+      const throttlesAfterRes = await pool.query('SELECT COUNT(*) FROM auth_throttles');
+      const sessionsAfterRes = await pool.query('SELECT COUNT(*) FROM auth_sessions');
+      const throttlesAfter = parseInt(throttlesAfterRes.rows[0].count, 10);
+      const sessionsAfter = parseInt(sessionsAfterRes.rows[0].count, 10);
+
+      assert.equal(throttlesAfter, throttlesBefore, 'auth_throttles count must not increase for unknown email');
+      assert.equal(sessionsAfter, sessionsBefore, 'auth_sessions count must not increase for unknown email');
+
+      // Verify scoped queries confirm no records exist associated with this email
+      const userRes = await pool.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [unknownEmail]);
+      assert.equal(userRes.rows.length, 0, 'No user should exist for unknown email');
+
+      const scopedThrottles = await pool.query(
+        `SELECT at.user_id FROM auth_throttles at
+         JOIN users u ON at.user_id = u.id
+         WHERE LOWER(u.email) = LOWER($1)`,
+        [unknownEmail]
+      );
+      assert.equal(scopedThrottles.rows.length, 0, 'No throttle record should exist for unknown email');
+
+      const scopedSessions = await pool.query(
+        `SELECT s.id FROM auth_sessions s
+         JOIN users u ON s.user_id = u.id
+         WHERE LOWER(u.email) = LOWER($1)`,
+        [unknownEmail]
+      );
+      assert.equal(scopedSessions.rows.length, 0, 'No session record should exist for unknown email');
     });
 
     await loginSuite.test('wrong password fails with generic AuthenticationError and creates no session', async () => {

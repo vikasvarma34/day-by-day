@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import { createApp } from '../../src/app';
-import { getPool } from '../../src/db/pool';
+import { getPool, closePool } from '../../src/db/pool';
 import { createTestUserFixture, deleteTestUserById } from './auth-test-fixtures';
 import { generateSessionToken, hashSessionToken } from '../../src/security/session';
 
@@ -32,7 +32,7 @@ test('Planner Tasks PATCH Content-Only Canonical Response Integration Suite', as
       await pool.query('DELETE FROM tasks WHERE user_id = $1', [user.id]);
       await deleteTestUserById(user.id);
     }
-    await pool.end();
+    await closePool();
   });
 
   const getValidId = () => '44444444-4444-4444-a444-' + Math.floor(Math.random() * 1000000000000).toString().padStart(12, '0');

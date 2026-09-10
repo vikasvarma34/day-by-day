@@ -2,7 +2,7 @@ import { test, describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import { createApp } from '../../src/app';
-import { getPool } from '../../src/db/pool';
+import { getPool, closePool } from '../../src/db/pool';
 import { createTestUserFixture, deleteTestUserById, getTestDate } from './auth-test-fixtures';
 import { generateSessionToken, hashSessionToken } from '../../src/security/session';
 import { TasksRepository } from '../../src/planner/tasks/tasks.repository';
@@ -20,9 +20,9 @@ test('POST /tasks Integration Suite', async (t) => {
   let token1: string;
   let token2: string;
 
-  const today = getTestDate(0);
-  const pastDate = getTestDate(-4);
-  const futureDate = getTestDate(1);
+  const getToday = () => getTestDate(0);
+  const getPastDate = () => getTestDate(-4);
+  const getFutureDate = () => getTestDate(1);
 
   t.before(async () => {
     user1 = await createTestUserFixture({ emailSuffix: 'taskcreator1' });
@@ -47,6 +47,7 @@ test('POST /tasks Integration Suite', async (t) => {
     await pool.query('DELETE FROM tasks WHERE user_id = $1 OR user_id = $2', [user1.id, user2.id]);
     await deleteTestUserById(user1.id);
     await deleteTestUserById(user2.id);
+    await closePool();
   });
 
   const getValidId = () => '11111111-1111-4111-a111-' + Math.floor(Math.random() * 1000000000000).toString().padStart(12, '0');
@@ -85,6 +86,8 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('creates historical ONCE task when startDate < plannerToday without reminder', async () => {
     const id = getValidId();
+    const today = getToday();
+    const pastDate = getPastDate();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
@@ -105,6 +108,8 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('creates historical ONCE task with optional scheduledTime', async () => {
     const id = getValidId();
+    const today = getToday();
+    const pastDate = getPastDate();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
@@ -122,6 +127,8 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('rejects creating historical ONCE task when reminder is provided with 400', async () => {
     const id = getValidId();
+    const today = getToday();
+    const pastDate = getPastDate();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
@@ -139,6 +146,8 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('rejects creating historical INTERVAL_DAYS task when startDate < plannerToday with 400', async () => {
     const id = getValidId();
+    const today = getToday();
+    const pastDate = getPastDate();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
@@ -156,6 +165,8 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('rejects creating historical WEEKDAYS task when startDate < plannerToday with 400', async () => {
     const id = getValidId();
+    const today = getToday();
+    const pastDate = getPastDate();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
@@ -173,6 +184,7 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('creates a task with ONCE schedule atomically when startDate >= plannerToday', async () => {
     const id = getValidId();
+    const today = getToday();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
@@ -194,6 +206,7 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('creates a task with INTERVAL_DAYS schedule', async () => {
     const id = getValidId();
+    const today = getToday();
     const res = await fetch(`${baseUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token1}` },
@@ -228,6 +241,8 @@ test('POST /tasks Integration Suite', async (t) => {
 
   await t.test('handles genuinely concurrent requests idempotently and safely', async () => {
     const id = getValidId();
+    const today = getToday();
+    const futureDate = getFutureDate();
     const payloadA = { id, title: 'Concurrent Winner', note: 'Payload A', plannerToday: today, schedule: { type: 'ONCE', startDate: today } };
     const payloadB = { id, title: 'Concurrent Loser', note: 'Payload B', plannerToday: today, schedule: { type: 'ONCE', startDate: futureDate } };
 

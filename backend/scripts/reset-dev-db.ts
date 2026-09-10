@@ -4,7 +4,18 @@ import { normalizeEmail } from '../src/security/validation';
 import { createUserAccount } from '../src/auth/user-creation';
 import { AuthRepository } from '../src/auth/auth.repository';
 
-export async function resetDevelopmentDatabase(): Promise<void> {
+export interface ResetDatabaseOptions {
+  pool?: {
+    connect: () => Promise<{
+      query: (text: string, values?: readonly unknown[]) => Promise<any>;
+      release: () => void;
+    }>;
+  };
+  authRepository?: Pick<AuthRepository, 'findUserByEmail'>;
+  createUser?: typeof createUserAccount;
+}
+
+export async function resetDevelopmentDatabase(options: ResetDatabaseOptions = {}): Promise<void> {
   const nodeEnv = getNodeEnv();
   const allowReset = process.env.ALLOW_DEV_DB_RESET?.trim();
 
@@ -30,7 +41,7 @@ export async function resetDevelopmentDatabase(): Promise<void> {
 
   console.log(`Resetting development database (NODE_ENV=${nodeEnv})...`);
 
-  const pool = getPool();
+  const pool = options.pool ?? getPool();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -46,10 +57,11 @@ export async function resetDevelopmentDatabase(): Promise<void> {
     await client.query('COMMIT');
 
     // Ensure the configured persistent dev user exists; if missing, seed it
-    const repository = new AuthRepository();
+    const repository = options.authRepository ?? new AuthRepository();
     const existing = await repository.findUserByEmail(devEmail);
     if (!existing) {
-      const created = await createUserAccount({
+      const createFn = options.createUser ?? createUserAccount;
+      const created = await createFn({
         email: devEmail,
         password: devPassword,
         firstName: 'Dev',
@@ -65,10 +77,15 @@ export async function resetDevelopmentDatabase(): Promise<void> {
   } catch (error: any) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('Database reset failed:', error.message || error);
+    if (options.pool) {
+      throw error;
+    }
     process.exitCode = 1;
   } finally {
     client.release();
-    await closePool();
+    if (!options.pool) {
+      await closePool();
+    }
   }
 }
 

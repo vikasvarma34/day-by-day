@@ -15,9 +15,12 @@ export const DB_POOL_DEFAULTS = {
 let poolInstance: Pool | null = null;
 
 export function createPoolConfig(connectionString: string): PoolConfig {
+  const envMax = process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX, 10) : NaN;
+  const max = Number.isInteger(envMax) && envMax > 0 ? envMax : DB_POOL_DEFAULTS.max;
+
   return {
     connectionString,
-    max: DB_POOL_DEFAULTS.max,
+    max,
     connectionTimeoutMillis: DB_POOL_DEFAULTS.connectionTimeoutMillis,
     idleTimeoutMillis: DB_POOL_DEFAULTS.idleTimeoutMillis,
     statement_timeout: DB_POOL_DEFAULTS.statement_timeout,

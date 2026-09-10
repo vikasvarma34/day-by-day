@@ -64,11 +64,22 @@ export async function deleteTestUserById(userId: string): Promise<void> {
   await pool.query('DELETE FROM users WHERE id = $1', [userId]);
 }
 
+export interface CleanAutomatedTestUsersOptions {
+  pool?: {
+    connect: () => Promise<{
+      query: (text: string, values?: readonly unknown[]) => Promise<any>;
+      release: () => void;
+    }>;
+  };
+}
+
 /**
  * Safely purges leftover automated test users and related planner/auth rows.
  * Only deletes users whose email strictly ends with @daybyday-test.invalid.
  */
-export async function cleanAutomatedTestUsers(): Promise<{ deletedUserCount: number }> {
+export async function cleanAutomatedTestUsers(
+  options: CleanAutomatedTestUsersOptions = {}
+): Promise<{ deletedUserCount: number }> {
   const allowCleanup = process.env.ALLOW_AUTOMATED_TEST_USER_CLEANUP?.trim();
   if (allowCleanup !== 'true') {
     throw new Error(
@@ -76,7 +87,7 @@ export async function cleanAutomatedTestUsers(): Promise<{ deletedUserCount: num
     );
   }
 
-  const pool = getPool();
+  const pool = options.pool ?? getPool();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
