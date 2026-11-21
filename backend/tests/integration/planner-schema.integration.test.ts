@@ -57,8 +57,15 @@ test('Planner Schema Integration Suite', async (t) => {
     );
   });
 
-  await t.test('tasks: rejects note longer than 500 characters', async () => {
-    const longNote = 'A'.repeat(501);
+  await t.test('tasks: accepts note up to 1500 characters and rejects 1501 characters', async () => {
+    const validNote = 'A'.repeat(1500);
+    const validRes = await pool.query(
+      `INSERT INTO tasks (user_id, title, note) VALUES ($1, 'Valid Note Task', $2) RETURNING id`,
+      [userId, validNote]
+    );
+    assert.ok(validRes.rows[0].id);
+
+    const longNote = 'A'.repeat(1501);
     await expectDbError(
       pool.query(`INSERT INTO tasks (user_id, title, note) VALUES ($1, 'Title', $2)`, [userId, longNote]),
       'tasks_note_check'

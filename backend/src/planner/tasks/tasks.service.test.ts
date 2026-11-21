@@ -48,11 +48,114 @@ describe('TasksService', () => {
     );
   });
 
-  it('rejects too long note', async () => {
-    const longNote = 'a'.repeat(2001);
+  it('accepts 1,500 character note and rejects 1,501 character note', async () => {
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: {} }));
+
+    const maxNote = 'a'.repeat(1500);
+    await assert.doesNotReject(
+      service.createTask(mockUserId, { id: '00000000-0000-4000-a000-000000000000', title: 'T', note: maxNote })
+    );
+
+    const tooLongNote = 'a'.repeat(1501);
     await assert.rejects(
-      service.createTask(mockUserId, { id: '00000000-0000-4000-a000-000000000000', title: 'T', note: longNote }),
+      service.createTask(mockUserId, { id: '00000000-0000-4000-a000-000000000000', title: 'T', note: tooLongNote }),
       BadRequestError
+    );
+  });
+
+  it('creates a Later task with a 1,400-character note without truncation', async () => {
+    const note1400 = 'x'.repeat(1400);
+    const mockTask = { id: '00000000-0000-4000-a000-000000000001', title: 'Later 1400', note: note1400 };
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: mockTask }));
+
+    const res = await service.createTask(mockUserId, {
+      id: '00000000-0000-4000-a000-000000000001',
+      title: 'Later 1400',
+      note: note1400
+    });
+
+    const [, dto] = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(dto.note, note1400);
+    assert.equal(dto.note?.length, 1400);
+    assert.equal(res.task.note, note1400);
+  });
+
+  it('creates a scheduled task with a 1,500-character note without truncation', async () => {
+    const note1500 = 'y'.repeat(1500);
+    const mockTask = { id: '00000000-0000-4000-a000-000000000002', title: 'Scheduled 1500', note: note1500 };
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: mockTask }));
+
+    const res = await service.createTask(mockUserId, {
+      id: '00000000-0000-4000-a000-000000000002',
+      title: 'Scheduled 1500',
+      note: note1500,
+      plannerToday: today,
+      schedule: { type: 'ONCE', startDate: today }
+    });
+
+    const [, dto] = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(dto.note, note1500);
+    assert.equal(dto.note?.length, 1500);
+    assert.equal(res.task.note, note1500);
+  });
+
+  it('updates an existing task from short note to 1,400 characters without truncation', async () => {
+    const note1400 = 'z'.repeat(1400);
+    const mockTask = { id: '00000000-0000-4000-a000-000000000003', title: 'Task', note: note1400 };
+    mockRepository.updateTask.mock.mockImplementation(async () => ({ task: mockTask, completions: [] }));
+
+    const res = await service.updateTask(mockUserId, '00000000-0000-4000-a000-000000000003', {
+      note: note1400
+    });
+
+    const [, , dto] = mockRepository.updateTask.mock.calls[0].arguments;
+    assert.equal(dto.note, note1400);
+    assert.equal(dto.note?.length, 1400);
+    assert.equal(res.task.note, note1400);
+  });
+
+  it('updates an existing task to exactly 1,500 characters without truncation', async () => {
+    const note1500 = 'w'.repeat(1500);
+    const mockTask = { id: '00000000-0000-4000-a000-000000000004', title: 'Task', note: note1500 };
+    mockRepository.updateTask.mock.mockImplementation(async () => ({ task: mockTask, completions: [] }));
+
+    const res = await service.updateTask(mockUserId, '00000000-0000-4000-a000-000000000004', {
+      note: note1500
+    });
+
+    const [, , dto] = mockRepository.updateTask.mock.calls[0].arguments;
+    assert.equal(dto.note, note1500);
+    assert.equal(dto.note?.length, 1500);
+    assert.equal(res.task.note, note1500);
+  });
+
+  it('rejects 1,501 characters on create and update with HTTP 400 BadRequestError', async () => {
+    const note1501 = 'a'.repeat(1501);
+
+    await assert.rejects(
+      service.createTask(mockUserId, {
+        id: '00000000-0000-4000-a000-000000000005',
+        title: 'Task',
+        note: note1501
+      }),
+      (err: any) => {
+        assert.ok(err instanceof BadRequestError);
+        assert.equal(err.status, 400);
+        assert.equal(err.message, 'Invalid note: max 1500 characters');
+        return true;
+      }
+    );
+
+    await assert.rejects(
+      service.updateTask(mockUserId, '00000000-0000-4000-a000-000000000005', {
+        note: note1501
+      }),
+      (err: any) => {
+        assert.ok(err instanceof BadRequestError);
+        assert.equal(err.status, 400);
+        assert.equal(err.message, 'Invalid note: max 1500 characters');
+        return true;
+      }
     );
   });
 
@@ -212,8 +315,8 @@ describe('TasksService', () => {
   it('validates scheduledTime format strictly', async () => {
     await assert.rejects(
       service.createTask(mockUserId, {
-        id: '00000000-0000-4000-a000-000000000000', 
-        title: 'T', 
+        id: '00000000-0000-4000-a000-000000000000',
+        title: 'T',
         plannerToday: today,
         schedule: { type: 'ONCE', startDate: today, scheduledTime: '' }
       }),

@@ -39,8 +39,8 @@ export class TasksService {
     if (typeof note === 'string') {
       note = note.trim();
       if (note === '') note = null;
-      if (note !== null && note.length > 500) {
-        throw new BadRequestError('Invalid note: max 500 characters');
+      if (note !== null && note.length > 1500) {
+        throw new BadRequestError('Invalid note: max 1500 characters');
       }
     } else if (note !== undefined && note !== null) {
       throw new BadRequestError('Invalid note');
@@ -216,8 +216,8 @@ export class TasksService {
       if (typeof note === 'string') {
         note = note.trim();
         if (note === '') note = null;
-        if (note !== null && note.length > 500) {
-          throw new BadRequestError('Invalid note: max 500 characters');
+        if (note !== null && note.length > 1500) {
+          throw new BadRequestError('Invalid note: max 1500 characters');
         }
       } else if (note !== null) {
         throw new BadRequestError('Invalid note');
