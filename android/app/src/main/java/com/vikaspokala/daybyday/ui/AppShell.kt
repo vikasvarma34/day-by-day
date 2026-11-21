@@ -21,12 +21,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -110,11 +112,15 @@ fun AppShell(
         taskActionError?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     }
     val reminderNotice by plannerTaskViewModel.reminderNotice.collectAsState()
-    LaunchedEffect(reminderNotice) {
-        reminderNotice?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
-            plannerTaskViewModel.dismissReminderNotice()
-        }
+    reminderNotice?.let { notice ->
+        AlertDialog(
+            onDismissRequest = { plannerTaskViewModel.dismissReminderNotice() },
+            title = { Text("Reminder") },
+            text = { Text(notice) },
+            confirmButton = {
+                TextButton(onClick = { plannerTaskViewModel.dismissReminderNotice() }) { Text("OK") }
+            }
+        )
     }
     val isTaskSaving by plannerTaskViewModel.isSaving.collectAsState()
     val backStack = rememberNavBackStack(Screen.Today as NavKey)

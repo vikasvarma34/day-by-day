@@ -53,6 +53,20 @@ import retrofit2.Response
 
 class PlannerRepositoryTest {
 
+    @Test
+    fun savedRemindersMustMatchIncludingClearingAndLegacyValues() {
+        val legacy = ScheduleEntity("s", "t", "ONCE", "2026-08-22", null, "18:00:00", null, null, null, 5, "", "")
+        val multi = legacy.copy(reminderMinutes = "5,10,15")
+        val none = legacy.copy(reminderMinutesBefore = null)
+        assertTrue(remindersMatchSavedSchedule(listOf(5), legacy.startDate, listOf(legacy)))
+        assertTrue(remindersMatchSavedSchedule(null, legacy.startDate, listOf(legacy), 5))
+        assertTrue(!remindersMatchSavedSchedule(emptyList(), legacy.startDate, listOf(legacy), 5))
+        assertTrue(remindersMatchSavedSchedule(listOf(15, 5, 10), multi.startDate, listOf(multi)))
+        assertTrue(remindersMatchSavedSchedule(null, none.startDate, listOf(none)))
+        assertTrue(!remindersMatchSavedSchedule(listOf(5, 10, 15), legacy.startDate, listOf(legacy)))
+        assertTrue(!remindersMatchSavedSchedule(null, legacy.startDate, listOf(legacy)))
+    }
+
     private class FakePlannerApi(
         var createResult: Result<CreateTaskResponseDto>? = null,
         var refreshResult: Result<PlannerRefreshResponseDto>? = null,
@@ -2522,7 +2536,8 @@ class PlannerRepositoryTest {
             title: String,
             startDate: String,
             scheduledTime: String?,
-            reminderMinutesBefore: Int?
+            reminderMinutesBefore: Int?,
+            reminderMinutes: List<Int>?
         ): com.vikaspokala.daybyday.notification.ReminderScheduleResult {
             scheduled.add(taskId)
             return com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled

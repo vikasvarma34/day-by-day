@@ -20,6 +20,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import retrofit2.HttpException
 
+class ReminderSaveMismatchException : IllegalStateException("The task was saved, but the server did not save all selected reminders.")
+
+internal fun remindersMatchSavedSchedule(requested: List<Int>?, startDate: String, schedules: List<com.vikaspokala.daybyday.data.local.planner.entity.ScheduleEntity>, legacyReminder: Int? = null): Boolean {
+    val saved = schedules.firstOrNull { it.startDate == startDate } ?: return false
+    val expected = requested ?: legacyReminder?.let { listOf(it) }.orEmpty()
+    return saved.getReminderOffsets().toSet() == expected.toSet()
+}
+
 open class PlannerRepository(
     private val plannerDatabase: PlannerDatabase,
     private val tokenProvider: suspend () -> String?,
@@ -72,6 +80,9 @@ open class PlannerRepository(
                 plannerDatabase.applyUpdateTaskSchedule(taskEntity, scheduleEntities, completionEntities)
 
                 safelyScheduleTaskReminder(taskEntity.id)
+                if (!remindersMatchSavedSchedule(schedule.reminderMinutes, schedule.startDate, scheduleEntities, schedule.reminderMinutesBefore)) {
+                    throw ReminderSaveMismatchException()
+                }
 
                 val elapsedMs = System.currentTimeMillis() - startTime
                 logSaveOperation("updateTask", elapsedMs, success = true)
@@ -126,6 +137,9 @@ open class PlannerRepository(
                 plannerDatabase.applyUpdateTaskSchedule(taskEntity, scheduleEntities, completionEntities)
 
                 safelyScheduleTaskReminder(taskEntity.id)
+                if (!remindersMatchSavedSchedule(schedule.reminderMinutes, schedule.startDate, scheduleEntities, schedule.reminderMinutesBefore)) {
+                    throw ReminderSaveMismatchException()
+                }
 
                 val elapsedMs = System.currentTimeMillis() - startTime
                 logSaveOperation("updateTaskSchedule", elapsedMs, success = true)
@@ -201,6 +215,9 @@ open class PlannerRepository(
                 plannerDatabase.applyCreateTask(taskEntity, scheduleEntities)
 
                 safelyScheduleTaskReminder(taskEntity.id)
+                if (schedule != null && !remindersMatchSavedSchedule(schedule.reminderMinutes, schedule.startDate, scheduleEntities, schedule.reminderMinutesBefore)) {
+                    throw ReminderSaveMismatchException()
+                }
 
                 val elapsedMs = System.currentTimeMillis() - startTime
                 logSaveOperation("createTask", elapsedMs, success = true)

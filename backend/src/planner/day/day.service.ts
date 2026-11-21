@@ -50,6 +50,7 @@ export class DayService {
         scheduledDate: requestedDate,
         scheduledTime: row.scheduled_time ?? null,
         reminderMinutesBefore: row.reminder_minutes_before ?? null,
+        reminderMinutes: row.reminder_minutes ?? (row.reminder_minutes_before !== null && row.reminder_minutes_before !== undefined ? [row.reminder_minutes_before] : null),
         completion,
       };
 

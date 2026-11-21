@@ -700,7 +700,8 @@ class AuthViewModelTest {
             title: String,
             startDate: String,
             scheduledTime: String?,
-            reminderMinutesBefore: Int?
+            reminderMinutesBefore: Int?,
+            reminderMinutes: List<Int>?
         ): com.vikaspokala.daybyday.notification.ReminderScheduleResult = com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
         override suspend fun scheduleTaskReminder(taskId: String): com.vikaspokala.daybyday.notification.ReminderScheduleResult = com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
         override fun cancelReminder(taskId: String) {}

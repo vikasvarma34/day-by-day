@@ -32,7 +32,8 @@ data class TaskWithScheduleRow(
     val intervalDays: Int?,
     val intervalAnchorDate: String?,
     val weekdaysMask: Int?,
-    val reminderMinutesBefore: Int?
+    val reminderMinutesBefore: Int?,
+    val reminderMinutes: String? = null
 )
 
 data class LaterTaskRow(
@@ -109,7 +110,8 @@ interface ScheduleDao {
             s.id AS scheduleId, s.scheduleType AS scheduleType, s.startDate AS startDate, s.endDate AS endDate,
             s.scheduledTime AS scheduledTime, s.intervalDays AS intervalDays,
             s.intervalAnchorDate AS intervalAnchorDate, s.weekdaysMask AS weekdaysMask,
-            s.reminderMinutesBefore AS reminderMinutesBefore
+            s.reminderMinutesBefore AS reminderMinutesBefore,
+            s.reminderMinutes AS reminderMinutes
         FROM schedules s
         INNER JOIN tasks t ON s.taskId = t.id
         WHERE s.startDate <= :dateString AND (s.endDate IS NULL OR s.endDate >= :dateString)
@@ -119,7 +121,8 @@ interface ScheduleDao {
     @Query("""SELECT t.id AS taskId, t.title AS title, t.note AS note, t.isImportant AS isImportant,
         s.id AS scheduleId, s.scheduleType AS scheduleType, s.startDate AS startDate, s.endDate AS endDate,
         s.scheduledTime AS scheduledTime, s.intervalDays AS intervalDays, s.intervalAnchorDate AS intervalAnchorDate,
-        s.weekdaysMask AS weekdaysMask, s.reminderMinutesBefore AS reminderMinutesBefore
+        s.weekdaysMask AS weekdaysMask, s.reminderMinutesBefore AS reminderMinutesBefore,
+        s.reminderMinutes AS reminderMinutes
         FROM schedules s INNER JOIN tasks t ON s.taskId = t.id
         WHERE t.isImportant = 1 AND s.startDate <= :endDate
         AND (s.endDate IS NULL OR s.endDate >= :startDate)""")

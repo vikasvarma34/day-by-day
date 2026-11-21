@@ -28,6 +28,7 @@ export class DayRepository {
          s.interval_anchor_date::text AS interval_anchor_date,
          s.weekdays_mask,
          s.reminder_minutes_before,
+         s.reminder_minutes,
          c.id AS completion_id,
          c.completed_date::text AS completed_date,
          c.completed_at

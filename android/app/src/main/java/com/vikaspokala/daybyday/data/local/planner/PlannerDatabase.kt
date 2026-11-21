@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.withTransaction
 import com.vikaspokala.daybyday.data.local.planner.dao.CompletionDao
 import com.vikaspokala.daybyday.data.local.planner.dao.ScheduleDao
@@ -22,7 +24,7 @@ import java.time.LocalDate
         ScheduleEntity::class,
         CompletionEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class PlannerDatabase : RoomDatabase() {
@@ -154,6 +156,7 @@ abstract class PlannerDatabase : RoomDatabase() {
                         intervalAnchorDate = row.intervalAnchorDate,
                         weekdaysMask = row.weekdaysMask,
                         reminderMinutesBefore = row.reminderMinutesBefore,
+                        reminderMinutes = row.reminderMinutes,
                         scheduledDate = dateString,
                         isCompleted = completedSet.contains(row.scheduleId)
                     )
@@ -164,6 +167,12 @@ abstract class PlannerDatabase : RoomDatabase() {
     companion object {
         private const val DATABASE_NAME = "planner.db"
 
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE schedules ADD COLUMN reminderMinutes TEXT")
+            }
+        }
+
         @Volatile
         private var instance: PlannerDatabase? = null
 
@@ -173,7 +182,7 @@ abstract class PlannerDatabase : RoomDatabase() {
                     context.applicationContext,
                     PlannerDatabase::class.java,
                     DATABASE_NAME
-                ).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).fallbackToDestructiveMigrationOnDowngrade().build().also { instance = it }
             }
         }
     }

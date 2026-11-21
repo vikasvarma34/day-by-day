@@ -20,7 +20,8 @@ test('DayService.getDay: organizes occurrences into timed (sorted), anytime, and
       interval_days: null,
       interval_anchor_date: null,
       weekdays_mask: 127, // Everyday
-      reminder_minutes_before: 15,
+      reminder_minutes_before: 5,
+      reminder_minutes: [5, 10, 15],
       completion_id: null,
       completed_date: null,
       completed_at: null,
@@ -40,6 +41,7 @@ test('DayService.getDay: organizes occurrences into timed (sorted), anytime, and
       interval_anchor_date: null,
       weekdays_mask: null,
       reminder_minutes_before: null,
+      reminder_minutes: null,
       completion_id: null,
       completed_date: null,
       completed_at: null,
@@ -59,6 +61,7 @@ test('DayService.getDay: organizes occurrences into timed (sorted), anytime, and
       interval_anchor_date: '2026-08-01',
       weekdays_mask: null,
       reminder_minutes_before: null,
+      reminder_minutes: null,
       completion_id: null,
       completed_date: null,
       completed_at: null,
@@ -78,6 +81,7 @@ test('DayService.getDay: organizes occurrences into timed (sorted), anytime, and
       interval_anchor_date: null,
       weekdays_mask: null,
       reminder_minutes_before: null,
+      reminder_minutes: null,
       completion_id: 'c1',
       completed_date: '2026-08-18',
       completed_at: new Date('2026-08-18T07:15:00.000Z'),
@@ -97,6 +101,7 @@ test('DayService.getDay: organizes occurrences into timed (sorted), anytime, and
       interval_anchor_date: '2026-08-01', // Occurs Aug 1, Aug 11, Aug 21... not Aug 18
       weekdays_mask: null,
       reminder_minutes_before: null,
+      reminder_minutes: null,
       completion_id: null,
       completed_date: null,
       completed_at: null,
@@ -116,6 +121,7 @@ test('DayService.getDay: organizes occurrences into timed (sorted), anytime, and
       interval_anchor_date: null,
       weekdays_mask: null,
       reminder_minutes_before: null,
+      reminder_minutes: null,
       completion_id: null,
       completed_date: null,
       completed_at: null,
@@ -137,6 +143,7 @@ test('DayService.getDay: organizes occurrences into timed (sorted), anytime, and
   assert.equal(result.timed[0].scheduledTime, '09:00:00');
   assert.equal(result.timed[1].title, 'Gym');
   assert.equal(result.timed[1].scheduledTime, '18:00:00');
+  assert.deepEqual(result.timed[1].reminderMinutes, [5, 10, 15]);
 
   // Anytime section (t3 and t6)
   assert.equal(result.anytime.length, 2);

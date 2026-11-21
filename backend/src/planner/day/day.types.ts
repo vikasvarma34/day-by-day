@@ -16,6 +16,7 @@ export interface TaskOccurrenceItem {
   scheduledDate: string;
   scheduledTime: string | null;
   reminderMinutesBefore: number | null;
+  reminderMinutes: number[] | null;
   completion: TaskOccurrenceCompletion | null;
 }
 
@@ -40,6 +41,7 @@ export interface CandidateScheduleRow {
   interval_anchor_date: string | null;
   weekdays_mask: number | null;
   reminder_minutes_before: number | null;
+  reminder_minutes: number[] | null;
   completion_id: string | null;
   completed_date: string | null;
   completed_at: Date | string | null;

@@ -41,6 +41,7 @@ export class RefreshRepository {
            s.interval_anchor_date::text AS interval_anchor_date,
            s.weekdays_mask,
            s.reminder_minutes_before,
+           s.reminder_minutes,
            s.created_at,
            s.updated_at
          FROM task_schedules s

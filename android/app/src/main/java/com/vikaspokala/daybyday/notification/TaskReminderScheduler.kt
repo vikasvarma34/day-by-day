@@ -30,7 +30,8 @@ data class ReminderCandidate(
     val title: String,
     val triggerEpochMillis: Long,
     val occurrenceDate: LocalDate,
-    val scheduleId: String
+    val scheduleId: String,
+    val offsetMinutes: Int = 0
 )
 
 interface TaskReminderScheduler {
@@ -47,7 +48,8 @@ interface TaskReminderScheduler {
         title: String,
         startDate: String,
         scheduledTime: String?,
-        reminderMinutesBefore: Int?
+        reminderMinutesBefore: Int?,
+        reminderMinutes: List<Int>? = null
     ): ReminderScheduleResult
     suspend fun scheduleTaskReminder(taskId: String): ReminderScheduleResult
     fun cancelReminder(taskId: String)
@@ -120,24 +122,46 @@ open class DefaultTaskReminderScheduler(
         title: String,
         startDate: String,
         scheduledTime: String?,
-        reminderMinutesBefore: Int?
+        reminderMinutesBefore: Int?,
+        reminderMinutes: List<Int>?
     ): ReminderScheduleResult {
-        if (scheduledTime.isNullOrBlank() || reminderMinutesBefore == null || reminderMinutesBefore < 0) {
+        val offsets = reminderMinutes ?: reminderMinutesBefore?.let { listOf(it) } ?: emptyList()
+        if (scheduledTime.isNullOrBlank() || offsets.isEmpty()) {
             cancelReminder(taskId)
             return ReminderScheduleResult.NotApplicable
         }
 
-        val triggerMillis = calculateTriggerEpochMillis(
-            startDate = startDate,
-            scheduledTime = scheduledTime,
-            reminderMinutesBefore = reminderMinutesBefore,
-            zoneId = zoneIdProvider()
-        ) ?: run {
+        val date = try {
+            LocalDate.parse(startDate.trim())
+        } catch (_: DateTimeParseException) {
             cancelReminder(taskId)
             return ReminderScheduleResult.NotApplicable
         }
 
-        if (triggerMillis <= currentTimeMillisProvider()) {
+        val time = parseDisplayTime(scheduledTime) ?: run {
+            cancelReminder(taskId)
+            return ReminderScheduleResult.NotApplicable
+        }
+
+        val taskDateTime = LocalDateTime.of(date, time)
+        val now = currentTimeMillisProvider()
+        val zoneId = zoneIdProvider()
+
+        var earliestTrigger: Long? = null
+        var earliestOffset: Int? = null
+
+        for (offset in offsets) {
+            if (offset < 0) continue
+            val trigger = taskDateTime.minusMinutes(offset.toLong()).atZone(zoneId).toInstant().toEpochMilli()
+            if (trigger > now) {
+                if (earliestTrigger == null || trigger < earliestTrigger) {
+                    earliestTrigger = trigger
+                    earliestOffset = offset
+                }
+            }
+        }
+
+        if (earliestTrigger == null) {
             cancelReminder(taskId)
             return ReminderScheduleResult.PastTrigger
         }
@@ -148,12 +172,12 @@ open class DefaultTaskReminderScheduler(
         }
 
         val manager = alarmManager ?: return ReminderScheduleResult.ExactAlarmPermissionDenied
-        val pendingIntent = createPendingIntent(taskId, title)
+        val pendingIntent = createPendingIntent(taskId, title, date, earliestOffset)
 
         return try {
             manager.setExactAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
-                triggerMillis,
+                earliestTrigger,
                 pendingIntent
             )
             ReminderScheduleResult.Scheduled
@@ -194,7 +218,12 @@ open class DefaultTaskReminderScheduler(
         }
 
         val manager = alarmManager ?: return ReminderScheduleResult.ExactAlarmPermissionDenied
-        val pendingIntent = createPendingIntent(taskId, task.title)
+        val pendingIntent = createPendingIntent(
+            taskId = taskId,
+            title = task.title,
+            occurrenceDate = candidate.occurrenceDate,
+            offsetMinutes = candidate.offsetMinutes
+        )
 
         return try {
             manager.setExactAndAllowWhileIdle(
@@ -245,11 +274,22 @@ open class DefaultTaskReminderScheduler(
         }
     }
 
-    private fun createPendingIntent(taskId: String, title: String): PendingIntent {
+    private fun createPendingIntent(
+        taskId: String,
+        title: String,
+        occurrenceDate: LocalDate? = null,
+        offsetMinutes: Int? = null
+    ): PendingIntent {
         val intent = Intent(context, ReminderBroadcastReceiver::class.java).apply {
             action = ReminderBroadcastReceiver.ACTION_FIRE_REMINDER
             putExtra(ReminderBroadcastReceiver.EXTRA_TASK_ID, taskId)
             putExtra(ReminderBroadcastReceiver.EXTRA_TASK_TITLE, title)
+            if (occurrenceDate != null) {
+                putExtra(ReminderBroadcastReceiver.EXTRA_OCCURRENCE_DATE, occurrenceDate.toString())
+            }
+            if (offsetMinutes != null) {
+                putExtra(ReminderBroadcastReceiver.EXTRA_OFFSET_MINUTES, offsetMinutes)
+            }
         }
         val requestCode = (taskId.hashCode() and 0x7FFFFFFF)
         return PendingIntent.getBroadcast(
@@ -284,8 +324,8 @@ fun calculateNextEligibleReminder(
 
     for (schedule in schedules) {
         val scheduledTimeStr = schedule.scheduledTime
-        val reminderMinutes = schedule.reminderMinutesBefore
-        if (scheduledTimeStr.isNullOrBlank() || reminderMinutes == null || reminderMinutes < 0) {
+        val offsets = schedule.getReminderOffsets()
+        if (scheduledTimeStr.isNullOrBlank() || offsets.isEmpty()) {
             continue
         }
 
@@ -305,23 +345,30 @@ fun calculateNextEligibleReminder(
         }
 
         val completedDates = completedDatesByScheduleId[schedule.id].orEmpty()
+        val maxOffset = offsets.maxOrNull() ?: 0
 
         when (schedule.scheduleType) {
             "ONCE" -> {
                 val occurrenceDate = startDate
-                val taskDateTime = LocalDateTime.of(occurrenceDate, localTime)
-                val triggerMillis = taskDateTime.minusMinutes(reminderMinutes.toLong())
-                    .atZone(zoneId).toInstant().toEpochMilli()
+                if (!completedDates.contains(occurrenceDate.toString())) {
+                    val taskDateTime = LocalDateTime.of(occurrenceDate, localTime)
+                    for (offset in offsets) {
+                        if (offset < 0) continue
+                        val triggerMillis = taskDateTime.minusMinutes(offset.toLong())
+                            .atZone(zoneId).toInstant().toEpochMilli()
 
-                if (triggerMillis > nowMillis && !completedDates.contains(occurrenceDate.toString())) {
-                    if (bestCandidate == null || triggerMillis < bestCandidate.triggerEpochMillis) {
-                        bestCandidate = ReminderCandidate(
-                            taskId = taskId,
-                            title = title,
-                            triggerEpochMillis = triggerMillis,
-                            occurrenceDate = occurrenceDate,
-                            scheduleId = schedule.id
-                        )
+                        if (triggerMillis > nowMillis) {
+                            if (bestCandidate == null || triggerMillis < bestCandidate.triggerEpochMillis) {
+                                bestCandidate = ReminderCandidate(
+                                    taskId = taskId,
+                                    title = title,
+                                    triggerEpochMillis = triggerMillis,
+                                    occurrenceDate = occurrenceDate,
+                                    scheduleId = schedule.id,
+                                    offsetMinutes = offset
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -354,23 +401,33 @@ fun calculateNextEligibleReminder(
                 var count = 0
                 while ((endDate == null || !current.isAfter(endDate)) && count < 366) {
                     val taskDateTime = LocalDateTime.of(current, localTime)
-                    val triggerMillis = taskDateTime.minusMinutes(reminderMinutes.toLong())
-                        .atZone(zoneId).toInstant().toEpochMilli()
+                    if (!completedDates.contains(current.toString())) {
+                        for (offset in offsets) {
+                            if (offset < 0) continue
+                            val triggerMillis = taskDateTime.minusMinutes(offset.toLong())
+                                .atZone(zoneId).toInstant().toEpochMilli()
 
-                    if (triggerMillis > nowMillis) {
-                        if (!completedDates.contains(current.toString())) {
-                            if (bestCandidate == null || triggerMillis < bestCandidate.triggerEpochMillis) {
-                                bestCandidate = ReminderCandidate(
-                                    taskId = taskId,
-                                    title = title,
-                                    triggerEpochMillis = triggerMillis,
-                                    occurrenceDate = current,
-                                    scheduleId = schedule.id
-                                )
+                            if (triggerMillis > nowMillis) {
+                                if (bestCandidate == null || triggerMillis < bestCandidate.triggerEpochMillis) {
+                                    bestCandidate = ReminderCandidate(
+                                        taskId = taskId,
+                                        title = title,
+                                        triggerEpochMillis = triggerMillis,
+                                        occurrenceDate = current,
+                                        scheduleId = schedule.id,
+                                        offsetMinutes = offset
+                                    )
+                                }
                             }
-                            break
                         }
                     }
+
+                    val earliestPossibleNextTrigger = taskDateTime.minusMinutes(maxOffset.toLong())
+                        .atZone(zoneId).toInstant().toEpochMilli()
+                    if (bestCandidate != null && earliestPossibleNextTrigger > bestCandidate.triggerEpochMillis) {
+                        break
+                    }
+
                     current = current.plusDays(interval.toLong())
                     count++
                 }
@@ -389,22 +446,31 @@ fun calculateNextEligibleReminder(
 
                     if (isMatch) {
                         val taskDateTime = LocalDateTime.of(current, localTime)
-                        val triggerMillis = taskDateTime.minusMinutes(reminderMinutes.toLong())
-                            .atZone(zoneId).toInstant().toEpochMilli()
+                        if (!completedDates.contains(current.toString())) {
+                            for (offset in offsets) {
+                                if (offset < 0) continue
+                                val triggerMillis = taskDateTime.minusMinutes(offset.toLong())
+                                    .atZone(zoneId).toInstant().toEpochMilli()
 
-                        if (triggerMillis > nowMillis) {
-                            if (!completedDates.contains(current.toString())) {
-                                if (bestCandidate == null || triggerMillis < bestCandidate.triggerEpochMillis) {
-                                    bestCandidate = ReminderCandidate(
-                                        taskId = taskId,
-                                        title = title,
-                                        triggerEpochMillis = triggerMillis,
-                                        occurrenceDate = current,
-                                        scheduleId = schedule.id
-                                    )
+                                if (triggerMillis > nowMillis) {
+                                    if (bestCandidate == null || triggerMillis < bestCandidate.triggerEpochMillis) {
+                                        bestCandidate = ReminderCandidate(
+                                            taskId = taskId,
+                                            title = title,
+                                            triggerEpochMillis = triggerMillis,
+                                            occurrenceDate = current,
+                                            scheduleId = schedule.id,
+                                            offsetMinutes = offset
+                                        )
+                                    }
                                 }
-                                break
                             }
+                        }
+
+                        val earliestPossibleNextTrigger = taskDateTime.minusMinutes(maxOffset.toLong())
+                            .atZone(zoneId).toInstant().toEpochMilli()
+                        if (bestCandidate != null && earliestPossibleNextTrigger > bestCandidate.triggerEpochMillis) {
+                            break
                         }
                     }
                     current = current.plusDays(1)

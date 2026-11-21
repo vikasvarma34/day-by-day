@@ -38,6 +38,7 @@ export class RefreshService {
       intervalAnchorDate: row.interval_anchor_date ?? null,
       weekdaysMask: row.weekdays_mask ?? null,
       reminderMinutesBefore: row.reminder_minutes_before ?? null,
+      reminderMinutes: row.reminder_minutes ?? (row.reminder_minutes_before !== null && row.reminder_minutes_before !== undefined ? [row.reminder_minutes_before] : null),
       createdAt:
         row.created_at instanceof Date
           ? row.created_at.toISOString()

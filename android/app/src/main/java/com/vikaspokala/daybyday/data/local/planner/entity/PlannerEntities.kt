@@ -36,8 +36,16 @@ data class ScheduleEntity(
     val weekdaysMask: Int?,
     val reminderMinutesBefore: Int?,
     val createdAt: String,
-    val updatedAt: String
-)
+    val updatedAt: String,
+    val reminderMinutes: String? = null
+) {
+    fun getReminderOffsets(): List<Int> {
+        if (reminderMinutes != null) {
+            return reminderMinutes.split(",").mapNotNull { it.trim().toIntOrNull() }
+        }
+        return reminderMinutesBefore?.let { listOf(it) } ?: emptyList()
+    }
+}
 
 @Entity(
     tableName = "completions",
@@ -74,6 +82,7 @@ fun RefreshScheduleDto.toEntity(): ScheduleEntity = ScheduleEntity(
     intervalAnchorDate = intervalAnchorDate,
     weekdaysMask = weekdaysMask,
     reminderMinutesBefore = reminderMinutesBefore,
+    reminderMinutes = reminderMinutes?.joinToString(",") ?: reminderMinutesBefore?.toString(),
     createdAt = createdAt,
     updatedAt = updatedAt
 )
@@ -120,6 +129,7 @@ fun TaskScheduleResponseDto.toEntity(taskId: String): ScheduleEntity = ScheduleE
     intervalAnchorDate = intervalAnchorDate,
     weekdaysMask = weekdaysMask,
     reminderMinutesBefore = reminderMinutesBefore,
+    reminderMinutes = reminderMinutes?.joinToString(",") ?: reminderMinutesBefore?.toString(),
     createdAt = createdAt,
     updatedAt = updatedAt
 )

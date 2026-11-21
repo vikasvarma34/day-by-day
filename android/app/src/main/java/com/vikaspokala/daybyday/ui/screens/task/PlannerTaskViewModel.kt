@@ -8,6 +8,7 @@ import com.vikaspokala.daybyday.data.local.planner.PlannerDatabase
 import com.vikaspokala.daybyday.data.remote.dto.CreateTaskScheduleRequestDto
 import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskScheduleDto
 import com.vikaspokala.daybyday.data.repository.PlannerRepository
+import com.vikaspokala.daybyday.data.repository.ReminderSaveMismatchException
 import com.vikaspokala.daybyday.notification.DefaultTaskReminderScheduler
 import com.vikaspokala.daybyday.notification.TaskReminderScheduler
 import java.time.LocalDate
@@ -167,7 +168,10 @@ class PlannerTaskViewModel(
                     },
                     onFailure = { error ->
                         _isSaving.value = false
-                        if (error is HttpException && error.code() == 401) onSessionExpired()
+                        if (error is ReminderSaveMismatchException) {
+                            _reminderNotice.value = "Task saved, but the server did not save the selected reminders. Check the task before editing again."
+                            onSuccess()
+                        } else if (error is HttpException && error.code() == 401) onSessionExpired()
                         else _actionError.value = "Unable to save task. Please try again."
                     }
                 )

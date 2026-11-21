@@ -32,7 +32,8 @@ class ReminderRestorationHandlerTest {
             title: String,
             startDate: String,
             scheduledTime: String?,
-            reminderMinutesBefore: Int?
+            reminderMinutesBefore: Int?,
+            reminderMinutes: List<Int>?
         ): ReminderScheduleResult = ReminderScheduleResult.Scheduled
 
         override suspend fun scheduleTaskReminder(taskId: String): ReminderScheduleResult =

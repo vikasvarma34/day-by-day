@@ -46,10 +46,18 @@ data class ScheduleEntity(
     val endDate: LocalDate? = null,
     val scheduledTime: LocalTime? = null,
     val reminderMinutesBefore: Int? = null,
+    val reminderMinutes: List<Int>? = null,
     val intervalDays: Int? = null,
     val intervalAnchorDate: LocalDate? = null,
     val weekdays: Set<Int>? = null
-)
+) {
+    fun getReminderOffsets(): List<Int> {
+        if (reminderMinutes != null) {
+            return reminderMinutes
+        }
+        return reminderMinutesBefore?.let { listOf(it) } ?: emptyList()
+    }
+}
 
 data class CompletionEntity(
     val id: String,
@@ -137,6 +145,17 @@ class InMemoryPlannerDatabase(
                 }
                 require(s.scheduledTime != null) {
                     "Schedule ${s.id} has reminderMinutesBefore but scheduledTime is null"
+                }
+            }
+
+            if (s.reminderMinutes != null) {
+                for (rem in s.reminderMinutes) {
+                    require(rem in ALLOWED_REMINDER_MINUTES) {
+                        "Schedule ${s.id} has invalid reminderMinutes: $rem"
+                    }
+                }
+                require(s.scheduledTime != null) {
+                    "Schedule ${s.id} has reminderMinutes but scheduledTime is null"
                 }
             }
 
@@ -230,6 +249,7 @@ class InMemoryPlannerDatabase(
         date: LocalDate,
         time: LocalTime? = null,
         reminderMinutesBefore: Int? = null,
+        reminderMinutes: List<Int>? = null,
         recurrence: Recurrence? = null,
         isImportant: Boolean = false,
         plannerToday: LocalDate = LocalDate.now()
@@ -241,17 +261,30 @@ class InMemoryPlannerDatabase(
             require(note.length <= 500) { "Invalid note: max 500 characters" }
         }
 
+        val rawOffsets = reminderMinutes ?: reminderMinutesBefore?.let { listOf(it) }
+        val effectiveOffsets = rawOffsets?.distinct()?.sorted()
+        val effectiveReminderBefore = effectiveOffsets?.firstOrNull() ?: reminderMinutesBefore
+
         val isHistorical = date.isBefore(plannerToday)
         if (isHistorical) {
             require(recurrence == null || recurrence is Recurrence.Once) {
                 "Historical task cannot be recurring"
             }
-            require(reminderMinutesBefore == null) {
+            require(effectiveOffsets.isNullOrEmpty() && reminderMinutesBefore == null) {
                 "Historical task cannot have a reminder"
             }
         }
 
-        if (reminderMinutesBefore != null) {
+        if (effectiveOffsets != null && effectiveOffsets.isNotEmpty()) {
+            for (offset in effectiveOffsets) {
+                require(offset in ALLOWED_REMINDER_MINUTES) {
+                    "Invalid reminderMinutes: $offset"
+                }
+            }
+            require(time != null) {
+                "Reminder requires scheduledTime"
+            }
+        } else if (reminderMinutesBefore != null) {
             require(reminderMinutesBefore in ALLOWED_REMINDER_MINUTES) {
                 "Invalid reminderMinutesBefore: $reminderMinutesBefore"
             }
@@ -319,7 +352,8 @@ class InMemoryPlannerDatabase(
             startDate = date,
             endDate = endDate,
             scheduledTime = time,
-            reminderMinutesBefore = reminderMinutesBefore,
+            reminderMinutesBefore = effectiveReminderBefore,
+            reminderMinutes = effectiveOffsets,
             intervalDays = intervalDays,
             intervalAnchorDate = intervalAnchorDate,
             weekdays = weekdays
@@ -382,6 +416,7 @@ class InMemoryPlannerDatabase(
         date: LocalDate? = null,
         time: LocalTime? = null,
         reminderMinutesBefore: Int? = null,
+        reminderMinutes: List<Int>? = null,
         recurrence: Recurrence? = null,
         isImportant: Boolean? = null,
         plannerToday: LocalDate = LocalDate.now()
@@ -412,6 +447,10 @@ class InMemoryPlannerDatabase(
             val isHistorical = existingSchedule.startDate.isBefore(plannerToday)
             val targetDate = date
 
+            val rawOffsets = reminderMinutes ?: reminderMinutesBefore?.let { listOf(it) }
+            val effectiveOffsets = rawOffsets?.distinct()?.sorted()
+            val effectiveReminderBefore = effectiveOffsets?.firstOrNull() ?: reminderMinutesBefore
+
             if (isHistorical) {
                 if (date != existingSchedule.startDate) {
                     throw IllegalArgumentException("Cannot modify schedule date of a historical task")
@@ -419,7 +458,7 @@ class InMemoryPlannerDatabase(
                 if (recurrence != null && scheduleEntityToRecurrence(existingSchedule) != recurrence) {
                     throw IllegalArgumentException("Cannot modify recurrence of a historical task")
                 }
-                if (reminderMinutesBefore != null && reminderMinutesBefore != existingSchedule.reminderMinutesBefore) {
+                if (effectiveReminderBefore != null && effectiveReminderBefore != existingSchedule.reminderMinutesBefore) {
                     throw IllegalArgumentException("Cannot modify reminder of a historical task")
                 }
             } else {
@@ -427,7 +466,16 @@ class InMemoryPlannerDatabase(
                     throw IllegalArgumentException("Cannot move task to a historical date")
                 }
 
-                if (reminderMinutesBefore != null) {
+                if (effectiveOffsets != null && effectiveOffsets.isNotEmpty()) {
+                    for (offset in effectiveOffsets) {
+                        require(offset in ALLOWED_REMINDER_MINUTES) {
+                            "Invalid reminderMinutes: $offset"
+                        }
+                    }
+                    require(time != null) {
+                        "Reminder requires scheduledTime"
+                    }
+                } else if (reminderMinutesBefore != null) {
                     require(reminderMinutesBefore in ALLOWED_REMINDER_MINUTES) {
                         "Invalid reminderMinutesBefore: $reminderMinutesBefore"
                     }
@@ -481,7 +529,8 @@ class InMemoryPlannerDatabase(
                     startDate = targetDate,
                     endDate = endDate,
                     scheduledTime = time,
-                    reminderMinutesBefore = reminderMinutesBefore,
+                    reminderMinutesBefore = effectiveReminderBefore,
+            reminderMinutes = effectiveOffsets,
                     intervalDays = intervalDays,
                     intervalAnchorDate = intervalAnchorDate,
                     weekdays = weekdays
@@ -526,6 +575,7 @@ class InMemoryPlannerDatabase(
         date: LocalDate,
         time: LocalTime? = null,
         reminderMinutesBefore: Int? = null,
+        reminderMinutes: List<Int>? = null,
         recurrence: Recurrence? = null,
         plannerToday: LocalDate = LocalDate.now()
     ) {
@@ -554,7 +604,20 @@ class InMemoryPlannerDatabase(
         } else task.note
         val effectiveImportant = isImportant ?: task.isImportant
 
-        if (reminderMinutesBefore != null) {
+        val rawOffsets = reminderMinutes ?: reminderMinutesBefore?.let { listOf(it) }
+        val effectiveOffsets = rawOffsets?.distinct()?.sorted()
+        val effectiveReminderBefore = effectiveOffsets?.firstOrNull() ?: reminderMinutesBefore
+
+        if (effectiveOffsets != null && effectiveOffsets.isNotEmpty()) {
+            for (offset in effectiveOffsets) {
+                require(offset in ALLOWED_REMINDER_MINUTES) {
+                    "Invalid reminderMinutes: $offset"
+                }
+            }
+            require(time != null) {
+                "Reminder requires scheduledTime"
+            }
+        } else if (reminderMinutesBefore != null) {
             require(reminderMinutesBefore in ALLOWED_REMINDER_MINUTES) {
                 "Invalid reminderMinutesBefore: $reminderMinutesBefore"
             }
@@ -611,7 +674,8 @@ class InMemoryPlannerDatabase(
             startDate = date,
             endDate = endDate,
             scheduledTime = time,
-            reminderMinutesBefore = reminderMinutesBefore,
+            reminderMinutesBefore = effectiveReminderBefore,
+            reminderMinutes = effectiveOffsets,
             intervalDays = intervalDays,
             intervalAnchorDate = intervalAnchorDate,
             weekdays = weekdays
@@ -911,6 +975,13 @@ class InMemoryPlannerDatabase(
                 val task = currentTasks[schedule.taskId] ?: continue
                 val isCompleted = currentCompletions.containsKey(Triple(task.id, schedule.id, date))
 
+                val offsets = schedule.getReminderOffsets()
+                val reminderDisplay = if (offsets.isNotEmpty()) {
+                    offsets.mapNotNull { reminderMinutesToDisplayString(it) }.joinToString(", ").ifEmpty { null }
+                } else {
+                    reminderMinutesToDisplayString(schedule.reminderMinutesBefore)
+                }
+
                 items.add(
                     ScheduleTaskItem(
                         id = task.id,
@@ -918,7 +989,7 @@ class InMemoryPlannerDatabase(
                         note = task.note,
                         date = date,
                         time = formatLocalTime(schedule.scheduledTime),
-                        reminder = reminderMinutesToDisplayString(schedule.reminderMinutesBefore),
+                        reminder = reminderDisplay,
                         recurrence = scheduleEntityToRecurrence(schedule),
                         isImportant = task.isImportant,
                         isCompleted = isCompleted

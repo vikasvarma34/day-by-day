@@ -18,6 +18,7 @@ export interface SnapshotSchedule {
   intervalAnchorDate: string | null;
   weekdaysMask: number | null;
   reminderMinutesBefore: number | null;
+  reminderMinutes: number[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +60,7 @@ export interface SnapshotScheduleRow {
   interval_anchor_date: string | null;
   weekdays_mask: number | null;
   reminder_minutes_before: number | null;
+  reminder_minutes: number[] | null;
   created_at: Date | string;
   updated_at: Date | string;
 }

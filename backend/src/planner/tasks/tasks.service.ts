@@ -83,7 +83,10 @@ export class TasksService {
         if (s.type !== 'ONCE') {
           throw new BadRequestError('Recurring schedules cannot start before plannerToday');
         }
-        if (s.reminderMinutesBefore !== undefined && s.reminderMinutesBefore !== null) {
+        if (
+          (s.reminderMinutesBefore !== undefined && s.reminderMinutesBefore !== null) ||
+          (Array.isArray(s.reminderMinutes) && s.reminderMinutes.length > 0)
+        ) {
           throw new BadRequestError('Reminders cannot be set for historical tasks');
         }
       }
@@ -108,8 +111,27 @@ export class TasksService {
         scheduledTime = s.scheduledTime;
       }
 
-      let reminder = null;
-      if (s.reminderMinutesBefore !== undefined && s.reminderMinutesBefore !== null) {
+      let reminder: number | null = null;
+      let reminderMinutesList: number[] | null = null;
+
+      if (s.reminderMinutes !== undefined && s.reminderMinutes !== null) {
+        if (!Array.isArray(s.reminderMinutes)) {
+          throw new BadRequestError('reminderMinutes must be an array of integers');
+        }
+        for (const rem of s.reminderMinutes) {
+          if (typeof rem !== 'number' || !ALLOWED_REMINDERS.includes(rem) || !Number.isInteger(rem)) {
+            throw new BadRequestError('Invalid reminderMinutes');
+          }
+        }
+        if (s.reminderMinutes.length > 0) {
+          if (!scheduledTime) {
+            throw new BadRequestError('reminderMinutes requires scheduledTime');
+          }
+          const sortedList: number[] = Array.from(new Set(s.reminderMinutes as number[])).sort((a: number, b: number) => a - b);
+          reminderMinutesList = sortedList;
+          reminder = sortedList[0];
+        }
+      } else if (s.reminderMinutesBefore !== undefined && s.reminderMinutesBefore !== null) {
         if (!ALLOWED_REMINDERS.includes(s.reminderMinutesBefore)) {
           throw new BadRequestError('Invalid reminderMinutesBefore');
         }
@@ -117,6 +139,7 @@ export class TasksService {
           throw new BadRequestError('reminderMinutesBefore requires scheduledTime');
         }
         reminder = s.reminderMinutesBefore;
+        reminderMinutesList = [s.reminderMinutesBefore];
       }
 
       let intervalDays = null;
@@ -180,6 +203,7 @@ export class TasksService {
         intervalAnchorDate,
         weekdaysMask,
         reminderMinutesBefore: reminder,
+        reminderMinutes: reminderMinutesList,
       };
     }
 
@@ -285,8 +309,27 @@ export class TasksService {
         scheduledTime = s.scheduledTime;
       }
 
-      let reminder = null;
-      if (s.reminderMinutesBefore !== undefined && s.reminderMinutesBefore !== null) {
+      let reminder: number | null = null;
+      let reminderMinutesList: number[] | null = null;
+
+      if (s.reminderMinutes !== undefined && s.reminderMinutes !== null) {
+        if (!Array.isArray(s.reminderMinutes)) {
+          throw new BadRequestError('reminderMinutes must be an array of integers');
+        }
+        for (const rem of s.reminderMinutes) {
+          if (typeof rem !== 'number' || !ALLOWED_REMINDERS.includes(rem) || !Number.isInteger(rem)) {
+            throw new BadRequestError('Invalid reminderMinutes');
+          }
+        }
+        if (s.reminderMinutes.length > 0) {
+          if (!scheduledTime) {
+            throw new BadRequestError('reminderMinutes requires scheduledTime');
+          }
+          const sortedList: number[] = Array.from(new Set(s.reminderMinutes as number[])).sort((a: number, b: number) => a - b);
+          reminderMinutesList = sortedList;
+          reminder = sortedList[0];
+        }
+      } else if (s.reminderMinutesBefore !== undefined && s.reminderMinutesBefore !== null) {
         if (!ALLOWED_REMINDERS.includes(s.reminderMinutesBefore)) {
           throw new BadRequestError('Invalid reminderMinutesBefore');
         }
@@ -294,6 +337,7 @@ export class TasksService {
           throw new BadRequestError('reminderMinutesBefore requires scheduledTime');
         }
         reminder = s.reminderMinutesBefore;
+        reminderMinutesList = [s.reminderMinutesBefore];
       }
 
       let intervalDays = null;
@@ -352,6 +396,7 @@ export class TasksService {
         intervalAnchorDate,
         weekdaysMask,
         reminderMinutesBefore: reminder,
+        reminderMinutes: reminderMinutesList,
       };
     }
 

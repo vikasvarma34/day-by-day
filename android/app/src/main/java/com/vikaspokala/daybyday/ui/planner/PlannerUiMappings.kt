@@ -12,18 +12,25 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-fun ScheduledOccurrence.toScheduleTaskItem(): ScheduleTaskItem = ScheduleTaskItem(
-    id = taskId,
-    scheduleId = scheduleId,
-    title = title,
-    note = note,
-    date = LocalDate.parse(scheduledDate),
-    time = scheduledTime.toDisplayTime(),
-    reminder = reminderMinutesBefore.toDisplayReminder(),
-    recurrence = toRecurrence(),
-    isImportant = isImportant,
-    isCompleted = isCompleted
-)
+fun ScheduledOccurrence.toScheduleTaskItem(): ScheduleTaskItem {
+    val offsets = if (reminderMinutes != null) {
+        reminderMinutes.split(",").mapNotNull { it.trim().toIntOrNull() }
+    } else {
+        reminderMinutesBefore?.let { listOf(it) } ?: emptyList()
+    }
+    return ScheduleTaskItem(
+        id = taskId,
+        scheduleId = scheduleId,
+        title = title,
+        note = note,
+        date = LocalDate.parse(scheduledDate),
+        time = scheduledTime.toDisplayTime(),
+        reminder = offsets.toDisplayReminder(),
+        recurrence = toRecurrence(),
+        isImportant = isImportant,
+        isCompleted = isCompleted
+    )
+}
 
 fun LaterTaskProjection.toLaterTaskItem(): LaterTaskItem = LaterTaskItem(
     id = taskId,
@@ -46,20 +53,26 @@ fun buildCreateSchedule(
 ): CreateTaskScheduleRequestDto {
     val parsedTime = parseDisplayTime(time)
     val formattedTime = parsedTime?.format(apiTimeFormatter)
+    val reminderOffsets = if (parsedTime == null) emptyList() else parseReminders(reminder)
+    val primaryReminder = reminderOffsets.firstOrNull()
+    val reminderList = reminderOffsets.ifEmpty { null }
     return when (recurrence) {
         is Recurrence.IntervalDays -> CreateTaskScheduleRequestDto(
             type = "INTERVAL_DAYS", startDate = date.toString(), endDate = recurrence.endDate?.toString(),
             scheduledTime = formattedTime, intervalDays = recurrence.intervalDays,
-            intervalAnchorDate = date.toString(), reminderMinutesBefore = if (parsedTime == null) null else parseReminder(reminder)
+            intervalAnchorDate = date.toString(), reminderMinutesBefore = primaryReminder,
+            reminderMinutes = reminderList
         )
         is Recurrence.Weekdays -> CreateTaskScheduleRequestDto(
             type = "WEEKDAYS", startDate = date.toString(), endDate = recurrence.endDate?.toString(),
             scheduledTime = formattedTime, weekdaysMask = recurrence.days.toWeekdaysMask(),
-            reminderMinutesBefore = if (parsedTime == null) null else parseReminder(reminder)
+            reminderMinutesBefore = primaryReminder,
+            reminderMinutes = reminderList
         )
         else -> CreateTaskScheduleRequestDto(
             type = "ONCE", startDate = date.toString(), endDate = date.toString(),
-            scheduledTime = formattedTime, reminderMinutesBefore = if (parsedTime == null) null else parseReminder(reminder)
+            scheduledTime = formattedTime, reminderMinutesBefore = primaryReminder,
+            reminderMinutes = reminderList
         )
     }
 }
@@ -69,6 +82,7 @@ fun buildUpdateSchedule(date: LocalDate, time: String?, reminder: String?, recur
     return UpdateTaskScheduleDto(
         type = create.type, startDate = create.startDate, endDate = create.endDate,
         scheduledTime = create.scheduledTime, reminderMinutesBefore = create.reminderMinutesBefore,
+        reminderMinutes = create.reminderMinutes,
         intervalDays = create.intervalDays, weekdaysMask = create.weekdaysMask
     )
 }
@@ -102,10 +116,27 @@ fun parseReminder(value: String?): Int? = when (value?.trim()) {
     "1 hour before" -> 60
     "1 day before" -> 1440
     "2 days before" -> 2880
-    else -> null
+    else -> value?.trim()?.toIntOrNull()?.takeIf { it in listOf(0, 5, 10, 15, 30, 60, 1440, 2880) }
 }
 
-private fun Int?.toDisplayReminder(): String? = when (this) {
+fun parseReminders(value: String?): List<Int> {
+    if (value.isNullOrBlank() || value.equals("No reminder", ignoreCase = true) || value.equals("None", ignoreCase = true)) {
+        return emptyList()
+    }
+    return value.split(",")
+        .mapNotNull { parseReminder(it.trim()) }
+        .distinct()
+        .sorted()
+}
+
+fun List<Int>.toDisplayReminder(): String? {
+    if (isEmpty()) return null
+    return mapNotNull { it.toDisplayReminder() }
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString(", ")
+}
+
+fun Int?.toDisplayReminder(): String? = when (this) {
     0 -> "At task time"
     5 -> "5 minutes before"
     10 -> "10 minutes before"

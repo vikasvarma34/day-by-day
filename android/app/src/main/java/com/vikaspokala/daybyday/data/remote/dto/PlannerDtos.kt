@@ -24,6 +24,7 @@ data class RefreshScheduleDto(
     val intervalAnchorDate: String? = null,
     val weekdaysMask: Int? = null,
     val reminderMinutesBefore: Int? = null,
+    val reminderMinutes: List<Int>? = null,
     val createdAt: String,
     val updatedAt: String
 )
@@ -87,7 +88,8 @@ data class CreateTaskScheduleRequestDto(
     val intervalDays: Int? = null,
     val intervalAnchorDate: String? = null,
     val weekdaysMask: Int? = null,
-    val reminderMinutesBefore: Int? = null
+    val reminderMinutesBefore: Int? = null,
+    val reminderMinutes: List<Int>? = null
 )
 
 @Serializable
@@ -111,6 +113,7 @@ data class TaskScheduleResponseDto(
     val intervalAnchorDate: String? = null,
     val weekdaysMask: Int? = null,
     val reminderMinutesBefore: Int? = null,
+    val reminderMinutes: List<Int>? = null,
     val createdAt: String,
     val updatedAt: String
 )
@@ -156,6 +159,7 @@ data class UpdateTaskScheduleDto(
     val endDate: String? = null,
     val scheduledTime: String? = null,
     val reminderMinutesBefore: Int? = null,
+    val reminderMinutes: List<Int>? = null,
     val intervalDays: Int? = null,
     val weekdaysMask: Int? = null
 )

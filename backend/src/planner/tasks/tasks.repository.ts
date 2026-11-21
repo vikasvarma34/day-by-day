@@ -53,9 +53,9 @@ export class TasksRepository {
         await client.query(
           `INSERT INTO task_schedules (
              task_id, schedule_type, start_date, end_date, interval_days,
-             interval_anchor_date, weekdays_mask, scheduled_time, reminder_minutes_before
+             interval_anchor_date, weekdays_mask, scheduled_time, reminder_minutes_before, reminder_minutes
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             dto.id,
             dto.schedule.type,
@@ -66,6 +66,7 @@ export class TasksRepository {
             dto.schedule.weekdaysMask ?? null,
             dto.schedule.scheduledTime ?? null,
             dto.schedule.reminderMinutesBefore ?? null,
+            dto.schedule.reminderMinutes ?? null,
           ]
         );
       }
@@ -173,12 +174,13 @@ export class TasksRepository {
           await client.query(
             `UPDATE task_schedules
              SET schedule_type = $1, start_date = $2, end_date = $3, interval_days = $4,
-                 interval_anchor_date = $5, weekdays_mask = $6, scheduled_time = $7, reminder_minutes_before = $8
-             WHERE id = $9`,
+                 interval_anchor_date = $5, weekdays_mask = $6, scheduled_time = $7,
+                 reminder_minutes_before = $8, reminder_minutes = $9
+             WHERE id = $10`,
             [
               s.type, s.startDate, s.endDate ?? null, s.intervalDays ?? null,
               s.intervalAnchorDate ?? null, s.weekdaysMask ?? null, s.scheduledTime ?? null,
-              s.reminderMinutesBefore ?? null, target.id
+              s.reminderMinutesBefore ?? null, s.reminderMinutes ?? null, target.id
             ]
           );
         } else {
@@ -273,13 +275,13 @@ export class TasksRepository {
     await client.query(
       `INSERT INTO task_schedules (
          task_id, schedule_type, start_date, end_date, interval_days,
-         interval_anchor_date, weekdays_mask, scheduled_time, reminder_minutes_before
+         interval_anchor_date, weekdays_mask, scheduled_time, reminder_minutes_before, reminder_minutes
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         taskId, s.type, s.startDate, s.endDate ?? null, s.intervalDays ?? null,
         s.intervalAnchorDate ?? null, s.weekdaysMask ?? null, s.scheduledTime ?? null,
-        s.reminderMinutesBefore ?? null,
+        s.reminderMinutesBefore ?? null, s.reminderMinutes ?? null,
       ]
     );
   }
@@ -305,7 +307,8 @@ export class TasksRepository {
     const schedulesRes = await executor.query(
       `SELECT
          id, schedule_type, start_date::text, end_date::text, scheduled_time,
-         interval_days, interval_anchor_date::text, weekdays_mask, reminder_minutes_before,
+         interval_days, interval_anchor_date::text, weekdays_mask,
+         reminder_minutes_before, reminder_minutes,
          created_at, updated_at
        FROM task_schedules
        WHERE task_id = $1
@@ -330,6 +333,7 @@ export class TasksRepository {
         intervalAnchorDate: s.interval_anchor_date ?? null,
         weekdaysMask: s.weekdays_mask ?? null,
         reminderMinutesBefore: s.reminder_minutes_before ?? null,
+        reminderMinutes: s.reminder_minutes ?? (s.reminder_minutes_before !== null && s.reminder_minutes_before !== undefined ? [s.reminder_minutes_before] : null),
         createdAt: s.created_at instanceof Date ? s.created_at.toISOString() : new Date(s.created_at).toISOString(),
         updatedAt: s.updated_at instanceof Date ? s.updated_at.toISOString() : new Date(s.updated_at).toISOString(),
       })),

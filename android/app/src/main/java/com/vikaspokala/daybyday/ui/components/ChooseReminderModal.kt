@@ -1,6 +1,7 @@
 package com.vikaspokala.daybyday.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
@@ -29,10 +29,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vikaspokala.daybyday.ui.planner.parseReminders
+import com.vikaspokala.daybyday.ui.planner.toDisplayReminder
 import com.vikaspokala.daybyday.ui.theme.DayByDayAccent
 import com.vikaspokala.daybyday.ui.theme.DayByDayFontFamily
 import com.vikaspokala.daybyday.ui.theme.DayByDayNeutralBorder
@@ -57,11 +61,9 @@ fun ChooseReminderModal(
     onDismiss: () -> Unit,
     onReminderSelected: (String?) -> Unit
 ) {
-    val initialSelection = when {
-        currentReminder.isNullOrEmpty() || currentReminder.equals("None", ignoreCase = true) || currentReminder.equals("No reminder", ignoreCase = true) -> "No reminder"
-        else -> currentReminder
-    }
-    var selectedOption by remember(currentReminder) { mutableStateOf(initialSelection) }
+    val initialSelection = parseReminders(currentReminder)
+        .mapNotNull { it.toDisplayReminder() }.toSet().ifEmpty { setOf("No reminder") }
+    var selectedOptions by remember(currentReminder) { mutableStateOf(initialSelection) }
 
     Box(
         modifier = Modifier
@@ -130,11 +132,26 @@ fun ChooseReminderModal(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     REMINDER_OPTIONS.forEach { option ->
-                        val isSelected = option.equals(selectedOption, ignoreCase = true)
+                        val isSelected = selectedOptions.contains(option)
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { selectedOption = option },
+                                .clickable {
+                                    if (option == "No reminder") {
+                                        selectedOptions = setOf("No reminder")
+                                    } else {
+                                        val next = (selectedOptions - "No reminder").toMutableSet()
+                                        if (next.contains(option)) {
+                                            next.remove(option)
+                                            if (next.isEmpty()) {
+                                                next.add("No reminder")
+                                            }
+                                        } else {
+                                            next.add(option)
+                                        }
+                                        selectedOptions = next
+                                    }
+                                },
                             shape = RoundedCornerShape(12.dp),
                             color = if (isSelected) Color(0xFFFBF7F2) else Color.Transparent
                         ) {
@@ -158,7 +175,7 @@ fun ChooseReminderModal(
 
                                 Surface(
                                     modifier = Modifier.size(20.dp),
-                                    shape = CircleShape,
+                                    shape = RoundedCornerShape(4.dp),
                                     color = if (isSelected) DayByDayAccent else Color.Transparent,
                                     border = BorderStroke(1.5.dp, if (isSelected) DayByDayAccent else Color(0xFFCCC0B5))
                                 ) {
@@ -167,11 +184,11 @@ fun ChooseReminderModal(
                                             modifier = Modifier.fillMaxSize(),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(6.dp)
-                                                    .background(Color.White, CircleShape)
-                                            )
+                                            Canvas(modifier = Modifier.size(12.dp)) {
+                                                val stroke = 2.dp.toPx()
+                                                drawLine(Color.White, Offset(size.width * 0.12f, size.height * 0.52f), Offset(size.width * 0.40f, size.height * 0.78f), stroke, cap = StrokeCap.Round)
+                                                drawLine(Color.White, Offset(size.width * 0.40f, size.height * 0.78f), Offset(size.width * 0.88f, size.height * 0.22f), stroke, cap = StrokeCap.Round)
+                                            }
                                         }
                                     }
                                 }
@@ -217,7 +234,8 @@ fun ChooseReminderModal(
                             .weight(1f)
                             .height(50.dp)
                             .clickable {
-                                val result = if (selectedOption == "No reminder") null else selectedOption
+                                val orderedOptions = REMINDER_OPTIONS.filter { it != "No reminder" && selectedOptions.contains(it) }
+                                val result = if (orderedOptions.isEmpty() || selectedOptions.contains("No reminder")) null else orderedOptions.joinToString(", ")
                                 onReminderSelected(result)
                             },
                         shape = RoundedCornerShape(18.dp),

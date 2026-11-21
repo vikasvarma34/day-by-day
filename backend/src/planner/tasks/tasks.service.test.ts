@@ -223,6 +223,94 @@ describe('TasksService', () => {
       service.createTask(mockUserId, payload),
       /Reminders cannot be set for historical tasks/
     );
+
+    const payloadMultiple = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Task',
+      plannerToday: today,
+      schedule: { type: 'ONCE', startDate: dPast2, scheduledTime: '10:00:00', reminderMinutes: [10, 60] }
+    };
+    await assert.rejects(
+      service.createTask(mockUserId, payloadMultiple),
+      /Reminders cannot be set for historical tasks/
+    );
+  });
+
+  it('creates scheduled task with multiple reminder offsets and maps correctly', async () => {
+    const mockTask = { id: '00000000-0000-4000-a000-000000000000' };
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: mockTask }));
+    const payload = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Multi Reminder Task',
+      plannerToday: today,
+      schedule: {
+        type: 'ONCE',
+        startDate: today,
+        scheduledTime: '10:00:00',
+        reminderMinutes: [15, 10, 5]
+      }
+    };
+    const result = await service.createTask(mockUserId, payload);
+    const [, dto] = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.deepEqual(dto.schedule.reminderMinutes, [5, 10, 15]);
+    assert.equal(dto.schedule.reminderMinutesBefore, 5);
+  });
+
+  it('updates existing task with multiple reminder offsets', async () => {
+    const mockTask = { id: '00000000-0000-4000-a000-000000000001' };
+    mockRepository.updateTask.mock.mockImplementation(async () => ({ task: mockTask, completions: [] }));
+    const payload = {
+      plannerToday: today,
+      effectiveDate: today,
+      schedule: {
+        type: 'ONCE',
+        startDate: today,
+        scheduledTime: '15:00:00',
+        reminderMinutes: [1440, 60]
+      }
+    };
+    await service.updateTask(mockUserId, '00000000-0000-4000-a000-000000000001', payload);
+    const [, , dto] = mockRepository.updateTask.mock.calls[0].arguments;
+    assert.deepEqual(dto.schedule.reminderMinutes, [60, 1440]);
+    assert.equal(dto.schedule.reminderMinutesBefore, 60);
+  });
+
+  it('rejects invalid reminder offset in reminderMinutes', async () => {
+    const payload = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Task',
+      plannerToday: today,
+      schedule: {
+        type: 'ONCE',
+        startDate: today,
+        scheduledTime: '10:00:00',
+        reminderMinutes: [25] // 25 is not in ALLOWED_REMINDERS
+      }
+    };
+    await assert.rejects(
+      service.createTask(mockUserId, payload),
+      /Invalid reminderMinutes/
+    );
+  });
+
+  it('preserves backward compatibility when single reminderMinutesBefore is supplied', async () => {
+    const mockTask = { id: '00000000-0000-4000-a000-000000000000' };
+    mockRepository.createIdempotent.mock.mockImplementation(async () => ({ isNew: true, task: mockTask }));
+    const payload = {
+      id: '00000000-0000-4000-a000-000000000000',
+      title: 'Legacy Reminder Task',
+      plannerToday: today,
+      schedule: {
+        type: 'ONCE',
+        startDate: today,
+        scheduledTime: '10:00:00',
+        reminderMinutesBefore: 15
+      }
+    };
+    await service.createTask(mockUserId, payload);
+    const [, dto] = mockRepository.createIdempotent.mock.calls[0].arguments;
+    assert.equal(dto.schedule.reminderMinutesBefore, 15);
+    assert.deepEqual(dto.schedule.reminderMinutes, [15]);
   });
 
   it('allows ONCE start date equal to plannerToday', async () => {

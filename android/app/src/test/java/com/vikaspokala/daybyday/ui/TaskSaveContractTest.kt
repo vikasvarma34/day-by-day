@@ -4,6 +4,8 @@ import com.vikaspokala.daybyday.ui.models.Recurrence
 import com.vikaspokala.daybyday.ui.models.toDisplayString
 import com.vikaspokala.daybyday.ui.planner.buildCreateSchedule
 import com.vikaspokala.daybyday.ui.planner.buildUpdateSchedule
+import com.vikaspokala.daybyday.ui.planner.parseReminders
+import com.vikaspokala.daybyday.ui.planner.toDisplayReminder
 import com.vikaspokala.daybyday.ui.planner.toScheduleTaskItem
 import com.vikaspokala.daybyday.ui.screens.task.PlannerTaskViewModel
 import com.vikaspokala.daybyday.ui.screens.task.initialTaskScheduleFormState
@@ -20,6 +22,18 @@ import org.junit.Test
 
 class TaskSaveContractTest {
     private val today = LocalDate.of(2026, 8, 20)
+
+    @Test
+    fun numericAndDisplayRemindersRoundTripWithoutInventingTaskTime() {
+        val offsets = listOf(5, 10, 15)
+        assertEquals(offsets, parseReminders("5, 10, 15"))
+        assertEquals(offsets, parseReminders(offsets.toDisplayReminder()))
+        assertTrue(parseReminders(null).isEmpty())
+        assertTrue(parseReminders("No reminder").isEmpty())
+        assertEquals(listOf(0), parseReminders("At task time"))
+        assertEquals(offsets, buildCreateSchedule(today, "6:00 PM", "5, 10, 15", null).reminderMinutes)
+    }
+
 
     @Test
     fun contentOnlyUsesExactlyUpdateTaskContent() {
@@ -293,7 +307,8 @@ class TaskSaveContractTest {
             title: String,
             startDate: String,
             scheduledTime: String?,
-            reminderMinutesBefore: Int?
+            reminderMinutesBefore: Int?,
+            reminderMinutes: List<Int>?
         ): com.vikaspokala.daybyday.notification.ReminderScheduleResult {
             return if (exactAlarmsAllowed) com.vikaspokala.daybyday.notification.ReminderScheduleResult.Scheduled
             else com.vikaspokala.daybyday.notification.ReminderScheduleResult.ExactAlarmPermissionDenied
@@ -475,5 +490,46 @@ class TaskSaveContractTest {
             PlannerUiCall.Schedule("task", today.toString(), today.toString(), schedule),
             repository.calls.single()
         )
+    }
+
+    @Test
+    fun buildCreateSchedule_withMultipleReminders_populatesBothOffsetsAndList() {
+        val schedule = buildCreateSchedule(
+            today,
+            "10:00 AM",
+            "1 hour before, 10 minutes before, 5 minutes before",
+            null
+        )
+
+        assertEquals(5, schedule.reminderMinutesBefore)
+        assertEquals(listOf(5, 10, 60), schedule.reminderMinutes)
+    }
+
+    @Test
+    fun buildUpdateSchedule_withMultipleReminders_populatesBothOffsetsAndList() {
+        val schedule = buildUpdateSchedule(
+            today,
+            "2:30 PM",
+            "1 day before, 30 minutes before",
+            Recurrence.IntervalDays(2)
+        )
+
+        assertEquals(30, schedule.reminderMinutesBefore)
+        assertEquals(listOf(30, 1440), schedule.reminderMinutes)
+    }
+
+    @Test
+    fun parseReminders_handlesAllEdgeCases() {
+        val emptyResult = parseReminders(null)
+        assertTrue(emptyResult.isEmpty())
+
+        val noReminderResult = parseReminders("No reminder")
+        assertTrue(noReminderResult.isEmpty())
+
+        val multiResult = parseReminders("1 day before, 5 minutes before, 10 minutes before")
+        assertEquals(listOf(5, 10, 1440), multiResult)
+
+        val formatted = listOf(5, 10, 1440).toDisplayReminder()
+        assertEquals("5 minutes before, 10 minutes before, 1 day before", formatted)
     }
 }

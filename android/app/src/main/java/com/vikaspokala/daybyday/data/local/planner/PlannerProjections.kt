@@ -21,6 +21,7 @@ data class ScheduledOccurrence(
     val intervalAnchorDate: String?,
     val weekdaysMask: Int?,
     val reminderMinutesBefore: Int?,
+    val reminderMinutes: String? = null,
     
     val scheduledDate: String,
     val isCompleted: Boolean

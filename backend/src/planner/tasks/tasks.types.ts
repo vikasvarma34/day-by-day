@@ -7,6 +7,7 @@ export interface CreateTaskScheduleDto {
   weekdaysMask?: number | null;
   scheduledTime?: string | null; // HH:mm:ss
   reminderMinutesBefore?: number | null;
+  reminderMinutes?: number[] | null;
 }
 
 export interface CreateTaskDto {
@@ -27,6 +28,7 @@ export interface PlannerTaskScheduleResponse {
   intervalAnchorDate: string | null;
   weekdaysMask: number | null;
   reminderMinutesBefore: number | null;
+  reminderMinutes: number[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +52,7 @@ export interface EditTaskScheduleDto {
   weekdaysMask?: number | null;
   scheduledTime?: string | null; // HH:mm:ss
   reminderMinutesBefore?: number | null;
+  reminderMinutes?: number[] | null;
 }
 
 export interface EditTaskDto {
