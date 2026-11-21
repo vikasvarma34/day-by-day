@@ -30,6 +30,9 @@ class PlannerTaskViewModel(
     scope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
 ) : ViewModel() {
     private val coroutineScope = scope
+    private val _isSaving = MutableStateFlow(false)
+    val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
     private val _actionError = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = _actionError.asStateFlow()
 
@@ -55,6 +58,7 @@ class PlannerTaskViewModel(
     }
 
     fun createLater(title: String, note: String?, isImportant: Boolean, onSuccess: () -> Unit = {}) {
+        if (!_isSaving.compareAndSet(false, true)) return
         val taskId = uuidProvider().toString()
         launchAction(onSuccess) { repository.createTask(taskId, title, note, isImportant) }
     }
@@ -63,6 +67,7 @@ class PlannerTaskViewModel(
         title: String, note: String?, isImportant: Boolean, schedule: CreateTaskScheduleRequestDto,
         onSuccess: () -> Unit = {}
     ) {
+        if (!_isSaving.compareAndSet(false, true)) return
         if (isExactAlarmDeniedForSchedule(
                 time = schedule.scheduledTime,
                 reminder = schedule.reminderMinutesBefore
@@ -70,6 +75,7 @@ class PlannerTaskViewModel(
         ) {
             _actionError.value = null
             _reminderNotice.value = "Turn on Alarms & reminders to use reminders."
+            _isSaving.value = false
             return
         }
 
@@ -90,6 +96,7 @@ class PlannerTaskViewModel(
         schedule: UpdateTaskScheduleDto,
         onSuccess: () -> Unit = {}
     ) {
+        if (!_isSaving.compareAndSet(false, true)) return
         if (scheduleChanged && isExactAlarmDeniedForSchedule(
                 time = schedule.scheduledTime,
                 reminder = schedule.reminderMinutesBefore
@@ -97,6 +104,7 @@ class PlannerTaskViewModel(
         ) {
             _actionError.value = null
             _reminderNotice.value = "Turn on Alarms & reminders to use reminders."
+            _isSaving.value = false
             return
         }
 
@@ -122,6 +130,7 @@ class PlannerTaskViewModel(
         schedule: UpdateTaskScheduleDto,
         onSuccess: () -> Unit = {}
     ) {
+        if (!_isSaving.compareAndSet(false, true)) return
         if (isExactAlarmDeniedForSchedule(
                 time = schedule.scheduledTime,
                 reminder = schedule.reminderMinutesBefore
@@ -129,6 +138,7 @@ class PlannerTaskViewModel(
         ) {
             _actionError.value = null
             _reminderNotice.value = "Turn on Alarms & reminders to use reminders."
+            _isSaving.value = false
             return
         }
 
@@ -140,20 +150,31 @@ class PlannerTaskViewModel(
         }
     }
 
-    fun deleteTask(taskId: String, onSuccess: () -> Unit = {}) =
+    fun deleteTask(taskId: String, onSuccess: () -> Unit = {}) {
+        if (!_isSaving.compareAndSet(false, true)) return
         launchAction(onSuccess) { repository.deleteTask(taskId) }
+    }
 
     private fun launchAction(onSuccess: () -> Unit, action: suspend () -> Result<Unit>) {
         coroutineScope.launch {
             _actionError.value = null
             _reminderNotice.value = null
-            action().fold(
-                onSuccess = { onSuccess() },
-                onFailure = { error ->
-                    if (error is HttpException && error.code() == 401) onSessionExpired()
-                    else _actionError.value = "Unable to save task. Please try again."
-                }
-            )
+            try {
+                action().fold(
+                    onSuccess = {
+                        _isSaving.value = false
+                        onSuccess()
+                    },
+                    onFailure = { error ->
+                        _isSaving.value = false
+                        if (error is HttpException && error.code() == 401) onSessionExpired()
+                        else _actionError.value = "Unable to save task. Please try again."
+                    }
+                )
+            } catch (t: Throwable) {
+                _isSaving.value = false
+                _actionError.value = "Unable to save task. Please try again."
+            }
         }
     }
 

@@ -1,5 +1,7 @@
 package com.vikaspokala.daybyday.data.repository
 
+import android.util.Log
+import com.vikaspokala.daybyday.BuildConfig
 import com.vikaspokala.daybyday.data.local.auth.SessionTokenStore
 import com.vikaspokala.daybyday.data.local.planner.PlannerDatabase
 import com.vikaspokala.daybyday.data.local.planner.entity.toEntity
@@ -16,6 +18,7 @@ import com.vikaspokala.daybyday.data.remote.dto.UpdateTaskSchedulePayloadDto
 import com.vikaspokala.daybyday.notification.TaskReminderScheduler
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import retrofit2.HttpException
 
 open class PlannerRepository(
     private val plannerDatabase: PlannerDatabase,
@@ -47,30 +50,37 @@ open class PlannerRepository(
         plannerToday: String,
         effectiveDate: String,
         schedule: UpdateTaskScheduleDto
-    ): Result<Unit> = mutex.withLock {
-        val token = tokenProvider()
-            ?: return Result.failure(IllegalStateException("Missing authentication session token"))
+    ): Result<Unit> {
+        val startTime = System.currentTimeMillis()
+        return mutex.withLock {
+            val token = tokenProvider()
+                ?: return Result.failure(IllegalStateException("Missing authentication session token"))
 
-        try {
-            val request = UpdateTaskRequestDto(
-                title = title,
-                note = note,
-                isImportant = isImportant,
-                plannerToday = plannerToday,
-                effectiveDate = effectiveDate,
-                schedule = schedule
-            )
-            val response = plannerApi.updateTask("Bearer $token", taskId, request)
-            val taskEntity = response.task.toEntity()
-            val scheduleEntities = response.task.schedules.map { it.toEntity(taskEntity.id) }
-            val completionEntities = response.completions.map { it.toEntity() }
-            plannerDatabase.applyUpdateTaskSchedule(taskEntity, scheduleEntities, completionEntities)
+            try {
+                val request = UpdateTaskRequestDto(
+                    title = title,
+                    note = note,
+                    isImportant = isImportant,
+                    plannerToday = plannerToday,
+                    effectiveDate = effectiveDate,
+                    schedule = schedule
+                )
+                val response = plannerApi.updateTask("Bearer $token", taskId, request)
+                val taskEntity = response.task.toEntity()
+                val scheduleEntities = response.task.schedules.map { it.toEntity(taskEntity.id) }
+                val completionEntities = response.completions.map { it.toEntity() }
+                plannerDatabase.applyUpdateTaskSchedule(taskEntity, scheduleEntities, completionEntities)
 
-            safelyScheduleTaskReminder(taskEntity.id)
+                safelyScheduleTaskReminder(taskEntity.id)
 
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
+                val elapsedMs = System.currentTimeMillis() - startTime
+                logSaveOperation("updateTask", elapsedMs, success = true)
+                Result.success(Unit)
+            } catch (e: Exception) {
+                val elapsedMs = System.currentTimeMillis() - startTime
+                logSaveOperation("updateTask", elapsedMs, success = false, error = e)
+                Result.failure(e)
+            }
         }
     }
 
@@ -79,27 +89,52 @@ open class PlannerRepository(
         plannerToday: String,
         effectiveDate: String,
         schedule: UpdateTaskScheduleDto
-    ): Result<Unit> = mutex.withLock {
-        val token = tokenProvider()
-            ?: return Result.failure(IllegalStateException("Missing authentication session token"))
+    ): Result<Unit> {
+        val startTime = System.currentTimeMillis()
+        val mutexStartTime = System.currentTimeMillis()
+        return mutex.withLock {
+            val mutexWaitMs = System.currentTimeMillis() - mutexStartTime
+            logDebug("updateTaskSchedule: Mutex acquired in ${mutexWaitMs}ms")
 
-        try {
+            val token = tokenProvider()
+                ?: return Result.failure(IllegalStateException("Missing authentication session token"))
+
             val request = UpdateTaskSchedulePayloadDto(
                 plannerToday = plannerToday,
                 effectiveDate = effectiveDate,
                 schedule = schedule
             )
-            val response = plannerApi.updateTaskSchedule("Bearer $token", taskId, request)
-            val taskEntity = response.task.toEntity()
-            val scheduleEntities = response.task.schedules.map { it.toEntity(taskEntity.id) }
-            val completionEntities = response.completions.map { it.toEntity() }
-            plannerDatabase.applyUpdateTaskSchedule(taskEntity, scheduleEntities, completionEntities)
 
-            safelyScheduleTaskReminder(taskEntity.id)
+            val httpStartTime = System.currentTimeMillis()
+            val response = try {
+                val res = plannerApi.updateTaskSchedule("Bearer $token", taskId, request)
+                val httpElapsedMs = System.currentTimeMillis() - httpStartTime
+                logDebug("updateTaskSchedule: HTTP request succeeded in ${httpElapsedMs}ms")
+                res
+            } catch (e: Exception) {
+                val httpElapsedMs = System.currentTimeMillis() - httpStartTime
+                val elapsedMs = System.currentTimeMillis() - startTime
+                logDebug("updateTaskSchedule: HTTP request failed in ${httpElapsedMs}ms with exception [${e.javaClass.name}]")
+                logSaveOperation("updateTaskSchedule", elapsedMs, success = false, error = e)
+                return Result.failure(e)
+            }
 
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
+            try {
+                val taskEntity = response.task.toEntity()
+                val scheduleEntities = response.task.schedules.map { it.toEntity(taskEntity.id) }
+                val completionEntities = response.completions.map { it.toEntity() }
+                plannerDatabase.applyUpdateTaskSchedule(taskEntity, scheduleEntities, completionEntities)
+
+                safelyScheduleTaskReminder(taskEntity.id)
+
+                val elapsedMs = System.currentTimeMillis() - startTime
+                logSaveOperation("updateTaskSchedule", elapsedMs, success = true)
+                Result.success(Unit)
+            } catch (e: Exception) {
+                val elapsedMs = System.currentTimeMillis() - startTime
+                logSaveOperation("updateTaskSchedule", elapsedMs, success = false, error = e)
+                Result.failure(e)
+            }
         }
     }
 
@@ -108,26 +143,33 @@ open class PlannerRepository(
         title: String,
         note: String? = null,
         isImportant: Boolean
-    ): Result<Unit> = mutex.withLock {
-        val token = tokenProvider()
-            ?: return Result.failure(IllegalStateException("Missing authentication session token"))
+    ): Result<Unit> {
+        val startTime = System.currentTimeMillis()
+        return mutex.withLock {
+            val token = tokenProvider()
+                ?: return Result.failure(IllegalStateException("Missing authentication session token"))
 
-        try {
-            val request = UpdateTaskContentRequestDto(
-                title = title,
-                note = note,
-                isImportant = isImportant
-            )
-            val response = plannerApi.updateTaskContent("Bearer $token", taskId, request)
-            val taskEntity = response.task.toEntity()
-            val completionEntities = response.completions.map { it.toEntity() }
-            plannerDatabase.applyUpdateTaskContent(taskEntity, completionEntities)
+            try {
+                val request = UpdateTaskContentRequestDto(
+                    title = title,
+                    note = note,
+                    isImportant = isImportant
+                )
+                val response = plannerApi.updateTaskContent("Bearer $token", taskId, request)
+                val taskEntity = response.task.toEntity()
+                val completionEntities = response.completions.map { it.toEntity() }
+                plannerDatabase.applyUpdateTaskContent(taskEntity, completionEntities)
 
-            safelyScheduleTaskReminder(taskEntity.id)
+                safelyScheduleTaskReminder(taskEntity.id)
 
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
+                val elapsedMs = System.currentTimeMillis() - startTime
+                logSaveOperation("updateTaskContent", elapsedMs, success = true)
+                Result.success(Unit)
+            } catch (e: Exception) {
+                val elapsedMs = System.currentTimeMillis() - startTime
+                logSaveOperation("updateTaskContent", elapsedMs, success = false, error = e)
+                Result.failure(e)
+            }
         }
     }
 
@@ -138,29 +180,36 @@ open class PlannerRepository(
         isImportant: Boolean = false,
         plannerToday: String? = null,
         schedule: CreateTaskScheduleRequestDto? = null
-    ): Result<Unit> = mutex.withLock {
-        val token = tokenProvider()
-            ?: return Result.failure(IllegalStateException("Missing authentication session token"))
+    ): Result<Unit> {
+        val startTime = System.currentTimeMillis()
+        return mutex.withLock {
+            val token = tokenProvider()
+                ?: return Result.failure(IllegalStateException("Missing authentication session token"))
 
-        try {
-            val request = CreateTaskRequestDto(
-                id = taskId,
-                title = title,
-                note = note,
-                isImportant = isImportant,
-                plannerToday = plannerToday,
-                schedule = schedule
-            )
-            val response = plannerApi.createTask("Bearer $token", request)
-            val taskEntity = response.task.toEntity()
-            val scheduleEntities = response.task.schedules.map { it.toEntity(response.task.id) }
-            plannerDatabase.applyCreateTask(taskEntity, scheduleEntities)
+            try {
+                val request = CreateTaskRequestDto(
+                    id = taskId,
+                    title = title,
+                    note = note,
+                    isImportant = isImportant,
+                    plannerToday = plannerToday,
+                    schedule = schedule
+                )
+                val response = plannerApi.createTask("Bearer $token", request)
+                val taskEntity = response.task.toEntity()
+                val scheduleEntities = response.task.schedules.map { it.toEntity(response.task.id) }
+                plannerDatabase.applyCreateTask(taskEntity, scheduleEntities)
 
-            safelyScheduleTaskReminder(taskEntity.id)
+                safelyScheduleTaskReminder(taskEntity.id)
 
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
+                val elapsedMs = System.currentTimeMillis() - startTime
+                logSaveOperation("createTask", elapsedMs, success = true)
+                Result.success(Unit)
+            } catch (e: Exception) {
+                val elapsedMs = System.currentTimeMillis() - startTime
+                logSaveOperation("createTask", elapsedMs, success = false, error = e)
+                Result.failure(e)
+            }
         }
     }
 
@@ -311,7 +360,38 @@ open class PlannerRepository(
         return plannerDatabase.observeScheduledOccurrences(date)
     }
 
+    private fun logSaveOperation(
+        operation: String,
+        elapsedMs: Long,
+        success: Boolean,
+        error: Throwable? = null
+    ) {
+        val status = if (success) "SUCCESS" else "FAILURE"
+        val httpCode = (error as? HttpException)?.code()
+        val details = buildString {
+            append("$operation: $status in ${elapsedMs}ms")
+            if (error != null) {
+                append(" [${error.javaClass.name}]")
+                if (httpCode != null) {
+                    append(" httpStatus=$httpCode")
+                }
+            }
+        }
+        logDebug(details)
+    }
+
+    private fun logDebug(message: String) {
+        if (BuildConfig.DEBUG) {
+            try {
+                Log.d(TAG, message)
+            } catch (_: Throwable) {
+                // Safe fallback when android.util.Log is not mocked (e.g., JVM tests)
+            }
+        }
+    }
+
     companion object {
+        private const val TAG = "DayByDaySave"
         val defaultMutex = Mutex()
     }
 }

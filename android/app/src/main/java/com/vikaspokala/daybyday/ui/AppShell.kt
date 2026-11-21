@@ -116,6 +116,7 @@ fun AppShell(
             plannerTaskViewModel.dismissReminderNotice()
         }
     }
+    val isTaskSaving by plannerTaskViewModel.isSaving.collectAsState()
     val backStack = rememberNavBackStack(Screen.Today as NavKey)
 
     LaunchedEffect(openTodayTrigger) {
@@ -408,6 +409,7 @@ fun AppShell(
                             recurrence = key.recurrence,
                             isLaterTask = key.isLaterTask,
                             plannerToday = todayViewModel.getPlannerToday(),
+                            isSaving = isTaskSaving,
                             onNavigateBack = {
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)
@@ -476,6 +478,7 @@ fun AppShell(
                             initialNote = key.initialNote,
                             initialIsImportant = key.initialIsImportant,
                             initialRecurrence = key.recurrence,
+                            isSaving = isTaskSaving,
                             onNavigateBack = {
                                 if (backStack.size > 1) {
                                     backStack.removeAt(backStack.lastIndex)

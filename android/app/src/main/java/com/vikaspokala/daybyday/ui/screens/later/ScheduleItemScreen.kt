@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +60,7 @@ fun ScheduleItemScreen(
     initialNote: String? = null,
     initialIsImportant: Boolean = false,
     initialRecurrence: com.vikaspokala.daybyday.ui.models.Recurrence? = null,
+    isSaving: Boolean = false,
     onNavigateBack: () -> Unit,
     onSchedule: (title: String, note: String?, date: LocalDate, time: String?, reminder: String?, recurrence: com.vikaspokala.daybyday.ui.models.Recurrence?, isImportant: Boolean) -> Unit,
     modifier: Modifier = Modifier
@@ -96,7 +98,16 @@ fun ScheduleItemScreen(
         }
     }
 
-    val isScheduleEnabled = selectedDate != null && titleText.trim().isNotEmpty()
+    var isSubmitting by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isSaving) {
+        if (!isSaving) {
+            isSubmitting = false
+        }
+    }
+
+    val isSaveInProgress = isSaving || isSubmitting
+    val isScheduleEnabled = !isSaveInProgress && selectedDate != null && titleText.trim().isNotEmpty()
 
     Box(
         modifier = modifier
@@ -227,7 +238,7 @@ fun ScheduleItemScreen(
                             )
                             Spacer(modifier = Modifier.weight(1f))
                             Text(
-                                text = "${noteText.length} / 500",
+                                text = "${noteText.length} / 1500",
                                 style = TextStyle(
                                     fontFamily = DayByDayFontFamily,
                                     fontWeight = FontWeight.W400,
@@ -239,7 +250,7 @@ fun ScheduleItemScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         BasicTextField(
                             value = noteText,
-                            onValueChange = { if (it.length <= 500) noteText = it },
+                            onValueChange = { if (it.length <= 1500) noteText = it },
                             minLines = 3,
                             maxLines = 4,
                             textStyle = TextStyle(
@@ -385,6 +396,7 @@ fun ScheduleItemScreen(
                         .then(
                             if (isScheduleEnabled) {
                                 Modifier.clickable {
+                                    if (isSaveInProgress) return@clickable
                                     selectedDate?.let { date ->
                                         val recEndDate = recurrence?.endDate
                                         val isEndDateInvalid = recEndDate != null && recEndDate.isBefore(date)
@@ -393,6 +405,7 @@ fun ScheduleItemScreen(
                                         } else if (date.isBefore(java.time.LocalDate.now())) {
                                             showPastDateWarning = true
                                         } else {
+                                            isSubmitting = true
                                             onSchedule(
                                                 titleText,
                                                 noteText,

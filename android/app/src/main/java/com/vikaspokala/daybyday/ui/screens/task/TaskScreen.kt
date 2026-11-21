@@ -132,6 +132,7 @@ fun TaskScreen(
     recurrence: com.vikaspokala.daybyday.ui.models.Recurrence? = null,
     isLaterTask: Boolean = false,
     plannerToday: java.time.LocalDate = java.time.LocalDate.now(),
+    isSaving: Boolean = false,
     onNavigateBack: () -> Unit,
     onSaveTask: (title: String, note: String?, dateString: String?, timeString: String?, reminderString: String?, recurrence: com.vikaspokala.daybyday.ui.models.Recurrence?, isImportant: Boolean) -> Unit = { _, _, _, _, _, _, _ -> },
     onScheduleThisClick: () -> Unit = {},
@@ -212,7 +213,17 @@ fun TaskScreen(
     val isContentChanged = isTitleDirty || isNoteDirty || isImportantDirty
     val isScheduleChanged = isDateDirty || isTimeDirty || isReminderDirty || isRecurrenceDirty
 
-    val isSaveEnabled = if (isCreateMode) {
+    var isSubmitting by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isSaving) {
+        if (!isSaving) {
+            isSubmitting = false
+        }
+    }
+
+    val isSaveInProgress = isSaving || isSubmitting
+
+    val isSaveEnabled = !isSaveInProgress && if (isCreateMode) {
         titleText.trim().isNotEmpty()
     } else {
         titleText.trim().isNotEmpty() && (isContentChanged || isScheduleChanged)
@@ -292,6 +303,7 @@ fun TaskScreen(
                             .then(
                                 if (isSaveEnabled) {
                                     Modifier.clickable {
+                                        if (isSaveInProgress) return@clickable
                                         val pd = parseTaskDate(currentDateString, plannerToday)
                                         val initialPd = parseTaskDate(dateString, plannerToday)
                                         val isHistoricalDate = pd != null && pd.isBefore(plannerToday)
@@ -311,6 +323,7 @@ fun TaskScreen(
                                         } else if (isBlocked) {
                                             showPastDateWarning = true
                                         } else {
+                                            isSubmitting = true
                                             val finalReminder = if (isCreateMode && isHistoricalDate) null else currentReminderString
                                             val finalRecurrence = if (isCreateMode && isHistoricalDate) null else currentRecurrence
                                             onSaveTask(
@@ -412,7 +425,7 @@ fun TaskScreen(
                             )
                             Spacer(modifier = Modifier.weight(1f))
                             Text(
-                                text = "${noteText.length} / 500",
+                                text = "${noteText.length} / 1500",
                                 style = TextStyle(
                                     fontFamily = DayByDayFontFamily,
                                     fontWeight = FontWeight.W400,
@@ -424,7 +437,7 @@ fun TaskScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         BasicTextField(
                             value = noteText,
-                            onValueChange = { if (it.length <= 500) noteText = it },
+                            onValueChange = { if (it.length <= 1500) noteText = it },
                             minLines = 3,
                             maxLines = 4,
                             textStyle = TextStyle(
