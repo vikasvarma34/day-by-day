@@ -178,7 +178,7 @@ fun TodayScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (selectedDate == LocalDate.now()) "Today" else selectedDate.format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())),
+                                text = formatTodayDateNavigationLabel(selectedDate),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = DayByDayPrimaryText
                             )
@@ -372,5 +372,23 @@ private fun PaddingWrapper(content: @Composable () -> Unit) {
         modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
     ) {
         content()
+    }
+}
+
+internal fun formatTodayDateNavigationLabel(
+    selectedDate: LocalDate,
+    today: LocalDate = LocalDate.now(),
+    locale: Locale = Locale.getDefault()
+): String {
+    val weekday = selectedDate.format(DateTimeFormatter.ofPattern("EEE", locale))
+        .replace(".", "")
+        .lowercase(locale)
+        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
+
+    return if (selectedDate == today) {
+        "Today - $weekday"
+    } else {
+        val datePart = selectedDate.format(DateTimeFormatter.ofPattern("d MMM", locale))
+        "$datePart - $weekday"
     }
 }

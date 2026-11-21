@@ -258,7 +258,7 @@ class InMemoryPlannerDatabase(
         require(trimmedTitle.isNotEmpty()) { "Title cannot be blank" }
         require(trimmedTitle.length <= 255) { "Invalid title: max 255 characters" }
         if (note != null) {
-            require(note.length <= 500) { "Invalid note: max 500 characters" }
+            require(note.length <= 1500) { "Invalid note: max 1500 characters" }
         }
 
         val rawOffsets = reminderMinutes ?: reminderMinutesBefore?.let { listOf(it) }
@@ -384,7 +384,7 @@ class InMemoryPlannerDatabase(
         require(trimmedTitle.isNotEmpty()) { "Title cannot be blank" }
         require(trimmedTitle.length <= 255) { "Invalid title: max 255 characters" }
         if (note != null) {
-            require(note.length <= 500) { "Invalid note: max 500 characters" }
+            require(note.length <= 1500) { "Invalid note: max 1500 characters" }
         }
 
         val taskId = "task_${UUID.randomUUID()}"
@@ -429,7 +429,7 @@ class InMemoryPlannerDatabase(
         require(trimmedTitle.isNotEmpty()) { "Title cannot be blank" }
         require(trimmedTitle.length <= 255) { "Invalid title: max 255 characters" }
         if (note != null) {
-            require(note.length <= 500) { "Invalid note: max 500 characters" }
+            require(note.length <= 1500) { "Invalid note: max 1500 characters" }
         }
 
         val existingSchedule = current.schedules.find { it.taskId == taskId }
@@ -599,7 +599,7 @@ class InMemoryPlannerDatabase(
         require(effectiveTitle.isNotEmpty()) { "Title cannot be blank" }
         require(effectiveTitle.length <= 255) { "Invalid title: max 255 characters" }
         val effectiveNote = if (note != null) {
-            require(note.length <= 500) { "Invalid note: max 500 characters" }
+            require(note.length <= 1500) { "Invalid note: max 1500 characters" }
             note
         } else task.note
         val effectiveImportant = isImportant ?: task.isImportant

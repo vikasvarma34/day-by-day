@@ -6,7 +6,7 @@ plugins {
 }
 
 val debugBaseUrl: String = providers.gradleProperty("DAY_BY_DAY_BASE_URL")
-    .getOrElse("http://10.0.2.2:3000/")
+    .getOrElse("https://day-by-day-one.vercel.app/")
 
 val releaseStoreFile = providers.gradleProperty("DAY_BY_DAY_RELEASE_STORE_FILE")
 val releaseStorePassword = providers.gradleProperty("DAY_BY_DAY_RELEASE_STORE_PASSWORD")
@@ -40,6 +40,7 @@ android {
 
     buildTypes {
         debug {
+            applicationIdSuffix = ".debug"
             buildConfigField("String", "BASE_URL", "\"$debugBaseUrl\"")
         }
         release {
